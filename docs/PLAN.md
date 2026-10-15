@@ -128,8 +128,9 @@ current intent, not a commitment to details.
    Google sign-in is desktop-only so far.)
    **Queued for the refinements session (user, 2026-10-15; not started):** flag days whose
    data looks wrong, e.g. outrageous step counts or strangely low calories (likely a
-   partly logged day). Thresholds and how a flagged day is shown or excluded are to be
-   decided then.
+   partly logged day). The user must be able to accept or reject a flagged day as valid,
+   and that choice should stick (and sync). Thresholds and what a rejected day means for
+   later uses (e.g. averages) are to be decided then.
 8. **Finances** (stretch).
 
 ## Known risks
