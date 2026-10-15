@@ -117,7 +117,8 @@ current intent, not a commitment to details.
 3. **Connections and rules engine.** Sign-in status for every integration, the
    events/conditions/actions model, and default "connection lost" alerts.
 4. **Pets module.** Status dashboard, events, and default rules.
-5. **Tasks & reminders**, with Google Tasks sync, plus the generic to-do lists.
+5. **Tasks & reminders**, with Google Tasks sync, plus the generic to-do lists
+   (to-do lists ✅ built 2026-10-15, awaiting user review).
 6. **Calendar**, with Google Calendar sync.
 7. **Health data pipeline.** Port FitThing's pulls for calories, macros, weight,
    body fat and steps. Refinements are planned in a later session.

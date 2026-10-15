@@ -1,5 +1,6 @@
 // The database schema, versioned with SQLite's PRAGMA user_version (approach from FitApp).
 // Both devices run the same migrations. Never edit a shipped migration; append a new one.
+import { syncColumns } from "../sync/records.ts";
 import type { Db } from "./types.ts";
 
 /** SQL, or a function for migrations that also move data. */
@@ -25,6 +26,22 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
     received_seq INTEGER NOT NULL DEFAULT 0,
     last_synced_at TEXT
   );
+  `,
+  // 3: generic to-do lists (core/todos.ts). Synced between Lifeboard's devices only.
+  `
+  CREATE TABLE todo_list (
+    ${syncColumns},
+    name TEXT NOT NULL,
+    position INTEGER NOT NULL
+  );
+  CREATE TABLE todo_item (
+    ${syncColumns},
+    list_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    done INTEGER NOT NULL DEFAULT 0,
+    position INTEGER NOT NULL
+  );
+  CREATE INDEX todo_item_list ON todo_item (list_id);
   `,
 ];
 

@@ -4,6 +4,7 @@
 import { getDeviceId, getMeta, setMeta } from "./db/meta.ts";
 import { SCHEMA_VERSION } from "./db/schema.ts";
 import { get, type Db } from "./db/types.ts";
+import * as todos from "./todos.ts";
 
 export interface AppInfo {
   deviceId: string;
@@ -39,6 +40,16 @@ export const api = {
   getAppInfo,
   getSyncSettings,
   saveSyncSettings,
+  listTodoLists: todos.listTodoLists,
+  getTodoList: todos.getTodoList,
+  createTodoList: todos.createTodoList,
+  renameTodoList: todos.renameTodoList,
+  deleteTodoList: todos.deleteTodoList,
+  addTodoItem: todos.addTodoItem,
+  setTodoItemDone: todos.setTodoItemDone,
+  editTodoItem: todos.editTodoItem,
+  deleteTodoItem: todos.deleteTodoItem,
+  clearDoneTodoItems: todos.clearDoneTodoItems,
 };
 
 export type Api = typeof api;

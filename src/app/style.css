@@ -96,3 +96,24 @@ button {
   text-decoration: none;
 }
 .tab.current { color: var(--accent); background: var(--surface-2); }
+
+.page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.page-header h1 { flex: 1; margin: 0; }
+.back { color: var(--text); text-decoration: none; font-size: 1.4rem; padding: 4px 8px 4px 0; }
+.section-header { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; }
+.section-header h2 { margin: 0; }
+
+button.secondary { color: var(--text); background: var(--surface-2); border: 1px solid var(--border); font-weight: 500; }
+button.danger { color: var(--danger); background: none; border: 1px solid var(--danger); margin-top: 28px; width: 100%; }
+button.icon { color: var(--muted); background: none; padding: 4px 10px; font-size: 1.3rem; line-height: 1; }
+
+.add-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.add-row input { flex: 1; min-width: 0; }
+
+.list-card { display: flex; justify-content: space-between; gap: 12px; color: var(--text); text-decoration: none; }
+
+.items { list-style: none; margin: 0; padding: 0; }
+.item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.item input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--accent); margin: 0; }
+.item-text { flex: 1; overflow-wrap: anywhere; cursor: pointer; }
+.item.done .item-text { color: var(--muted); text-decoration: line-through; }

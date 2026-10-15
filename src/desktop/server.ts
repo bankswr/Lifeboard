@@ -49,7 +49,14 @@ server.post<{ Params: { name: string }; Body: { args?: unknown[] } }>("/api/:nam
   // Object.hasOwn so only the functions listed in `api` can be called, nothing inherited.
   if (!Object.hasOwn(api, name)) return reply.code(404).send({ error: `Unknown API call: ${name}` });
   const fn = api[name as ApiName] as (...args: unknown[]) => Promise<unknown>;
-  return fn(db, ...(request.body?.args ?? []));
+  try {
+    // null for functions that return nothing: an empty reply isn't valid JSON for the UI.
+    return (await fn(db, ...(request.body?.args ?? []))) ?? null;
+  } catch (error) {
+    // Core errors are messages meant for the user ("List name can't be empty.").
+    request.log.warn(error);
+    return reply.code(400).send({ error: (error as Error).message });
+  }
 });
 
 server.post<{ Body: SyncRequest }>("/sync", async (request) => answerSync(db, request.body));

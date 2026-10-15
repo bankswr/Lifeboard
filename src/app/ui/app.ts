@@ -5,7 +5,7 @@ import { html, render, type TemplateResult } from "lit-html";
 
 export interface View {
   /** Which bottom-bar item is current. */
-  section: "home" | "settings";
+  section: "home" | "lists" | "settings";
   content: TemplateResult;
 }
 
@@ -36,7 +36,22 @@ export async function refresh() {
 function bottomBar(current: View["section"]) {
   const item = (section: View["section"], href: string, label: string) =>
     html`<a class="tab ${section === current ? "current" : ""}" href=${href}>${label}</a>`;
-  return html`<nav class="tabbar">${item("home", "#/", "Home")}${item("settings", "#/settings", "Settings")}</nav>`;
+  return html`<nav class="tabbar">
+    ${item("home", "#/", "Home")}${item("lists", "#/lists", "Lists")}${item("settings", "#/settings", "Settings")}
+  </nav>`;
+}
+
+/**
+ * Runs a change the user asked for, then re-renders the screen. If it fails, the error's
+ * message (core errors are written for the user) is shown instead.
+ */
+export async function act(change: () => Promise<unknown>) {
+  try {
+    await change();
+  } catch (error) {
+    alert((error as Error).message);
+  }
+  await refresh();
 }
 
 export function start() {

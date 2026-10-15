@@ -35,6 +35,7 @@ export async function call<Name extends ApiName>(name: Name, ...args: ApiArgs<Na
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ args }),
   });
-  if (!response.ok) throw new Error(`${name} failed: ${response.status} ${await response.text()}`);
-  return response.json();
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(body?.error ?? `${name} failed (${response.status})`);
+  return body;
 }

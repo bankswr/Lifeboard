@@ -5,6 +5,7 @@ import { initBackend, platform } from "./backend.ts";
 import { syncQuietly } from "./sync.ts";
 import { refresh, start } from "./ui/app.ts";
 import "./ui/views/home.ts";
+import "./ui/views/lists.ts";
 import "./ui/views/settings.ts";
 
 async function main() {
