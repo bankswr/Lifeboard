@@ -25,10 +25,24 @@ export function phoneDatabase(): Db {
   return phoneDb;
 }
 
+// On the phone, database calls really wait on the native side, so two operations could
+// interleave; a write made during a sync would then join the sync's transaction and be lost
+// if the sync rolled back. Every phone operation (API calls, sync) therefore runs one at a
+// time through this queue. The desktop doesn't need it: its database calls are synchronous.
+let queue: Promise<unknown> = Promise.resolve();
+
+/** Runs `operation` on the phone after every earlier one has finished. */
+export function onPhoneDb<T>(operation: (db: Db) => Promise<T>): Promise<T> {
+  const db = phoneDatabase();
+  const result = queue.then(() => operation(db));
+  queue = result.catch(() => {}); // a failed operation must not block the ones after it
+  return result;
+}
+
 export async function call<Name extends ApiName>(name: Name, ...args: ApiArgs<Name>): Promise<ApiResult<Name>> {
   if (phoneDb) {
     const fn = api[name] as (db: Db, ...args: unknown[]) => Promise<ApiResult<Name>>;
-    return fn(phoneDb, ...args);
+    return onPhoneDb((db) => fn(db, ...args));
   }
   const response = await fetch(`./api/${name}`, {
     method: "POST",

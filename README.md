@@ -40,3 +40,19 @@ cd android
 JAVA_HOME=~/android-studio/jbr ANDROID_HOME=~/Android/Sdk ./gradlew assembleDebug
 # → android/app/build/outputs/apk/debug/app-debug.apk
 ```
+
+## Connections
+
+Sign in under **Settings → Connections** on each device (sign-ins are never synced):
+
+- **Whisker (Litter-Robot)** and **Cronometer**: email and password. The password is saved
+  on the device so expired sessions renew themselves; a rejected password raises an alert.
+- **Google Health** (steps, weight, body fat): desktop only for now. Put a "Desktop app"
+  OAuth client JSON at `data/google_client_secret.json` (FitThing's
+  `secrets/client_secret.json` works), and publish the OAuth consent screen in Google Cloud
+  ("In production"), or Google ends the sign-in after 7 days. The phone receives this data
+  through sync.
+
+The desktop updates when it starts and every 4 hours; the phone when opened (if the last
+update is over 12 hours old) or with **Update now**. Alerts are set under
+**Settings → Alert rules**.
