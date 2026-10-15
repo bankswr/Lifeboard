@@ -8,6 +8,10 @@ import { deliverAlerts } from "./notify.ts";
 import { READING_TYPES } from "./readings.ts";
 import * as rules from "./rules.ts";
 import * as todos from "./todos.ts";
+import { deleteCredential } from "./credentials.ts";
+import { signInToCronometer } from "./cronometer/integration.ts";
+import { recentNutrition } from "./health.ts";
+import { INTEGRATIONS } from "./integrations.ts";
 import { lastUpdateAt, listConnections, runUpdate } from "./updates.ts";
 
 export interface AppInfo {
@@ -56,6 +60,17 @@ async function getStatus(db: Db) {
   };
 }
 
+/** Each integration and whether this device is signed in to it. */
+async function listIntegrations(db: Db) {
+  return Promise.all(INTEGRATIONS.map(async (i) => ({ id: i.id, name: i.name, signedIn: await i.isSetUp(db) })));
+}
+
+/** Forgets this device's sign-in to an integration. Data already fetched is kept. */
+async function signOut(db: Db, integrationId: string) {
+  await deleteCredential(db, integrationId);
+  await db.run("DELETE FROM connection WHERE id = ?", [integrationId]);
+}
+
 export const api = {
   getAppInfo,
   getSyncSettings,
@@ -77,6 +92,10 @@ export const api = {
   getRule: rules.getRule,
   saveRule: rules.saveRule,
   deleteRule: rules.deleteRule,
+  listIntegrations,
+  signInToCronometer,
+  signOut,
+  recentNutrition,
 };
 
 export type Api = typeof api;

@@ -150,3 +150,9 @@ fieldset { border: 1px solid var(--border); border-radius: var(--radius); paddin
 legend { color: var(--muted); font-size: 0.9rem; padding: 0 4px; }
 .condition { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 6px; align-items: center; }
 .condition input { min-width: 0; }
+
+table.data { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+table.data th { color: var(--muted); font-weight: 500; font-size: 0.85rem; text-align: right; padding: 4px; }
+table.data td { text-align: right; padding: 6px 4px; border-top: 1px solid var(--border); }
+table.data th:first-child, table.data td:first-child { text-align: left; }
+button:disabled { opacity: 0.6; }

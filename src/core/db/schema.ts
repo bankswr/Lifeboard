@@ -81,6 +81,23 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
     `);
     await insertDefaultRules(db);
   },
+  // 5: saved sign-ins (per device, never synced; core/credentials.ts) and daily nutrition
+  // from Cronometer (synced; core/health.ts).
+  `
+  CREATE TABLE credential (
+    id TEXT PRIMARY KEY,
+    data TEXT NOT NULL
+  );
+  CREATE TABLE nutrition_day (
+    ${syncColumns},
+    date TEXT NOT NULL,
+    calories REAL,
+    protein_g REAL,
+    carbs_g REAL,
+    fat_g REAL
+  );
+  CREATE INDEX nutrition_day_date ON nutrition_day (date);
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

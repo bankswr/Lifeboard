@@ -5,7 +5,7 @@ import { html, render, type TemplateResult } from "lit-html";
 
 export interface View {
   /** Which bottom-bar item is current. */
-  section: "home" | "lists" | "settings";
+  section: "home" | "lists" | "health" | "settings";
   content: TemplateResult;
 }
 
@@ -37,7 +37,8 @@ function bottomBar(current: View["section"]) {
   const item = (section: View["section"], href: string, label: string) =>
     html`<a class="tab ${section === current ? "current" : ""}" href=${href}>${label}</a>`;
   return html`<nav class="tabbar">
-    ${item("home", "#/", "Home")}${item("lists", "#/lists", "Lists")}${item("settings", "#/settings", "Settings")}
+    ${item("home", "#/", "Home")}${item("lists", "#/lists", "Lists")}${item("health", "#/health", "Health")}
+    ${item("settings", "#/settings", "Settings")}
   </nav>`;
 }
 

@@ -4,25 +4,10 @@
 // on command or when opened more than 12 hours after the last update (docs/PLAN.md).
 import { getMeta, setMeta } from "./db/meta.ts";
 import { utcNow, type Db } from "./db/types.ts";
+import { SignedOutError, type Integration } from "./integration.ts";
+import { INTEGRATIONS } from "./integrations.ts";
 import type { ConnectionStatus, Reading } from "./readings.ts";
 import { evaluateRules, type NewAlert } from "./rules.ts";
-
-/** Thrown by an integration when its sign-in no longer works and the user must sign in again. */
-export class SignedOutError extends Error {}
-
-export interface Integration {
-  /** Stable id, e.g. "whisker". */
-  id: string;
-  /** Shown to the user, e.g. "Whisker (Litter-Robot)". */
-  name: string;
-  /** False until the user has signed in on this device; not-set-up integrations are skipped. */
-  isSetUp(db: Db): Promise<boolean>;
-  /** Fetches fresh data, stores it, and returns readings for the alert rules. */
-  update(db: Db): Promise<Reading[]>;
-}
-
-/** Integrations available on every device. Each one registers itself here as it's built. */
-export const INTEGRATIONS: Integration[] = [];
 
 export interface ConnectionInfo {
   id: string;

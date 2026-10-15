@@ -4,7 +4,8 @@ import type { Db } from "../src/core/db/types.ts";
 import type { Reading } from "../src/core/readings.ts";
 import { evaluateRules, fillMessage, listRules, recentAlerts, saveRule } from "../src/core/rules.ts";
 import { answerSync, syncWithDesktop } from "../src/core/sync/sync.ts";
-import { isUpdateDue, listConnections, runUpdate, SignedOutError, type Integration } from "../src/core/updates.ts";
+import { SignedOutError, type Integration } from "../src/core/integration.ts";
+import { isUpdateDue, listConnections, runUpdate } from "../src/core/updates.ts";
 import { openNodeDb } from "../src/desktop/db/nodeSqlite.ts";
 
 async function newDb() {

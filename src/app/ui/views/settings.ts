@@ -19,6 +19,7 @@ route(/^\/settings$/, async () => {
     section: "settings",
     content: html`
       <h1>Settings</h1>
+      <a class="card list-card" href="#/connections"><span>Connections</span><span class="muted">›</span></a>
       <a class="card list-card" href="#/rules"><span>Alert rules</span><span class="muted">›</span></a>
       ${platform === "desktop" ? await desktopPairing() : await phoneSync()}
       <section class="card">
