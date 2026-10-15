@@ -39,3 +39,60 @@ body {
 
 h1 { font-size: 1.5rem; margin: 0 0 12px; }
 .muted { color: var(--muted); }
+h2 { font-size: 1.1rem; margin: 0 0 8px; }
+
+/* Leave room for the bottom bar. */
+.screen { padding-bottom: calc(80px + var(--inset-bottom)); }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin: 12px 0;
+}
+.card p { margin: 6px 0; }
+.label { color: var(--muted); font-size: 0.85rem; margin-top: 12px !important; }
+.mono { font-family: ui-monospace, monospace; word-break: break-all; }
+
+form { display: grid; gap: 12px; }
+label { display: grid; gap: 4px; color: var(--muted); font-size: 0.9rem; }
+input {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+button {
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent-text);
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 8px calc(6px + var(--inset-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.tab {
+  flex: 0 1 160px;
+  text-align: center;
+  padding: 8px;
+  border-radius: 8px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.tab.current { color: var(--accent); background: var(--surface-2); }

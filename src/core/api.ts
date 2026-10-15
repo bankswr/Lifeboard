@@ -1,6 +1,7 @@
 // Every operation the UI can ask for. Each takes the database first, then plain JSON-safe
 // arguments, and returns JSON-safe data. On the phone the UI calls these directly; on the
 // desktop it calls them through the server (POST /api/<name>), which runs the same code.
+import { getDeviceId, getMeta, setMeta } from "./db/meta.ts";
 import { SCHEMA_VERSION } from "./db/schema.ts";
 import { get, type Db } from "./db/types.ts";
 
@@ -10,12 +11,34 @@ export interface AppInfo {
 }
 
 async function getAppInfo(db: Db): Promise<AppInfo> {
-  const row = await get(db, "SELECT value FROM meta WHERE key = 'device_id'");
-  return { deviceId: row!.value, schemaVersion: SCHEMA_VERSION };
+  return { deviceId: await getDeviceId(db), schemaVersion: SCHEMA_VERSION };
+}
+
+/** Phone only: where the desktop is and the key it gave for syncing. */
+export interface SyncSettings {
+  desktopAddress: string;
+  syncKey: string;
+  lastSyncedAt: string | null;
+}
+
+async function getSyncSettings(db: Db): Promise<SyncSettings> {
+  const peer = await get(db, "SELECT last_synced_at FROM sync_peer WHERE peer_id = ?", [await getMeta(db, "sync_peer_id")]);
+  return {
+    desktopAddress: (await getMeta(db, "desktop_address")) ?? "",
+    syncKey: (await getMeta(db, "sync_key")) ?? "",
+    lastSyncedAt: peer?.last_synced_at ?? null,
+  };
+}
+
+async function saveSyncSettings(db: Db, desktopAddress: string, syncKey: string): Promise<void> {
+  await setMeta(db, "desktop_address", desktopAddress.trim().replace(/\/+$/, ""));
+  await setMeta(db, "sync_key", syncKey.trim());
 }
 
 export const api = {
   getAppInfo,
+  getSyncSettings,
+  saveSyncSettings,
 };
 
 export type Api = typeof api;

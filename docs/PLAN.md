@@ -107,13 +107,13 @@ Each phase ends with tests passing and an agent note. Before each feature phase
 starts, its plan is reviewed with the user and adjusted. The plan below is the
 current intent, not a commitment to details.
 
-0. **Scaffold.** Copy the FitApp skeleton and set up the `core/` / `app/` /
+0. ✅ **Scaffold.** Copy the FitApp skeleton and set up the `core/` / `app/` /
    `desktop/` / `android/` layout. Get an empty app running on desktop and on the
    phone.
 1. **Pet API spike.** Prove we can sign in to and read the Litter-Robot and the
    Petory feeders from Node and from the phone. This is the riskiest dependency:
    the APIs are unofficial and may change, and the Petory API is still unknown.
-2. **Data model and LAN sync.** Build both, tested with a throwaway record type.
+2. ✅ **Data model and LAN sync.** Build both, tested with a throwaway record type.
 3. **Connections and rules engine.** Sign-in status for every integration, the
    events/conditions/actions model, and default "connection lost" alerts.
 4. **Pets module.** Status dashboard, events, and default rules.

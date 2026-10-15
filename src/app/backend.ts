@@ -19,6 +19,12 @@ export async function initBackend(): Promise<void> {
   }
 }
 
+/** The on-device database. Phone only: the sync code works on it directly. */
+export function phoneDatabase(): Db {
+  if (!phoneDb) throw new Error("No on-device database: this isn't the phone app.");
+  return phoneDb;
+}
+
 export async function call<Name extends ApiName>(name: Name, ...args: ApiArgs<Name>): Promise<ApiResult<Name>> {
   if (phoneDb) {
     const fn = api[name] as (db: Db, ...args: unknown[]) => Promise<ApiResult<Name>>;

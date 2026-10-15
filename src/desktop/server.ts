@@ -1,11 +1,16 @@
 // The desktop side of Lifeboard: keeps the desktop database, runs the shared core code for
-// the UI (POST /api/<name>), and serves the built UI from dist/. Start with `npm run desktop`.
+// the UI (POST /api/<name>), serves the built UI from dist/, and answers the phone's LAN
+// sync (POST /sync). Start with `npm run desktop`.
+import { timingSafeEqual } from "node:crypto";
 import { mkdirSync } from "node:fs";
+import { networkInterfaces } from "node:os";
 import { join, resolve } from "node:path";
 import fastifyStatic from "@fastify/static";
 import Fastify from "fastify";
 import { api, type ApiName } from "../core/api.ts";
+import { getMeta, setMeta } from "../core/db/meta.ts";
 import { migrate } from "../core/db/schema.ts";
+import { answerSync, type SyncRequest } from "../core/sync/sync.ts";
 import { DATA_DIR, DESKTOP_HOST, DESKTOP_PORT } from "./config.ts";
 import { openNodeDb } from "./db/nodeSqlite.ts";
 
@@ -13,7 +18,31 @@ mkdirSync(DATA_DIR, { recursive: true });
 const db = openNodeDb(join(DATA_DIR, "lifeboard.db"));
 await migrate(db);
 
-const server = Fastify({ logger: { level: "warn" } });
+// The secret the phone must send to sync. Made once; shown in the desktop app's settings.
+if (!(await getMeta(db, "sync_key"))) await setMeta(db, "sync_key", crypto.randomUUID());
+const syncKey = (await getMeta(db, "sync_key"))!;
+
+const server = Fastify({ logger: { level: "warn" }, bodyLimit: 50 * 1024 * 1024 });
+
+// Other machines may only reach /sync, and only with the key. Everything else (the UI and
+// its API, which can read and change all data) answers this computer only.
+server.addHook("onRequest", async (request, reply) => {
+  if (request.url === "/sync") {
+    if (!hasSyncKey(request.headers.authorization)) return reply.code(401).send({ error: "Wrong or missing sync key" });
+  } else if (!isThisComputer(request.ip)) {
+    return reply.code(403).send({ error: "Only available on the desktop itself" });
+  }
+});
+
+function hasSyncKey(header: string | undefined): boolean {
+  const given = Buffer.from(header?.replace(/^Bearer /, "") ?? "");
+  const expected = Buffer.from(syncKey);
+  return given.length === expected.length && timingSafeEqual(given, expected);
+}
+
+function isThisComputer(ip: string): boolean {
+  return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
+}
 
 server.post<{ Params: { name: string }; Body: { args?: unknown[] } }>("/api/:name", async (request, reply) => {
   const { name } = request.params;
@@ -23,7 +52,23 @@ server.post<{ Params: { name: string }; Body: { args?: unknown[] } }>("/api/:nam
   return fn(db, ...(request.body?.args ?? []));
 });
 
+server.post<{ Body: SyncRequest }>("/sync", async (request) => answerSync(db, request.body));
+
+/** What the phone needs to pair with this desktop, for the desktop's settings screen. */
+server.get("/desktop/pairing", async () => ({
+  addresses: lanAddresses().map((ip) => `http://${ip}:${DESKTOP_PORT}`),
+  syncKey,
+  lanSyncOn: DESKTOP_HOST !== "127.0.0.1",
+}));
+
+function lanAddresses(): string[] {
+  return Object.values(networkInterfaces())
+    .flat()
+    .filter((address) => address && address.family === "IPv4" && !address.internal)
+    .map((address) => address!.address);
+}
+
 await server.register(fastifyStatic, { root: resolve("dist") });
 
 await server.listen({ host: DESKTOP_HOST, port: DESKTOP_PORT });
-console.log(`Lifeboard is running at http://${DESKTOP_HOST}:${DESKTOP_PORT}`);
+console.log(`Lifeboard is running at http://127.0.0.1:${DESKTOP_PORT}`);

@@ -15,6 +15,17 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
     `);
     await db.run("INSERT INTO meta (key, value) VALUES ('device_id', ?)", [crypto.randomUUID()]);
   },
+  // 2: LAN sync bookkeeping (see core/sync/). next_seq numbers local changes; sync_peer holds
+  // how far this device has sent to and received from each peer (the phone tracks the desktop).
+  `
+  INSERT INTO meta (key, value) VALUES ('next_seq', '1');
+  CREATE TABLE sync_peer (
+    peer_id TEXT PRIMARY KEY,
+    sent_seq INTEGER NOT NULL DEFAULT 0,
+    received_seq INTEGER NOT NULL DEFAULT 0,
+    last_synced_at TEXT
+  );
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
