@@ -111,6 +111,20 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
   );
   CREATE INDEX health_point_type_day ON health_point (type, day);
   `,
+  // 7: latest status of each pet device (per device, core/devices.ts), and the Litter-Robot
+  // default alert rules.
+  async (db) => {
+    await db.exec(`
+      CREATE TABLE device_status (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        name TEXT NOT NULL,
+        data TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    await insertDefaultRules(db);
+  },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

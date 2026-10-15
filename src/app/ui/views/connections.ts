@@ -63,9 +63,7 @@ async function signIn(event: SubmitEvent, integrationId: string) {
   button.disabled = true;
   button.textContent = "Signing in…";
   try {
-    if (integrationId === "cronometer") {
-      await call("signInToCronometer", String(fields.get("email")), String(fields.get("password")));
-    }
+    await call("signInWithPassword", integrationId, String(fields.get("email")), String(fields.get("password")));
     message = "Signed in. Fetching data…";
     await refresh();
     await call("updateNow");

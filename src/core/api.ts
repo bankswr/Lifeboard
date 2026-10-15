@@ -9,7 +9,7 @@ import { READING_TYPES } from "./readings.ts";
 import * as rules from "./rules.ts";
 import * as todos from "./todos.ts";
 import { deleteCredential } from "./credentials.ts";
-import { signInToCronometer } from "./cronometer/integration.ts";
+import { listDeviceStatuses } from "./devices.ts";
 import { dailyHealth, recentNutrition } from "./health.ts";
 import { INTEGRATIONS } from "./integrations.ts";
 import { lastUpdateAt, listConnections, runUpdate } from "./updates.ts";
@@ -57,6 +57,7 @@ async function getStatus(db: Db) {
     lastUpdateAt: await lastUpdateAt(db),
     connections: await listConnections(db),
     alerts: await rules.recentAlerts(db),
+    devices: await listDeviceStatuses(db),
   };
 }
 
@@ -65,6 +66,13 @@ async function listIntegrations(db: Db) {
   return Promise.all(
     INTEGRATIONS.map(async (i) => ({ id: i.id, name: i.name, signInMethod: i.signInMethod, signedIn: await i.isSetUp(db) })),
   );
+}
+
+/** Password sign-in from the Connections screen; the integration checks it with the service first. */
+async function signInWithPassword(db: Db, integrationId: string, email: string, password: string) {
+  const integration = INTEGRATIONS.find((i) => i.id === integrationId);
+  if (!integration?.signIn) throw new Error(`${integrationId} doesn't use a password sign-in.`);
+  await integration.signIn(db, email, password);
 }
 
 /** Forgets this device's sign-in to an integration. Data already fetched is kept. */
@@ -95,7 +103,7 @@ export const api = {
   saveRule: rules.saveRule,
   deleteRule: rules.deleteRule,
   listIntegrations,
-  signInToCronometer,
+  signInWithPassword,
   signOut,
   recentNutrition,
   dailyHealth,

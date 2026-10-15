@@ -5,6 +5,8 @@ import { DESKTOP_PORT } from "./src/desktop/config.ts";
 // desktop by the Lifeboard server (src/desktop/server.ts), so asset paths must be relative.
 export default defineConfig({
   base: "./",
+  // amazon-cognito-identity-js (Whisker sign-in) refers to Node's `global`; browsers call it globalThis.
+  define: { global: "globalThis" },
   server: {
     host: "127.0.0.1",
     port: 5173,

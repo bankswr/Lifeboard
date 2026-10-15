@@ -3,7 +3,6 @@
 // and today is never fetched (the day isn't logged yet), so a second pull would add nothing.
 import { getCredential, saveCredential } from "../credentials.ts";
 import { addDays, localDate } from "../dates.ts";
-import type { Db } from "../db/types.ts";
 import { saveNutritionDays, latestNutritionDate } from "../health.ts";
 import { SignedOutError, type Integration } from "../integration.ts";
 import { CronometerClient, CronometerSessionExpiredError, CronometerSignInError } from "./client.ts";
@@ -36,6 +35,12 @@ export const cronometer: Integration = {
 
   async isSetUp(db) {
     return Boolean(await getCredential(db, "cronometer"));
+  },
+
+  async signIn(db, email, password) {
+    const client = new CronometerClient();
+    await client.signIn(email.trim(), password);
+    await saveCredential<CronometerCredential>(db, "cronometer", { email: email.trim(), password, cookies: client.savedCookies() });
   },
 
   async update(db) {
@@ -71,9 +76,3 @@ async function signInWithSaved(client: CronometerClient, credential: CronometerC
   }
 }
 
-/** Signs in from the Connections screen and saves the sign-in on this device. */
-export async function signInToCronometer(db: Db, email: string, password: string): Promise<void> {
-  const client = new CronometerClient();
-  await client.signIn(email.trim(), password);
-  await saveCredential<CronometerCredential>(db, "cronometer", { email: email.trim(), password, cookies: client.savedCookies() });
-}

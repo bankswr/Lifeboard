@@ -129,8 +129,10 @@ describe("custom rules", () => {
     await drawerRule(phone);
     await syncWithDesktop(phone, (request) => answerSync(desktop, request));
     await syncWithDesktop(phone, (request) => answerSync(desktop, request));
-    expect((await listRules(desktop)).map((r) => r.name)).toEqual(["Drawer nearly full", "Sign-in or connection problem"]);
-    expect(await listRules(phone)).toEqual(await listRules(desktop));
+    const desktopRules = await listRules(desktop);
+    expect(desktopRules.map((r) => r.name)).toContain("Drawer nearly full");
+    expect(new Set(desktopRules.map((r) => r.name)).size).toBe(desktopRules.length); // no duplicates
+    expect(await listRules(phone)).toEqual(desktopRules);
   });
 });
 

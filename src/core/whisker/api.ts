@@ -1,0 +1,103 @@
+// Whisker's cloud API for the Litter-Robot 4, read-only. Sign-in is AWS Cognito, through
+// AWS's own amazon-cognito-identity-js (runs in Node and in the phone's WebView). Status is
+// read from the LR4 GraphQL API. Field names and status rules follow pylitterbot (MIT, used
+// by Home Assistant) and @ddgold/homebridge-litter-robot (MIT); see
+// agent-notes/2026-10-15-pet-api-research.md. Lifeboard never sends commands to the robot.
+import {
+  AuthenticationDetails,
+  CognitoRefreshToken,
+  CognitoUser,
+  CognitoUserPool,
+  type CognitoUserSession,
+} from "amazon-cognito-identity-js";
+
+// Whisker's public app identifiers (the same values pylitterbot uses).
+const USER_POOL_ID = "us-east-1_rjhNnZVAm";
+const CLIENT_ID = "4552ujeu3aic90nf8qn53levmn";
+const LR4_GRAPHQL_URL = "https://lr4.iothings.site/graphql";
+
+/** The LR4 fields Lifeboard reads (full list: pylitterbot robot/models.py). */
+const LR4_FIELDS = `
+  name serial isOnline lastSeen unitPowerStatus robotStatus robotCycleState displayCode
+  DFILevelPercent isDFIFull litterLevelPercentage catWeight isLaserDirty isBonnetRemoved
+`;
+
+export type RawRobot = Record<string, any>;
+
+export interface WhiskerTokens {
+  idToken: string;
+  refreshToken: string;
+}
+
+/** Cognito refused the email and password. */
+export class WhiskerSignInError extends Error {}
+
+/** The three calls the integration makes; tests swap in a fake. */
+export interface WhiskerApi {
+  signIn(email: string, password: string): Promise<WhiskerTokens>;
+  /** A fresh ID token from a refresh token; throws when the refresh token no longer works. */
+  refresh(email: string, refreshToken: string): Promise<string>;
+  robots(idToken: string): Promise<RawRobot[]>;
+}
+
+// Cognito's library keeps tokens in browser storage by default; Lifeboard saves its own
+// copy with the sign-in, so the library gets a throwaway in-memory store.
+const memoryStorage = () => {
+  const items = new Map<string, string>();
+  return {
+    getItem: (key: string) => items.get(key) ?? null,
+    setItem: (key: string, value: string) => void items.set(key, value),
+    removeItem: (key: string) => void items.delete(key),
+    clear: () => items.clear(),
+  };
+};
+
+function cognitoUser(email: string): CognitoUser {
+  const Storage = memoryStorage();
+  const pool = new CognitoUserPool({ UserPoolId: USER_POOL_ID, ClientId: CLIENT_ID, Storage });
+  return new CognitoUser({ Username: email, Pool: pool, Storage });
+}
+
+export const cognitoWhiskerApi: WhiskerApi = {
+  signIn(email, password) {
+    return new Promise((resolve, reject) =>
+      cognitoUser(email).authenticateUser(new AuthenticationDetails({ Username: email, Password: password }), {
+        onSuccess: (session) => resolve(tokensOf(session)),
+        onFailure: (error) =>
+          reject(
+            error?.code === "NotAuthorizedException" || error?.code === "UserNotFoundException"
+              ? new WhiskerSignInError("Whisker didn't accept the email and password.")
+              : error,
+          ),
+      }),
+    );
+  },
+
+  refresh(email, refreshToken) {
+    return new Promise((resolve, reject) =>
+      cognitoUser(email).refreshSession(new CognitoRefreshToken({ RefreshToken: refreshToken }), (error, session) =>
+        error ? reject(error) : resolve(session.getIdToken().getJwtToken()),
+      ),
+    );
+  },
+
+  async robots(idToken) {
+    const userId = JSON.parse(atob(idToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).mid;
+    const response = await fetch(LR4_GRAPHQL_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: `query ($userId: String!) { getLitterRobot4ByUser(userId: $userId) { ${LR4_FIELDS} } }`,
+        variables: { userId },
+      }),
+    });
+    if (!response.ok) throw new Error(`Whisker answered ${response.status}.`);
+    const body = await response.json();
+    if (body.errors?.length) throw new Error(`Whisker: ${body.errors.map((e: { message: string }) => e.message).join("; ")}`);
+    return body.data.getLitterRobot4ByUser ?? [];
+  },
+};
+
+function tokensOf(session: CognitoUserSession): WhiskerTokens {
+  return { idToken: session.getIdToken().getJwtToken(), refreshToken: session.getRefreshToken().getToken() };
+}

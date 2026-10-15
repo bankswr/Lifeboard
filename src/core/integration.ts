@@ -15,6 +15,8 @@ export interface Integration {
   signInMethod: "password" | "google";
   /** False until the user has signed in on this device; not-set-up integrations are skipped. */
   isSetUp(db: Db): Promise<boolean>;
+  /** For password sign-in: checks the email and password with the service and saves the sign-in. */
+  signIn?(db: Db, email: string, password: string): Promise<void>;
   /** Fetches fresh data, stores it, and returns readings for the alert rules. */
   update(db: Db): Promise<Reading[]>;
 }

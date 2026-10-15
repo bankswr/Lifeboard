@@ -50,10 +50,36 @@ const DEFAULT_RULES: Rule[] = [
     conditions: [{ field: "status", operator: "not_equals", value: "connected" }],
     message: "{subject}: {status}. {message}",
   },
+  {
+    id: "default-litter-robot-drawer",
+    name: "Litter-Robot drawer full",
+    enabled: true,
+    readingType: "litter_robot",
+    conditions: [{ field: "drawerFull", operator: "equals", value: true }],
+    message: "{subject}: the waste drawer is full.",
+  },
+  {
+    id: "default-litter-robot-offline",
+    name: "Litter-Robot offline",
+    enabled: true,
+    readingType: "litter_robot",
+    conditions: [{ field: "online", operator: "equals", value: false }],
+    message: "{subject} is offline.",
+  },
+  {
+    id: "default-litter-robot-low-litter",
+    name: "Litter-Robot litter low",
+    enabled: true,
+    readingType: "litter_robot",
+    conditions: [{ field: "litterLevel", operator: "less", value: 20 }],
+    message: "{subject}: litter is down to {litterLevel}%.",
+  },
 ];
 
+/** Adds the default rules this database doesn't have yet (never overwrites the user's edits). */
 export async function insertDefaultRules(db: Db): Promise<void> {
   for (const rule of DEFAULT_RULES) {
+    if (await get(db, "SELECT 1 FROM rule WHERE id = ?", [rule.id])) continue;
     await upsert(db, "rule", {
       ...toRow(rule),
       updated_at: "2026-01-01T00:00:00.000Z",

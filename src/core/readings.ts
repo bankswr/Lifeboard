@@ -27,6 +27,8 @@ export interface ReadingType {
   fields: ReadingField[];
 }
 
+import { LITTER_ROBOT_STATUSES } from "./whisker/status.ts";
+
 export const CONNECTION_STATUSES = ["connected", "signed_out", "error"] as const;
 export type ConnectionStatus = (typeof CONNECTION_STATUSES)[number];
 
@@ -37,6 +39,19 @@ export const READING_TYPES: ReadingType[] = [
     fields: [
       { name: "status", label: "Status", type: "text", options: [...CONNECTION_STATUSES] },
       { name: "message", label: "Problem", type: "text" },
+    ],
+  },
+  {
+    id: "litter_robot",
+    label: "Litter-Robot checked",
+    fields: [
+      { name: "status", label: "Status", type: "text", options: LITTER_ROBOT_STATUSES },
+      { name: "online", label: "Online", type: "boolean" },
+      { name: "drawerLevel", label: "Drawer level (%)", type: "number" },
+      { name: "drawerFull", label: "Drawer full", type: "boolean" },
+      { name: "litterLevel", label: "Litter level (%)", type: "number" },
+      { name: "catWeight", label: "Cat weight (lb)", type: "number" },
+      { name: "laserDirty", label: "Sensors need cleaning", type: "boolean" },
     ],
   },
 ];
