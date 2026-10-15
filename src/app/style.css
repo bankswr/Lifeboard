@@ -156,3 +156,11 @@ table.data th { color: var(--muted); font-weight: 500; font-size: 0.85rem; text-
 table.data td { text-align: right; padding: 6px 4px; border-top: 1px solid var(--border); }
 table.data th:first-child, table.data td:first-child { text-align: left; }
 button:disabled { opacity: 0.6; }
+/* Wide tables scroll sideways inside their card instead of widening the page (phone). */
+.table-scroll { overflow-x: auto; }
+.table-scroll table.data td, .table-scroll table.data th { white-space: nowrap; }
+.screen.wide { max-width: 960px; }
+/* Keep the first column (the day) in view while the rest scrolls. */
+.table-scroll table.data th:first-child, .table-scroll table.data td:first-child {
+  position: sticky; left: 0; background: var(--surface); padding-right: 10px;
+}

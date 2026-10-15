@@ -1,4 +1,5 @@
-// Health (#/health): the data fetched so far, one row per day. Charts and other refinements
+// Health (#/health): the data fetched so far, one row per day with Cronometer and Google
+// columns side by side. Charts and other refinements
 // come later (user, 2026-10-15: "for now, let's just get the data").
 import { html } from "lit-html";
 import type { HealthDay } from "../../../core/health.ts";
@@ -11,37 +12,28 @@ route(/^\/health$/, async () => {
   const signInHint = html`<p class="muted">No data yet. Sign in under Settings → Connections.</p>`;
   return {
     section: "health",
+    wide: true,
     content: html`
       <h1>Health</h1>
       <section class="card">
-        <h2>Nutrition</h2>
-        ${hasAny((d) => d.calories)
+        ${hasAny((d) => d.calories ?? d.weightLbs ?? d.bodyFatPercent ?? d.steps)
           ? html`
-              <table class="data">
-                <thead><tr><th>Day</th><th>kcal</th><th>Protein</th><th>Carbs</th><th>Fat</th></tr></thead>
-                <tbody>
-                  ${days.map((day) => html`<tr>
-                    <td>${formatDay(day.date)}</td><td>${show(day.calories)}</td>
-                    <td>${show(day.proteinG, " g")}</td><td>${show(day.carbsG, " g")}</td><td>${show(day.fatG, " g")}</td>
-                  </tr>`)}
-                </tbody>
-              </table>
-            `
-          : signInHint}
-      </section>
-      <section class="card">
-        <h2>Body and steps</h2>
-        ${hasAny((d) => d.weightLbs ?? d.bodyFatPercent ?? d.steps)
-          ? html`
-              <table class="data">
-                <thead><tr><th>Day</th><th>Weight</th><th>Body fat</th><th>Steps</th></tr></thead>
-                <tbody>
-                  ${days.map((day) => html`<tr>
-                    <td>${formatDay(day.date)}</td><td>${show(day.weightLbs, " lb", 1)}</td>
-                    <td>${show(day.bodyFatPercent, "%", 1)}</td><td>${day.steps === null ? "–" : day.steps.toLocaleString()}</td>
-                  </tr>`)}
-                </tbody>
-              </table>
+              <div class="table-scroll">
+                <table class="data">
+                  <thead><tr>
+                    <th>Day</th><th>kcal</th><th>Protein g</th><th>Carbs g</th><th>Fat g</th>
+                    <th>Weight lb</th><th>Body fat %</th><th>Steps</th>
+                  </tr></thead>
+                  <tbody>
+                    ${days.map((day) => html`<tr>
+                      <td>${formatDay(day.date)}</td><td>${show(day.calories)}</td>
+                      <td>${show(day.proteinG)}</td><td>${show(day.carbsG)}</td><td>${show(day.fatG)}</td>
+                      <td>${show(day.weightLbs, 1)}</td><td>${show(day.bodyFatPercent, 1)}</td>
+                      <td>${day.steps === null ? "–" : day.steps.toLocaleString()}</td>
+                    </tr>`)}
+                  </tbody>
+                </table>
+              </div>
             `
           : signInHint}
       </section>
@@ -49,9 +41,9 @@ route(/^\/health$/, async () => {
   };
 });
 
-/** A number rounded for display, or a dash when there's no value. */
-function show(value: number | null, unit = "", decimals = 0): string {
-  return value === null ? "–" : `${value.toFixed(decimals)}${unit}`;
+/** A number rounded for display, or a dash when there's no value. Units are in the headers. */
+function show(value: number | null, decimals = 0): string {
+  return value === null ? "–" : value.toFixed(decimals);
 }
 
 /** "2026-10-14" → "Wed, Oct 14" in the device's language. */

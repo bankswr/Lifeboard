@@ -124,8 +124,12 @@ current intent, not a commitment to details.
 6. **Calendar**, with Google Calendar sync.
 7. **Health data pipeline.** Port FitThing's pulls for calories, macros, weight,
    body fat and steps. Refinements are planned in a later session.
-   (Built 2026-10-15 ahead of order while blocked elsewhere; awaiting first live run.
+   (Built 2026-10-15 ahead of order while blocked elsewhere; live-verified 2026-10-15.
    Google sign-in is desktop-only so far.)
+   **Queued for the refinements session (user, 2026-10-15; not started):** flag days whose
+   data looks wrong, e.g. outrageous step counts or strangely low calories (likely a
+   partly logged day). Thresholds and how a flagged day is shown or excluded are to be
+   decided then.
 8. **Finances** (stretch).
 
 ## Known risks

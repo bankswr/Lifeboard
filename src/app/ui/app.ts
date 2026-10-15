@@ -7,6 +7,8 @@ export interface View {
   /** Which bottom-bar item is current. */
   section: "home" | "lists" | "health" | "settings";
   content: TemplateResult;
+  /** Use the full width on a wide screen (tables); others stay phone-width. */
+  wide?: boolean;
 }
 
 type Handler = (params: string[]) => Promise<View>;
@@ -30,7 +32,7 @@ export async function refresh() {
   }
   const [result, handler] = match;
   const view = await handler(result!.slice(1));
-  render(html`<main class="screen">${view.content}</main>${bottomBar(view.section)}`, root);
+  render(html`<main class="screen ${view.wide ? "wide" : ""}">${view.content}</main>${bottomBar(view.section)}`, root);
 }
 
 function bottomBar(current: View["section"]) {
