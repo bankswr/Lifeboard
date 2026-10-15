@@ -24,3 +24,10 @@ conventions in `agent-notes/README.md`, and update the index.
   names, small single-purpose functions, straightforward control flow, and comments that
   explain *why* rather than *what*. Choose the readable version when it costs little in
   performance.
+
+## Project layout and commands
+See `README.md`. In short: `src/core/` is shared by both devices and must not use DOM or
+Node-only APIs; `src/app/` is the UI; `src/desktop/` is the Node server. Node runs the
+desktop `.ts` files directly (type stripping), so imports name the `.ts` file and
+TypeScript-only syntax such as enums and parameter properties is not allowed
+(`erasableSyntaxOnly` enforces this). Check work with `npm test` and `npm run build`.

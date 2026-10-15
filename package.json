@@ -1,0 +1,30 @@
+{
+  "name": "lifeboard",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "server": "node --watch src/desktop/server.ts",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "desktop": "npm run build && node src/desktop/server.ts",
+    "android": "npm run build && cap sync android"
+  },
+  "dependencies": {
+    "@capacitor-community/sqlite": "^8.1.1",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/core": "^8.5.2",
+    "@fastify/static": "^10.1.6",
+    "fastify": "^5.12.7",
+    "lit-html": "^3.3.3"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
+    "@types/node": "^26.6.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.3"
+  }
+}

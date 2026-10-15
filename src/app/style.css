@@ -1,0 +1,41 @@
+/* Base styles copied from FitApp (mobile/src/style.css). */
+:root {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface-2: #273449;
+  --border: #334155;
+  --text: #f8fafc;
+  --muted: #94a3b8;
+  --accent: #22c55e;
+  --accent-text: #052e16;
+  --danger: #f87171;
+  --blue: #60a5fa;
+  --radius: 12px;
+  /* Space taken by the phone's status bar / camera cutout (top) and gesture bar (bottom).
+     Browsers expose env(); the Android app (Capacitor, edge-to-edge) also sets --safe-area-inset-*. */
+  --inset-top: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px));
+  --inset-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px));
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html, body { margin: 0; }
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.4;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.screen {
+  min-height: 100dvh;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: calc(16px + var(--inset-top)) 16px calc(24px + var(--inset-bottom));
+}
+
+h1 { font-size: 1.5rem; margin: 0 0 12px; }
+.muted { color: var(--muted); }
