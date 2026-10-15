@@ -4,7 +4,11 @@
 import { getDeviceId, getMeta, setMeta } from "./db/meta.ts";
 import { SCHEMA_VERSION } from "./db/schema.ts";
 import { get, type Db } from "./db/types.ts";
+import { deliverAlerts } from "./notify.ts";
+import { READING_TYPES } from "./readings.ts";
+import * as rules from "./rules.ts";
 import * as todos from "./todos.ts";
+import { lastUpdateAt, listConnections, runUpdate } from "./updates.ts";
 
 export interface AppInfo {
   deviceId: string;
@@ -36,6 +40,22 @@ async function saveSyncSettings(db: Db, desktopAddress: string, syncKey: string)
   await setMeta(db, "sync_key", syncKey.trim());
 }
 
+/** Runs an update now and shows notifications for any new alerts. */
+async function updateNow(db: Db) {
+  const result = await runUpdate(db);
+  await deliverAlerts(result.alerts);
+  return result;
+}
+
+/** Everything the home screen shows about updates and alerts. */
+async function getStatus(db: Db) {
+  return {
+    lastUpdateAt: await lastUpdateAt(db),
+    connections: await listConnections(db),
+    alerts: await rules.recentAlerts(db),
+  };
+}
+
 export const api = {
   getAppInfo,
   getSyncSettings,
@@ -50,6 +70,13 @@ export const api = {
   editTodoItem: todos.editTodoItem,
   deleteTodoItem: todos.deleteTodoItem,
   clearDoneTodoItems: todos.clearDoneTodoItems,
+  updateNow,
+  getStatus,
+  getReadingTypes: async (_db: Db) => READING_TYPES,
+  listRules: rules.listRules,
+  getRule: rules.getRule,
+  saveRule: rules.saveRule,
+  deleteRule: rules.deleteRule,
 };
 
 export type Api = typeof api;

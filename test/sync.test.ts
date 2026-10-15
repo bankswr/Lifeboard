@@ -35,7 +35,9 @@ describe("sync", () => {
     await saveRecord(phone, TABLE, { name: "from phone" });
     await saveRecord(desktop, TABLE, { name: "from desktop" });
 
-    expect(await syncPhone(phone, desktop)).toEqual({ sent: 1, received: 1 });
+    // sent 2: the new row plus the default alert rule every device starts with; the desktop
+    // already has an identical copy of that rule, so it isn't counted as received either way.
+    expect(await syncPhone(phone, desktop)).toEqual({ sent: 2, received: 1 });
     expect(await names(phone)).toEqual(["from desktop", "from phone"]);
     expect(await names(desktop)).toEqual(["from desktop", "from phone"]);
   });

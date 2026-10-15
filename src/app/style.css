@@ -117,3 +117,36 @@ button.icon { color: var(--muted); background: none; padding: 4px 10px; font-siz
 .item input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--accent); margin: 0; }
 .item-text { flex: 1; overflow-wrap: anywhere; cursor: pointer; }
 .item.done .item-text { color: var(--muted); text-decoration: line-through; }
+
+.small { font-size: 0.85rem; }
+a.button {
+  font-weight: 600;
+  color: var(--accent-text);
+  background: var(--accent);
+  border-radius: 8px;
+  padding: 10px 14px;
+  text-decoration: none;
+}
+
+.status-row { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; }
+.status.connected { color: var(--accent); }
+.status.signed_out, .status.error { color: var(--danger); }
+
+.rule-card { display: flex; align-items: center; gap: 12px; }
+.rule-card a { flex: 1; display: grid; gap: 2px; color: var(--text); text-decoration: none; }
+.switch { display: flex; align-items: center; gap: 8px; color: var(--text); }
+.switch input { width: 20px; height: 20px; accent-color: var(--accent); margin: 0; }
+
+select {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 8px;
+  min-width: 0;
+}
+fieldset { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px 12px; display: grid; gap: 10px; margin: 0; }
+legend { color: var(--muted); font-size: 0.9rem; padding: 0 4px; }
+.condition { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 6px; align-items: center; }
+.condition input { min-width: 0; }

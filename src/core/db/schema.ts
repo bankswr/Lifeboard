@@ -1,5 +1,6 @@
 // The database schema, versioned with SQLite's PRAGMA user_version (approach from FitApp).
 // Both devices run the same migrations. Never edit a shipped migration; append a new one.
+import { insertDefaultRules } from "../rules.ts";
 import { syncColumns } from "../sync/records.ts";
 import type { Db } from "./types.ts";
 
@@ -43,6 +44,43 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
   );
   CREATE INDEX todo_item_list ON todo_item (list_id);
   `,
+  // 4: connections, alert rules and alerts (core/connections.ts, core/rules.ts, core/updates.ts).
+  // Rules sync between devices; everything else is per device (each device signs in and
+  // alerts on its own).
+  async (db) => {
+    await db.exec(`
+      CREATE TABLE connection (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        status TEXT NOT NULL,
+        message TEXT,
+        last_checked_at TEXT,
+        last_success_at TEXT
+      );
+      CREATE TABLE rule (
+        ${syncColumns},
+        name TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        reading_type TEXT NOT NULL,
+        conditions TEXT NOT NULL,
+        message TEXT NOT NULL
+      );
+      CREATE TABLE rule_state (
+        rule_id TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        matched INTEGER NOT NULL,
+        PRIMARY KEY (rule_id, subject)
+      );
+      CREATE TABLE alert (
+        id INTEGER PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        rule_id TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        message TEXT NOT NULL
+      );
+    `);
+    await insertDefaultRules(db);
+  },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

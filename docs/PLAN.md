@@ -114,7 +114,7 @@ current intent, not a commitment to details.
    Petory feeders from Node and from the phone. This is the riskiest dependency:
    the APIs are unofficial and may change, and the Petory API is still unknown.
 2. ✅ **Data model and LAN sync.** Build both, tested with a throwaway record type.
-3. **Connections and rules engine.** Sign-in status for every integration, the
+3. ✅ **Connections and rules engine** (built 2026-10-15, awaiting user review). Sign-in status for every integration, the
    events/conditions/actions model, and default "connection lost" alerts.
 4. **Pets module.** Status dashboard, events, and default rules.
 5. **Tasks & reminders**, with Google Tasks sync, plus the generic to-do lists

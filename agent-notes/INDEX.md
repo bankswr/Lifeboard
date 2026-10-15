@@ -8,3 +8,4 @@ One line per note: `- [Title](file.md) — one-line summary`
 - [LAN sync](2026-10-15-lan-sync.md) — phase 2: seq-based exchange, newest edit wins, tombstones; how a feature makes a table synced; desktop listens on 0.0.0.0 with key-protected /sync, UI loopback-only; Android cleartext; WebView testing via raw CDP
 - [Pet API research](2026-10-15-pet-api-research.md) — Litter-Robot: Cognito + per-model endpoints (LR4 GraphQL), TS route via amazon-cognito-identity-js, alert fields; Petory F01W: no known API, next step is decompiling the app pulled from the user's phone
 - [To-do lists](2026-10-15-todo-lists.md) — generic synced lists (built unreviewed while user away); UI decisions; lit-html `live()` gotcha for checkboxes
+- [Connections, rules, updates](2026-10-15-connections-and-rules.md) — phase 3: readings → edge-triggered IFTTT-style rules (notify only), per-device connection status + alerts, update schedule per device, notification delivery; built unreviewed

@@ -9,10 +9,12 @@ import fastifyStatic from "@fastify/static";
 import Fastify from "fastify";
 import { api, type ApiName } from "../core/api.ts";
 import { getMeta, setMeta } from "../core/db/meta.ts";
+import { setAlertDelivery } from "../core/notify.ts";
 import { migrate } from "../core/db/schema.ts";
 import { answerSync, type SyncRequest } from "../core/sync/sync.ts";
 import { DATA_DIR, DESKTOP_HOST, DESKTOP_PORT } from "./config.ts";
 import { openNodeDb } from "./db/nodeSqlite.ts";
+import { showDesktopNotifications } from "./notify.ts";
 
 mkdirSync(DATA_DIR, { recursive: true });
 const db = openNodeDb(join(DATA_DIR, "lifeboard.db"));
@@ -79,3 +81,16 @@ await server.register(fastifyStatic, { root: resolve("dist") });
 
 await server.listen({ host: DESKTOP_HOST, port: DESKTOP_PORT });
 console.log(`Lifeboard is running at http://127.0.0.1:${DESKTOP_PORT}`);
+
+// Updates: once at start, then every 4 hours while the server runs (docs/PLAN.md).
+const UPDATE_EVERY_HOURS = 4;
+setAlertDelivery(showDesktopNotifications);
+async function scheduledUpdate() {
+  try {
+    await api.updateNow(db);
+  } catch (error) {
+    console.error("Update failed:", error);
+  }
+}
+void scheduledUpdate();
+setInterval(scheduledUpdate, UPDATE_EVERY_HOURS * 60 * 60 * 1000);
