@@ -1,0 +1,3 @@
+# Lifeboard
+
+@AGENTS.md
