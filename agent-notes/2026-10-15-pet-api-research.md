@@ -26,6 +26,31 @@
   nothing). Run `node spikes/litterrobot.ts`. Needs the user. Type-checked only.
 
 ## Petory feeders
+
+**Update 2026-10-15 (later): Petory is a Tuya white-label app.** APK pulled from the user's
+Pixel 7 Pro over wireless adb (Petory 1.0.4, versionCode 5; base.apk + arm64 split, kept
+only in the session scratchpad, not in the repo). Its code is Tuya's OEM app SDK:
+`com.thingclips.*` packages and `libThing*.so` / `libthingsmart.so` native libs ("Thing" is
+Tuya's 2023 rename of "TuyaSmart"). So the feeders are ordinary Tuya cloud devices, and the
+plan's option (a) applies; decompiling Petory's private API is not needed. Choice of Tuya
+route (Smart Life re-pair vs developer cloud project vs others) is with the user; see
+whichever note records it.
+
+**LAN finding:** three Tuya devices broadcast on the home LAN (UDP 6667, decrypted with the
+public broadcast key): same productKey `kf5grvjfxbmaijbo`, protocol **3.3**, so almost
+certainly the three feeders. Local reads need each device's local key, which only Tuya's
+cloud hands out (changes on re-pair).
+
+**User decision (2026-10-15):** keep the Petory app (strongly prefers not to switch). Plan:
+sign in with the Petory account the way the Petory app does (Tuya mobile API using the
+app's built-in app key/secret + `assets/t_s.bmp` signing key), read device status and the
+local keys, then poll locally from the desktop with cloud as fallback. User accepts the
+fragility; if it doesn't work, they will move the feeders to Smart Life (QR sign-in, as
+Home Assistant does). **Blocked:** extracting the app key from the APK was denied by the
+agent's permission classifier ("credential exploration"); needs the user's explicit
+permission rule or another route before continuing.
+
+Earlier research (superseded by the above where it conflicts):
 - Model **F01W** (Amazon ASIN B0B376CLN3). App: Google Play `com.petory.smart`, developer
   "patpet" = Shenzhen Patpet Technology Co., Ltd. Not Tuya-branded as far as found.
 - **No public API, library, Home Assistant or Homebridge integration found** (web searches

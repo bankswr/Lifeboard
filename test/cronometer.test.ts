@@ -74,8 +74,15 @@ function fakeCronometer(password: string) {
     if (url.pathname === "/cronometer/app") {
       const body = await request.text();
       if (!session || !sessions.has(session)) return respond("//EX[1,0]");
-      if (body.includes("|authenticate|")) return respond("//OK[4242,0,[]]");
-      if (body.includes(`|${session}|`)) return respond('//OK[1,["0123456789abcdef0123456789abcdef"],0,7]');
+      // As on the live site since 2026-10: authenticate's string table carries the session
+      // value that generateAuthorizationToken wants (alongside other hex strings); the
+      // cookie value itself is rejected.
+      const sessionValue = session.replace("s", "").padStart(32, "f");
+      if (body.includes("|authenticate|")) {
+        return respond(`//OK[4242,0,["com.example.User/1","${"1".repeat(32)}","${sessionValue}","x"],0,7]`);
+      }
+      if (body.includes(`|${sessionValue}|`)) return respond('//OK[1,["0123456789abcdef0123456789abcdef"],0,7]');
+      return respond('//EX[2,1,["NotLoggedInException/1","Invalid or expired session"],0,7]');
     }
     if (url.pathname === "/export" && url.searchParams.get("nonce") === "0123456789abcdef0123456789abcdef") {
       return respond(`Date,Energy (kcal),Protein (g),Carbs (g),Fat (g)\n${url.searchParams.get("end")},2100,150,200,70\n`);

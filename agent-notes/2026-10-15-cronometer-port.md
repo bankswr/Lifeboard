@@ -24,6 +24,19 @@ Cronometer** (that needs the user's sign-in); everything is tested against a fak
 - Dropped from FitThing: retry/backoff on 429/5xx (the next scheduled update is the retry),
   all non-macro nutrients, CSV import, the gap-fill/targets logic (user: refinements later).
 
+## Cronometer redeploy, fixed 2026-10-15 (first live run)
+- Cronometer's GWT build changed since FitThing's capture: new permutation and policy hash
+  (where to find them is commented in `client.ts`). Old permutation's `.cache.js` → 404 is
+  the quick test for "they redeployed". Method signatures were unchanged.
+- **`generateAuthorizationToken` no longer accepts the `sesnonce` cookie** as its session
+  argument (`NotLoggedInException: Invalid or expired session`). The web app passes a field
+  of the User object instead (minified `T_b()` → `$c.Q`); it arrives as a 32-hex string in
+  `authenticate`'s GWT string table. Its index depends on account data (was [112] of 116, a
+  different 32-hex string came earlier), so the client tries every 32-hex string, last
+  first, then the cookie. Found with a throwaway diagnostic the user ran (credentials never
+  passed through the agent).
+- Verified live: sign-in, export, 29 days stored. FitThing has the same break (not fixed).
+
 ## Credentials (decision to confirm with the user)
 - Email + password are saved in the per-device `credential` table (never synced), like
   FitThing's `secrets/cronometer.json`. That is what makes "never silently signed out"

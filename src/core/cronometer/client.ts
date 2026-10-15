@@ -13,9 +13,11 @@ const RPC_URL = `${BASE_URL}/cronometer/app`;
 const EXPORT_URL = `${BASE_URL}/export`;
 const GWT_MODULE_BASE = `${BASE_URL}/cronometer/`;
 
-// Values from the live site (2026-09-18). Update together if Cronometer redeploys.
-const GWT_PERMUTATION = "1008F9FC280FA1C9D6FFD0C3960CC121";
-const SERVICE_POLICY_HASH = "13F6CC6C06AE73A6E95DE9B0233AB365";
+// Values from the live site (2026-10-15). Update together if Cronometer redeploys:
+// the permutation is the 32-hex id in /cronometer/cronometer.nocache.js; the policy hash is
+// the one passed next to 'app' in /cronometer/<permutation>.cache.js.
+const GWT_PERMUTATION = "CEADF04BFA75A692920132BE30ADAD5C";
+const SERVICE_POLICY_HASH = "9AE2A14D962F8D53422A5AF8355930C3";
 const SERVICE = "com.cronometer.shared.rpc.CronometerService";
 
 const authenticateBody = (timezoneOffsetMinutes: number) =>
@@ -37,6 +39,17 @@ export class CronometerSignInError extends Error {}
 export class CronometerSessionExpiredError extends Error {}
 /** Cronometer answered in an unexpected way, probably because its web app changed. */
 export class CronometerChangedError extends Error {}
+
+/**
+ * The 32-hex strings in a GWT reply's string table (the `["...", ...]` before the final
+ * `,0,7]`), last first: in authenticate's reply the session value sits near the end.
+ */
+function sessionCandidates(gwtReply: string): string[] {
+  const table = /,(\[(?:"(?:[^"\\]|\\.)*",?)*\]),\d+,\d+\]$/.exec(gwtReply)?.[1];
+  if (!table) return [];
+  const strings: string[] = JSON.parse(table);
+  return strings.filter((entry) => /^[0-9a-f]{32}$/.test(entry)).reverse();
+}
 
 export class CronometerClient {
   private session: CookieSession;
@@ -96,10 +109,16 @@ export class CronometerClient {
     const userId = /^\/\/OK\[(\d+),/.exec(authenticated)?.[1];
     if (!userId) throw new CronometerSessionExpiredError("Cronometer didn't accept the saved session.");
 
-    const tokenResponse = await this.rpc(generateTokenBody(sesnonce, userId));
-    const token = /"([0-9a-f]{32})"/.exec(tokenResponse)?.[1];
-    if (!token) throw new CronometerChangedError("Cronometer's export has changed; Lifeboard needs an update.");
-    return token;
+    // The token call wants a session value as an argument. Until 2026-10 that was the
+    // sesnonce cookie; now it is a separate 32-hex string inside authenticate's reply (the
+    // User object's string table). Its position there depends on the account's data, so
+    // try each candidate, newest-known form first, rather than picking by index.
+    for (const session of [...sessionCandidates(authenticated), sesnonce]) {
+      const tokenResponse = await this.rpc(generateTokenBody(session, userId));
+      const token = /^\/\/OK\[.*"([0-9a-f]{32})"/.exec(tokenResponse)?.[1];
+      if (token) return token;
+    }
+    throw new CronometerChangedError("Cronometer's export has changed; Lifeboard needs an update.");
   }
 
   private async rpc(body: string): Promise<string> {
