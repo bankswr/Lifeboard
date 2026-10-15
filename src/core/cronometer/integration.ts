@@ -32,6 +32,7 @@ export function rangeToFetch(latestStored: string | null, today: string): { star
 export const cronometer: Integration = {
   id: "cronometer",
   name: "Cronometer",
+  signInMethod: "password",
 
   async isSetUp(db) {
     return Boolean(await getCredential(db, "cronometer"));

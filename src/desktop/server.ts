@@ -14,6 +14,7 @@ import { migrate } from "../core/db/schema.ts";
 import { answerSync, type SyncRequest } from "../core/sync/sync.ts";
 import { DATA_DIR, DESKTOP_HOST, DESKTOP_PORT } from "./config.ts";
 import { openNodeDb } from "./db/nodeSqlite.ts";
+import { registerGoogleSignIn } from "./googleSignIn.ts";
 import { showDesktopNotifications } from "./notify.ts";
 
 mkdirSync(DATA_DIR, { recursive: true });
@@ -76,6 +77,8 @@ function lanAddresses(): string[] {
     .filter((address) => address && address.family === "IPv4" && !address.internal)
     .map((address) => address!.address);
 }
+
+registerGoogleSignIn(server, db, () => api.updateNow(db));
 
 await server.register(fastifyStatic, { root: resolve("dist") });
 

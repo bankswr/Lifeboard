@@ -11,6 +11,8 @@ export interface Integration {
   id: string;
   /** Shown to the user, e.g. "Cronometer". */
   name: string;
+  /** How the user signs in: an email/password form, or Google's sign-in page (desktop only for now). */
+  signInMethod: "password" | "google";
   /** False until the user has signed in on this device; not-set-up integrations are skipped. */
   isSetUp(db: Db): Promise<boolean>;
   /** Fetches fresh data, stores it, and returns readings for the alert rules. */

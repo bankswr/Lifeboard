@@ -98,6 +98,19 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
   );
   CREATE INDEX nutrition_day_date ON nutrition_day (date);
   `,
+  // 6: measurements from Google Health (steps, weight, body fat), synced (core/health.ts).
+  `
+  CREATE TABLE health_point (
+    ${syncColumns},
+    type TEXT NOT NULL,
+    day TEXT NOT NULL,
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    value REAL NOT NULL,
+    source TEXT NOT NULL
+  );
+  CREATE INDEX health_point_type_day ON health_point (type, day);
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

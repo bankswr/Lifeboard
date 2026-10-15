@@ -1,7 +1,7 @@
 // Connections (#/connections): sign in to outside services on this device, or sign out.
 // Sign-ins are kept on this device only; the other device signs in separately.
 import { html } from "lit-html";
-import { call } from "../../backend.ts";
+import { call, platform } from "../../backend.ts";
 import { act, refresh, route } from "../app.ts";
 
 let message = "";
@@ -27,7 +27,9 @@ route(/^\/connections$/, async () => {
                 <button class="secondary" @click=${() => signOut(integration.id, integration.name)}>Sign out</button>
               </section>
             `
-          : html`
+          : integration.signInMethod === "google"
+            ? googleSignIn(integration.name)
+            : html`
               <section class="card">
                 <h2>${integration.name}</h2>
                 <form @submit=${(event: SubmitEvent) => signIn(event, integration.id)}>
@@ -41,6 +43,17 @@ route(/^\/connections$/, async () => {
     `,
   };
 });
+
+function googleSignIn(name: string) {
+  return html`
+    <section class="card">
+      <h2>${name}</h2>
+      ${platform === "desktop"
+        ? html`<a class="button" href="/oauth/google/start">Sign in with Google</a>`
+        : html`<p class="muted">Sign in on the desktop. Its data reaches this phone when they sync.</p>`}
+    </section>
+  `;
+}
 
 async function signIn(event: SubmitEvent, integrationId: string) {
   event.preventDefault();

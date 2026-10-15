@@ -16,7 +16,7 @@ async function newDb() {
 
 /** A pretend integration whose next update does whatever `behave` says. */
 function fakeIntegration(behave: () => Reading[]): Integration {
-  return { id: "fake", name: "Fake service", isSetUp: async () => true, update: async () => behave() };
+  return { id: "fake", name: "Fake service", signInMethod: "password", isSetUp: async () => true, update: async () => behave() };
 }
 
 describe("updates and the default sign-in rule", () => {
