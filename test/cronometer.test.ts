@@ -35,11 +35,13 @@ describe("parseDailySummary", () => {
 });
 
 describe("rangeToFetch", () => {
-  it("fetches 30 days up to yesterday the first time", () => {
-    expect(rangeToFetch(null, "2026-10-15")).toEqual({ start: "2026-09-15", end: "2026-10-14" });
+  it("fetches 90 days up to yesterday the first time", () => {
+    expect(rangeToFetch(null, "2026-10-15")).toEqual({ start: "2026-07-17", end: "2026-10-14" });
   });
   it("re-reads 3 days before the newest stored day after that", () => {
-    expect(rangeToFetch("2026-10-14", "2026-10-15")).toEqual({ start: "2026-10-11", end: "2026-10-14" });
+    expect(rangeToFetch("2026-10-14", "2026-10-15", "2026-07-17")).toEqual({ start: "2026-10-11", end: "2026-10-14" });
+    // Stored data but no history pull yet (an install from before it): fetch the history once.
+    expect(rangeToFetch("2026-10-14", "2026-10-15")).toEqual({ start: "2026-07-17", end: "2026-10-14" });
   });
 });
 

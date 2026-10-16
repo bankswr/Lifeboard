@@ -14,17 +14,31 @@ interface CronometerCredential {
   cookies?: string;
   /** Local date of the last successful pull. */
   lastPulledOn?: string;
+  /** Earliest day the history pull has covered; absent until it has run. */
+  historyFrom?: string;
 }
 
-/** Days fetched on the first pull. */
-const FIRST_PULL_DAYS = 30;
+/**
+ * Days of history fetched once (user, 2026-10-16: 90 days, as for Google). Raising this
+ * makes every device fetch the longer history at its next update.
+ */
+export const HISTORY_DAYS = 90;
 /** Entries can be logged or fixed a few days late, so each pull re-reads this many days. */
 const OVERLAP_DAYS = 3;
 
-/** The dates to fetch, or null if there's nothing new. Ends yesterday. */
-export function rangeToFetch(latestStored: string | null, today: string): { start: string; end: string } | null {
+/** The first day of the history pull. */
+export function historyStart(today: string): string {
+  return addDays(today, -HISTORY_DAYS);
+}
+
+/**
+ * The dates to fetch, or null if there's nothing new. Ends yesterday. Starts at the history
+ * start until the history has been fetched (`historyFrom` covers it).
+ */
+export function rangeToFetch(latestStored: string | null, today: string, historyFrom?: string): { start: string; end: string } | null {
   const end = addDays(today, -1);
-  const start = latestStored ? addDays(latestStored, -OVERLAP_DAYS) : addDays(end, -(FIRST_PULL_DAYS - 1));
+  const needsHistory = !historyFrom || historyFrom > historyStart(today);
+  const start = latestStored && !needsHistory ? addDays(latestStored, -OVERLAP_DAYS) : historyStart(today);
   return start <= end ? { start, end } : null;
 }
 
@@ -46,8 +60,10 @@ export const cronometer: Integration = {
   async update(db) {
     const credential = (await getCredential<CronometerCredential>(db, "cronometer"))!;
     const today = localDate();
-    if (credential.lastPulledOn === today) return [];
-    const range = rangeToFetch(await latestNutritionDate(db), today);
+    const needsHistory = !credential.historyFrom || credential.historyFrom > historyStart(today);
+    // One export covers the whole range, so the history pull costs one of the ~10 a day.
+    if (credential.lastPulledOn === today && !needsHistory) return [];
+    const range = rangeToFetch(await latestNutritionDate(db), today, credential.historyFrom);
     if (!range) return [];
 
     const client = new CronometerClient(credential.cookies);
@@ -61,7 +77,10 @@ export const cronometer: Integration = {
     }
 
     await saveNutritionDays(db, parseDailySummary(csv));
-    await saveCredential(db, "cronometer", { ...credential, cookies: client.savedCookies(), lastPulledOn: today });
+    await saveCredential(db, "cronometer", {
+      ...credential, cookies: client.savedCookies(), lastPulledOn: today,
+      historyFrom: needsHistory ? range.start : credential.historyFrom,
+    });
     return [];
   },
 };

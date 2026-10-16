@@ -1,7 +1,7 @@
 // Monitor (#/monitor, in the Hub menu; the start screen): what needs attention today, in the
 // user's order (2026-10-16): alerts (dismissable; red border when there are any), today's
 // tasks and events from the Schedule, a card per device with its levels, and a Health card
-// whose contents are still to be decided.
+// with today's targets (docs/PLAN.md phase 7a).
 import { html } from "lit-html";
 import { localDate } from "../../../core/dates.ts";
 import type { ScheduleDay } from "../../../core/schedule/store.ts";
@@ -9,12 +9,15 @@ import { call } from "../../backend.ts";
 import { act, route } from "../app.ts";
 import { card } from "../card.ts";
 import { formatTime } from "../format.ts";
+import { targetsBody } from "./health.ts";
 import { deviceCards, NO_DEVICES_HINT } from "./pets.ts";
 import { eventRow, taskRow, timeRange } from "./schedule.ts";
 
 route(/^\/monitor$/, async () => {
   const today = localDate();
-  const [status, [schedule]] = await Promise.all([call("getStatus"), call("getSchedule", today, today)]);
+  const [status, [schedule], health] = await Promise.all([
+    call("getStatus"), call("getSchedule", today, today), call("analyzeHealth"),
+  ]);
   const connectionProblems = status.connections.filter((connection) => connection.status !== "connected");
   return {
     section: "monitor",
@@ -62,7 +65,12 @@ route(/^\/monitor$/, async () => {
       ${status.devices.length === 0 ? html`<section class="card">${NO_DEVICES_HINT}</section>` : ""}
       <div class="device-grid">${deviceCards(status.devices, status)}</div>
 
-      ${card("monitor-health", "Health", html`<p class="muted">Coming soon: what goes here is still to be decided.</p>`)}
+      ${card("monitor-health", "Health", html`
+        ${targetsBody(health.targets)}
+        ${health.pendingCount && !health.targets
+          ? html`<p class="small danger-text">${health.pendingCount} flagged item${health.pendingCount === 1 ? "" : "s"} to review.</p>`
+          : ""}
+      `, { actions: html`<a class="small" href="#/health">Health ›</a>` })}
     `,
   };
 });

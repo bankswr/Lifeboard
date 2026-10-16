@@ -31,11 +31,14 @@ export async function recentNutrition(db: Db, days = 14): Promise<NutritionDay[]
   return rows.map((row) => ({ date: row.date, calories: row.calories, proteinG: row.protein_g, carbsG: row.carbs_g, fatG: row.fat_g }));
 }
 
-// ---------- Google Health points (steps, weight, body fat) ----------
+// ---------- Google Health points (steps, weight, body fat, heart rate) ----------
 
-export type PointType = "steps" | "weight" | "body-fat";
+export type PointType = "steps" | "weight" | "body-fat" | "heart-rate" | "daily-resting-heart-rate";
 
-/** One measurement as stored. Weight is in grams, body fat in percent, steps a count. */
+/**
+ * One measurement as stored. Weight is in grams, body fat in percent, steps a count, heart
+ * rate (samples every few minutes from the ring) and daily resting heart rate in beats per minute.
+ */
 export interface HealthPoint {
   id: string;
   type: PointType;
@@ -88,32 +91,45 @@ export interface HealthDay {
   weightLbs: number | null;
   bodyFatPercent: number | null;
   steps: number | null;
+  /** Mean of the day's heart-rate samples. */
+  averageHeartRate: number | null;
+  restingHeartRate: number | null;
 }
 
-const LBS_PER_GRAM = 0.00220462262185;
+export const LBS_PER_GRAM = 0.00220462262185;
 
 /** One row per day for the last `days` days (newest first, ending yesterday), every source combined. */
 export async function dailyHealth(db: Db, days = 14): Promise<HealthDay[]> {
   const end = addDays(localDate(), -1);
-  const start = addDays(end, -(days - 1));
+  return healthDays(db, addDays(end, -(days - 1)), end);
+}
+
+/** One row per day from `start` to `end` (both included), newest first, every source combined. */
+export async function healthDays(db: Db, start: string, end: string): Promise<HealthDay[]> {
   const nutrition = new Map(
     (await db.all("SELECT * FROM nutrition_day WHERE date BETWEEN ? AND ? AND deleted = 0", [start, end])).map((row) => [row.date, row]),
   );
-  const points = await db.all("SELECT * FROM health_point WHERE day BETWEEN ? AND ? AND deleted = 0", [start, end]);
-  const average = (type: PointType, day: string) => {
-    const values = points.filter((p) => p.type === type && p.day === day).map((p) => p.value);
-    return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
-  };
+  // Averaged in SQL: heart rate alone is ~144 samples a day.
+  const averages = new Map(
+    (await db.all(
+      `SELECT type, day, AVG(value) AS value FROM health_point
+       WHERE type IN ('weight', 'body-fat', 'heart-rate', 'daily-resting-heart-rate') AND day BETWEEN ? AND ? AND deleted = 0
+       GROUP BY type, day`,
+      [start, end],
+    )).map((row) => [`${row.type} ${row.day}`, row.value as number]),
+  );
+  const average = (type: PointType, day: string) => averages.get(`${type} ${day}`) ?? null;
+  const stepPoints = await db.all("SELECT * FROM health_point WHERE type = 'steps' AND day BETWEEN ? AND ? AND deleted = 0", [start, end]);
   const steps = stepsByDay(
-    points
-      .filter((p) => p.type === "steps")
-      .map((p) => ({ day: p.day, start: Date.parse(p.start_time), end: Date.parse(p.end_time), count: p.value, source: p.source })),
+    stepPoints.map((p) => ({ day: p.day, start: Date.parse(p.start_time), end: Date.parse(p.end_time), count: p.value, source: p.source })),
   );
 
   const rows: HealthDay[] = [];
   for (let date = end; date >= start; date = addDays(date, -1)) {
     const food = nutrition.get(date);
     const grams = average("weight", date);
+    const heartRate = average("heart-rate", date);
+    const resting = average("daily-resting-heart-rate", date);
     rows.push({
       date,
       calories: food?.calories ?? null,
@@ -123,6 +139,8 @@ export async function dailyHealth(db: Db, days = 14): Promise<HealthDay[]> {
       weightLbs: grams === null ? null : grams * LBS_PER_GRAM,
       bodyFatPercent: average("body-fat", date),
       steps: steps.has(date) ? Math.round(steps.get(date)!) : null,
+      averageHeartRate: heartRate === null ? null : Math.round(heartRate),
+      restingHeartRate: resting === null ? null : Math.round(resting),
     });
   }
   return rows;

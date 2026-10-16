@@ -15,6 +15,8 @@ import * as maintenance from "./maintenance.ts";
 import * as food from "./smartlife/food.ts";
 import { getLitterSettings, saveLitterSettings } from "./whisker/levels.ts";
 import { dailyHealth, recentNutrition } from "./health.ts";
+import { clearVerdict, setVerdict } from "./healthReview.ts";
+import { analyzeHealth, getHealthSettings, saveHealthSettings, targetHistory } from "./healthTargets.ts";
 import { INTEGRATIONS } from "./integrations.ts";
 import { lastUpdateAt, listConnections, runUpdate } from "./updates.ts";
 import * as scheduleEdit from "./schedule/edit.ts";
@@ -196,6 +198,12 @@ export const api = {
   signOut,
   recentNutrition,
   dailyHealth,
+  analyzeHealth: (db: Db) => analyzeHealth(db),
+  getHealthSettings,
+  saveHealthSettings,
+  setHealthVerdict: setVerdict,
+  clearHealthVerdict: clearVerdict,
+  getTargetHistory: (db: Db) => targetHistory(db),
   getSchedule: schedule.getSchedule,
   getScheduleOptions: schedule.getScheduleOptions,
   getEvent: schedule.getEvent,

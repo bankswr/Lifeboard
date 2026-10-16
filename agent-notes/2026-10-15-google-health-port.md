@@ -11,7 +11,8 @@ Google API** (needs the user's interactive sign-in); tested against a fake API.
   `invalid_grant` on refresh → `SignedOutError` → "signed out" alert.
 - `core/google/healthApi.ts`: paginated `dataPoints` list with FitThing's AIP-160 filters
   (UTC-midnight bounds) for `steps`, `weight`, `body-fat`.
-- `core/google/integration.ts`: first pull 30 days, then from 3 days before the newest
+- `core/google/integration.ts`: first pull 30 days (90 since 2026-10-16, see
+  2026-10-16-health-targets.md), then from 3 days before the newest
   stored day of each type, up to today (exclusive), as FitThing did.
 - `health_point` table (synced): one row per Google point, weight in grams, body fat %,
   step counts with interval and source package. Ids: `google-<point name>`; step points

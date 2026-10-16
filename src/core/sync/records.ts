@@ -15,6 +15,7 @@ import { get, utcNow, type Db, type Row } from "../db/types.ts";
 export const SYNCED_TABLES: string[] = [
   "todo_list", "todo_item", "rule", "nutrition_day", "health_point",
   "calendar", "task_list", "calendar_event", "task", "schedule_change", "setting", "feeder_event", "fountain_refill", "maintenance_item",
+  "health_review", "health_target",
 ];
 
 /** Column definitions for a synced table's CREATE TABLE. */

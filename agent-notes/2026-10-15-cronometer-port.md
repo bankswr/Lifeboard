@@ -11,7 +11,7 @@ Cronometer** (that needs the user's sign-in); everything is tested against a fak
   `agent-notes/2026-09-17-cronometer-endpoints.md`.
 - `parse.ts`: calories (kJ converted) + protein/carbs/fat only, via papaparse. Same
   column-candidate lists as FitThing; a missing required column is an error.
-- `integration.ts`: first pull 30 days, then from 3 days before the newest stored day;
+- `integration.ts`: first pull 30 days (90 since 2026-10-16, see 2026-10-16-health-targets.md), then from 3 days before the newest stored day;
   always ends **yesterday** (FitThing excluded today too: the day isn't fully logged).
   **At most one pull per local calendar day per device**, because of Cronometer's ~10
   exports/day cap (desktop updates every 4 h would otherwise burn 6/day).

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { saveCredential } from "../src/core/credentials.ts";
+import { getCredential, saveCredential } from "../src/core/credentials.ts";
 import { HEALTH_SCOPES, SCHEDULE_SCOPES } from "../src/core/google/oauth.ts";
 import { addDays, localDate } from "../src/core/dates.ts";
 import { migrate } from "../src/core/db/schema.ts";
@@ -60,6 +60,19 @@ describe("toHealthPoint", () => {
       .toMatchObject({ value: 21.5 });
   });
 
+  it("reads heart-rate samples and daily resting heart rate", () => {
+    const sample = toHealthPoint("heart-rate", {
+      dataSource: { application: { packageName: RING } },
+      heartRate: { sampleTime: { physicalTime: "2026-10-03T23:50:00Z", civilTime: civil }, beatsPerMinute: "88" },
+    });
+    expect(sample).toMatchObject({ id: `google-heart-rate-${RING}-2026-10-03T23:50:00Z`, day: "2026-10-03", value: 88 });
+    const resting = toHealthPoint("daily-resting-heart-rate", {
+      dataSource: { application: { packageName: RING } },
+      dailyRestingHeartRate: { date: { year: 2026, month: 10, day: 4 }, beatsPerMinute: "70" },
+    });
+    expect(resting).toMatchObject({ day: "2026-10-04", startTime: "2026-10-04T00:00:00Z", value: 70 });
+  });
+
   it("skips points missing fields", () => {
     expect(toHealthPoint("weight", { name: "x" })).toBeNull();
   });
@@ -78,8 +91,11 @@ describe("health storage and the daily summary", () => {
       point("w1", "weight", 80000), point("w2", "weight", 81000),
     ]);
     await replaceHealthPoints(db, "steps", `${yesterday}T00:00:00Z`, `${localDate()}T00:00:00Z`, [point("s1", "steps", 6000)]);
+    await replaceHealthPoints(db, "heart-rate", `${yesterday}T00:00:00Z`, `${localDate()}T00:00:00Z`, [
+      point("h1", "heart-rate", 60), point("h2", "heart-rate", 81),
+    ]);
     const [day] = await dailyHealth(db, 2);
-    expect(day).toMatchObject({ date: yesterday, calories: 2000, steps: 6000, bodyFatPercent: null });
+    expect(day).toMatchObject({ date: yesterday, calories: 2000, steps: 6000, bodyFatPercent: null, averageHeartRate: 71, restingHeartRate: null });
     expect(day.weightLbs).toBeCloseTo(80500 * 0.00220462262185);
   });
 
@@ -126,17 +142,22 @@ describe("Google integration", () => {
     }
   }
 
-  it("fetches steps, weight and body fat with a refreshed token", async () => {
+  it("fetches steps, weight, body fat and heart rate with a refreshed token", async () => {
     const site = fakeGoogle(true);
     await withFetch(site.fetch, async () => {
       const db = await newDb();
       await saveCredential(db, "google", { clientId: "id", clientSecret: "secret", refreshToken: "refresh" });
       const result = await runUpdate(db, [google]);
       expect(result.connections[0]).toMatchObject({ name: "Google", status: "connected" });
-      expect(site.requests.filter((p) => p.includes("dataPoints"))).toHaveLength(3);
+      // 90 days of history: one query per type, except heart rate (14 days at most per query).
+      const queries = site.requests.filter((p) => p.includes("dataPoints"));
+      expect(queries.filter((p) => p.includes("/heart-rate/"))).toHaveLength(7);
+      expect(queries).toHaveLength(4 + 7);
       expect(await db.all("SELECT type, value FROM health_point")).toEqual([{ type: "weight", value: 80000 }]);
       // The Health API refuses tokens carrying other scopes, so each API gets its own token.
       expect(site.tokenScopes).toEqual([HEALTH_SCOPES.join(" "), SCHEDULE_SCOPES.join(" ")]);
+      // The history pull is remembered, so later updates only re-read recent days of stored types.
+      expect((await getCredential<{ historyFrom: string }>(db, "google"))!.historyFrom).toBe(addDays(localDate(), -90));
     });
   });
 

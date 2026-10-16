@@ -8,6 +8,7 @@ import { SignedOutError, type Integration } from "./integration.ts";
 import { INTEGRATIONS } from "./integrations.ts";
 import type { ConnectionStatus, Reading } from "./readings.ts";
 import { checkFountainAlarm } from "./fountain.ts";
+import { checkHealth } from "./healthTargets.ts";
 import { generateMaintenanceTasks } from "./maintenance.ts";
 import { evaluateRules, type NewAlert } from "./rules.ts";
 
@@ -48,8 +49,13 @@ export async function runUpdate(db: Db, integrations: Integration[] = INTEGRATIO
   }
   // The water fountain has no connection; its estimate only needs checking against the time.
   const fountainAlerts = await checkFountainAlarm(db);
+  // After the pulls, so new health data is reviewed and today's targets use it.
+  const healthAlerts = await checkHealth(db);
   await setMeta(db, "last_update_at", utcNow());
-  return { alerts: [...(await evaluateRules(db, readings)), ...fountainAlerts], connections: await listConnections(db) };
+  return {
+    alerts: [...(await evaluateRules(db, readings)), ...fountainAlerts, ...healthAlerts],
+    connections: await listConnections(db),
+  };
 }
 
 async function recordConnection(db: Db, integration: Integration, status: ConnectionStatus, message: string) {

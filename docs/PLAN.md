@@ -133,7 +133,43 @@ current intent, not a commitment to details.
    data looks wrong, e.g. outrageous step counts or strangely low calories (likely a
    partly logged day). The user must be able to accept or reject a flagged day as valid,
    and that choice should stick (and sync). Thresholds and what a rejected day means for
-   later uses (e.g. averages) are to be decided then.
+   later uses (e.g. averages) are to be decided then. (Decided 2026-10-16, see 7a.)
+7a. **Health analysis: expenditure and adaptive targets** (agreed with the user 2026-10-16;
+   build started the same day; details and reasoning in
+   agent-notes/2026-10-16-health-targets.md). Cronometer stays the place food is recorded;
+   Lifeboard does the analysis. Display only: nothing is written back to Cronometer.
+   - **Body composition:** 7-day moving averages of weight and body fat %. An average needs at
+     least 3 weigh-ins in its 7 days, otherwise the last valid value carries forward. Lean
+     body mass (LBM) = weight × (1 − body fat %).
+   - **BMR:** Katch-McArdle from LBM: 370 + 21.6 × LBM (kg).
+   - **Expenditure:** over a fit window (setting, default 28 days; 14 at first, raised 2026-10-16 after short windows proved noisy on real data) ending the day before
+     (1-day lag: a day's numbers use only earlier days): average intake minus the energy the
+     weight trend implies. Default 3,500 kcal per lb of trend; a settings toggle switches to
+     an advanced fat/lean split (fat mass vs lean mass change from body fat %). Steps are the
+     activity proxy: they spread the window's expenditure over its days. A given day's steps
+     are informational and don't change that day's target.
+   - **Heart rate:** pulled from Google Health (samples and daily resting heart rate), to be
+     examined as an alternative activity proxy before deciding how to use it.
+   - **History (user, 2026-10-16):** Google and Cronometer fetch 90 days of history once per
+     device, then only recent days. Body water isn't available: the Google Health API has no
+     such type.
+   - **Targets:** calories = expenditure + goal (lb/week, setting) × 3,500 / 7. Protein and
+     fat = settings in g per lb of LBM (defaults 1.0 and 0.4); carbs fill the remaining
+     calories. Flags: carbs would go negative; goal rate beyond informational limits
+     (defaults: loss over 1% of body weight per week, gain over 0.5%).
+   - **Fallback:** too few valid days in the window → BMR × a fixed activity factor, flagged.
+   - **Suspicious data:** thresholds are settings (defaults: calories under 50% of estimated
+     expenditure or under 1,000 kcal; steps over 40,000; a weigh-in over 3 lb from the
+     7-day average; body fat over 2 points from its 7-day average). A day with no Cronometer
+     entry is flagged as a reminder. Flagged items appear in the Hub's alerts. Unresolved or
+     rejected items are left out of the calculations, and the targets say how many await
+     review. Accepting an item brings it back in; dismissing its alert does not.
+   - **History:** each day's targets are saved when computed (synced) and listed from a button.
+   - **Where:** a Health card on Monitor and basic cards on the Health page. Settings → Health
+     holds the settings.
+   - **Later, with the Health page work (not started):** charts and fuller explanations on the
+     Health page, and a side-by-side comparison of the 3,500 kcal/lb and fat/lean split
+     estimates.
 8. **Finances** (stretch).
 
 ## Known risks
@@ -153,7 +189,8 @@ current intent, not a commitment to details.
 
 - **Phone updates:** on command, or when the app opens if more than 12 hours have
   passed since the last update.
-- **Health v1:** calories, macros, weight, body fat, steps. Data only.
+- **Health v1:** calories, macros, weight, body fat, steps (heart rate added 2026-10-16).
+  Analysis (expenditure and adaptive targets) agreed 2026-10-16, see phase 7a.
 - **Devices:** Whisker Litter-Robot, Petory feeders (via Smart Life), and a water fountain
   with no connection (user, 2026-10-16), tracked only through Refill presses.
 - **Notifications:** the main problem is silent sign-outs. Rules are customizable,

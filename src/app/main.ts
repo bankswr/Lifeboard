@@ -14,6 +14,7 @@ import "./ui/views/connections.ts";
 import "./ui/views/feeders.ts";
 import "./ui/views/fountain.ts";
 import "./ui/views/health.ts";
+import "./ui/views/healthSettings.ts";
 import "./ui/views/lists.ts";
 import "./ui/views/maintenance.ts";
 import "./ui/views/litter.ts";

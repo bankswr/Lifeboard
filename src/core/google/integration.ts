@@ -1,8 +1,9 @@
-// Google integration: Google Health (steps, weight, body fat into the health_point table),
+// Google integration: Google Health (steps, weight, body fat, heart rate into the
+// health_point table),
 // then the Schedule's calendar and tasks (core/schedule/push.ts).
 // Signing in needs a browser redirect, which only the desktop can do for now
 // (src/desktop/googleSignIn.ts); the phone gets this data through LAN sync.
-import { getCredential } from "../credentials.ts";
+import { getCredential, saveCredential } from "../credentials.ts";
 import { addDays, localDate } from "../dates.ts";
 import { latestHealthDay, replaceHealthPoints, type HealthPoint, type PointType } from "../health.ts";
 import type { Integration } from "../integration.ts";
@@ -12,11 +13,17 @@ import { accessToken, HEALTH_SCOPES, type GoogleClient } from "./oauth.ts";
 
 export interface GoogleCredential extends GoogleClient {
   refreshToken: string;
+  /** Earliest day the history pull has covered; absent until it has run. */
+  historyFrom?: string;
 }
 
-const TYPES: PointType[] = ["steps", "weight", "body-fat"];
-/** Days fetched the first time; later fetches re-read 3 days before the newest stored day. */
-const FIRST_PULL_DAYS = 30;
+const TYPES: PointType[] = ["steps", "weight", "body-fat", "heart-rate", "daily-resting-heart-rate"];
+/**
+ * Days of history fetched once (user, 2026-10-16: 90 days, enough heart rate and weight
+ * history for the analysis); later fetches re-read 3 days before the newest stored day.
+ * Raising this makes every device fetch the longer history at its next update.
+ */
+export const HISTORY_DAYS = 90;
 const OVERLAP_DAYS = 3;
 
 export const google: Integration = {
@@ -33,13 +40,16 @@ export const google: Integration = {
     const token = await accessToken(credential, credential.refreshToken, HEALTH_SCOPES);
     // Up to today (not included), as FitThing did: today isn't complete yet.
     const end = localDate();
+    const historyStart = addDays(end, -HISTORY_DAYS);
+    const needsHistory = !credential.historyFrom || credential.historyFrom > historyStart;
     for (const type of TYPES) {
       const latest = await latestHealthDay(db, type);
-      const start = latest ? addDays(latest, -OVERLAP_DAYS) : addDays(end, -FIRST_PULL_DAYS);
+      const start = latest && !needsHistory ? addDays(latest, -OVERLAP_DAYS) : historyStart;
       const points = await listDataPoints(token, type, start, end);
       const stored = points.map((point) => toHealthPoint(type, point)).filter((p): p is HealthPoint => p !== null);
       await replaceHealthPoints(db, type, `${start}T00:00:00Z`, `${end}T00:00:00Z`, stored);
     }
+    if (needsHistory) await saveCredential(db, "google", { ...credential, historyFrom: historyStart });
     await syncSchedule(db);
     return [];
   },
@@ -59,6 +69,33 @@ export function toHealthPoint(type: PointType, point: DataPoint): HealthPoint | 
         startTime: interval.startTime,
         endTime: interval.endTime,
         value: Number(point.steps.count),
+        source,
+      };
+    }
+    if (type === "heart-rate") {
+      const sampleTime = point.heartRate.sampleTime;
+      return {
+        // Heart-rate points have no name either.
+        id: `google-heart-rate-${source}-${sampleTime.physicalTime}`,
+        type,
+        day: civilDate(sampleTime.civilTime.date),
+        startTime: sampleTime.physicalTime,
+        endTime: sampleTime.physicalTime,
+        value: Number(point.heartRate.beatsPerMinute),
+        source,
+      };
+    }
+    if (type === "daily-resting-heart-rate") {
+      // A daily value with no time of its own: stored at the start of its (UTC) date so the
+      // fetch range, which is compared against start_time, covers it.
+      const day = civilDate(point.dailyRestingHeartRate.date);
+      return {
+        id: `google-resting-heart-rate-${source}-${day}`,
+        type,
+        day,
+        startTime: `${day}T00:00:00Z`,
+        endTime: `${day}T00:00:00Z`,
+        value: Number(point.dailyRestingHeartRate.beatsPerMinute),
         source,
       };
     }

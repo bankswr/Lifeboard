@@ -226,6 +226,22 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
   `,
   // 15: two kinds of list (core/todos.ts): "todo" (existing lists) and "prototype".
   "ALTER TABLE todo_list ADD COLUMN kind TEXT NOT NULL DEFAULT 'todo';",
+  // 16: health analysis (core/healthReview.ts, core/healthTargets.ts): the user's verdicts on
+  // flagged days and entries (id "<date>-<kind>"), and each day's saved targets as JSON.
+  `
+  CREATE TABLE health_review (
+    ${syncColumns},
+    date TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    verdict TEXT NOT NULL
+  );
+  CREATE TABLE health_target (
+    ${syncColumns},
+    date TEXT NOT NULL,
+    data TEXT NOT NULL
+  );
+  CREATE INDEX health_target_date ON health_target (date);
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
