@@ -180,6 +180,9 @@ current intent, not a commitment to details.
   tasks on today, highlighted; done tasks crossed out; tasks may have a Lifeboard-only time;
   main calendar only, others added in Settings → Calendars; all task lists; repeating-event
   edits for this / this and following / all. Reminders later.
+- **Lists (user, 2026-10-16):** two kinds. To-do lists: ticked items are crossed out and
+  cleared when the app next loads. Prototype lists: standard items whose checkboxes select
+  items to copy into other lists. Items can be copied singly, by selection or all at once.
 - **Maintenance (user, 2026-10-16):** Details → Maintenance holds recurring chores entered
   like a calendar entry, repeating by default (monthly). On each day one comes due, Lifeboard
   adds a Google task for it that day (fixed id per item and date; after missed days only the

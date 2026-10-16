@@ -35,3 +35,18 @@ draft.
 - Desktop (Playwright): add/check/rename/back, checkbox states correct after fix.
 - Emulator: created a list on the phone, synced: sent 2, received 5; both sides then
   list the same three lists.
+
+## Update 2026-10-16 (user)
+- The Lists screen shows every list as a collapsible card with its items and add box; the
+  separate per-list page (#/lists/<id>) is gone.
+- Copying (`copyTodoItems`, `copyTodoList`): duplicates into another list as unticked items
+  at its end, skipping texts already open there (case-insensitive). "Copy all" includes
+  ticked items, so a list works as a template.
+- Two kinds (migration 15, `todo_list.kind`): **todo** — ticking crosses out in place; ticked
+  items are deleted by `clearCheckedItems` each time the app loads (main.ts, both devices);
+  **prototype** — standard items to copy; checkboxes are a screen-only selection for
+  "Copy selected to…", never saved. ⚙ menu per card (Rename, Delete); floating + opens a
+  dialog for name and kind.
+- To-do lists have a **Copy mode** button instead of per-item and "copy all" pickers: in copy
+  mode the list works like a prototype (checkboxes select; Copy all / Copy N selected) until
+  "Exit copy mode". Screen-only state.

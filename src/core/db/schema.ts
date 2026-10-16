@@ -224,6 +224,8 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
     last_generated TEXT
   );
   `,
+  // 15: two kinds of list (core/todos.ts): "todo" (existing lists) and "prototype".
+  "ALTER TABLE todo_list ADD COLUMN kind TEXT NOT NULL DEFAULT 'todo';",
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

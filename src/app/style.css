@@ -296,7 +296,59 @@ button.small { padding: 6px 10px; font-size: 0.85rem; }
 }
 .card-toggle h2 { margin: 0; }
 .card-toggle .chevron { color: var(--muted); transition: transform 0.15s; }
-.card.collapsed .chevron { transform: rotate(-90deg); }
+.collapsible.collapsed > .card-head .chevron { transform: rotate(-90deg); }
 .card-actions { display: flex; align-items: center; gap: 8px; }
 .card-body { margin-top: 8px; }
 .card-body[hidden] { display: none; }
+
+/* ---------- Lists ---------- */
+.card .add-row { margin-bottom: 4px; }
+.card h2 .small { font-weight: 400; margin-left: 6px; }
+.card .section-header h3 { margin: 0; font-size: 0.95rem; color: var(--muted); }
+.card .section-header { margin-top: 12px; }
+.copy-select { padding: 4px 6px; font-size: 0.8rem; max-width: 9em; color: var(--muted); }
+.list-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+.list-actions .copy-select { max-width: 12em; }
+.danger-text { color: var(--danger) !important; }
+.item.selected .item-text { color: var(--accent); }
+
+/* ⚙ menu on a list card */
+.gear-menu { position: relative; }
+.gear-menu > summary {
+  list-style: none; cursor: pointer; color: var(--muted); font-size: 1.15rem; line-height: 1;
+  padding: 6px 8px; border-radius: 8px;
+}
+.gear-menu > summary::-webkit-details-marker { display: none; }
+.gear-menu[open] > summary { background: var(--surface-2); color: var(--text); }
+.gear-menu-list {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; min-width: 140px;
+  display: grid; padding: 6px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: 0 10px 30px rgb(0 0 0 / 0.45);
+}
+.gear-menu-list button { background: none; color: var(--text); text-align: left; font-weight: 600; padding: 10px 12px; border-radius: 8px; }
+.gear-menu-list button:hover, .gear-menu-list button:focus-visible { background: var(--surface-2); outline: none; }
+
+/* Floating + button (above the bottom bar) and the new-list dialog */
+.fab {
+  position: fixed; right: 16px; bottom: calc(64px + var(--inset-bottom)); z-index: 9;
+  width: 56px; height: 56px; border-radius: 50%; padding: 0;
+  font-size: 1.8rem; line-height: 1; box-shadow: 0 6px 20px rgb(0 0 0 / 0.45);
+}
+dialog.sheet {
+  width: min(420px, calc(100vw - 32px)); padding: 18px; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+}
+dialog.sheet::backdrop { background: rgb(0 0 0 / 0.55); }
+dialog.sheet h2 { margin: 0 0 4px; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.copy-select.primary {
+  margin-left: auto; max-width: none; padding: 8px 10px; font-size: 0.9rem; font-weight: 600;
+  color: var(--accent-text); background: var(--accent); border-color: var(--accent);
+}
+/* The open dropdown keeps the normal colors. */
+.copy-select.primary option { color: var(--text); background: var(--surface); font-weight: 400; }
+.copy-mode-toggle { min-width: 9.5em; }
+/* A collapsible group of cards (Lists: To-do lists, Prototype lists). */
+.card-group { margin: 16px 0; }
+.card-group > .card-head .card-toggle h2 { font-size: 1.15rem; }
+.card-group > .card-body { margin-top: 0; }

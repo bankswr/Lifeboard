@@ -26,6 +26,8 @@ import "./ui/views/settings.ts";
 
 async function main() {
   await initBackend();
+  // To-do items ticked last time are cleared each time the app loads (user, 2026-10-16).
+  await call("clearCheckedItems");
   start();
   if (platform === "android") {
     setAlertDelivery(showPhoneNotifications);
