@@ -7,10 +7,17 @@ import { SignedOutError } from "../integration.ts";
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 
-/** Read-only access to the Google Health data Lifeboard uses (steps; weight and body fat). */
-export const GOOGLE_HEALTH_SCOPES = [
+/**
+ * What Lifeboard asks Google for: read-only Google Health data (steps; weight and body fat),
+ * the list of calendars (to choose which the Schedule shows), editing calendar events, and
+ * Google Tasks.
+ */
+export const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly",
   "https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly",
+  "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/tasks",
 ];
 
 /** The OAuth client from Google Cloud ("Desktop app" type: the downloaded JSON's `installed` part). */
@@ -31,7 +38,7 @@ export function signInUrl(client: GoogleClient, redirectUri: string, challenge: 
     client_id: client.clientId,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: GOOGLE_HEALTH_SCOPES.join(" "),
+    scope: GOOGLE_SCOPES.join(" "),
     access_type: "offline", // ask for a refresh token
     prompt: "consent", // so a refresh token is returned even on a repeat sign-in
     code_challenge: challenge,

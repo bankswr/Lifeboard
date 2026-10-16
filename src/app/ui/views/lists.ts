@@ -1,33 +1,36 @@
-// To-do lists: #/lists shows every list; #/lists/<id> shows one list's items.
+// To-do lists (in the Hub menu): #/lists shows every list; #/lists/<id> shows one list's items.
 // Renames, edits and delete confirmations use the browser's own prompt/confirm dialogs.
 import { html } from "lit-html";
 import { live } from "lit-html/directives/live.js";
-import type { TodoItem } from "../../../core/todos.ts";
+import type { TodoItem, TodoList } from "../../../core/todos.ts";
 import { call } from "../../backend.ts";
 import { act, route } from "../app.ts";
 
 route(/^\/lists$/, async () => {
   const lists = await call("listTodoLists");
-  return {
-    section: "lists",
-    content: html`
-      <h1>Lists</h1>
-      <form class="add-row" @submit=${(event: SubmitEvent) => addFromForm(event, (name) => call("createTodoList", name))}>
-        <input name="text" placeholder="New list" aria-label="New list name" autocomplete="off">
-        <button type="submit">Add</button>
-      </form>
-      ${lists.length === 0 ? html`<p class="muted">No lists yet.</p>` : ""}
-      ${lists.map(
-        (list) => html`
-          <a class="card list-card" href="#/lists/${list.id}">
-            <span>${list.name}</span>
-            <span class="muted">${list.openCount} open${list.doneCount ? `, ${list.doneCount} done` : ""}</span>
-          </a>
-        `,
-      )}
-    `,
-  };
+  return { section: "lists", content: listsPage(lists) };
 });
+
+function listsPage(lists: TodoList[]) {
+  return html`
+    <header class="page-header">
+      <h1>Lists</h1>
+    </header>
+    <form class="add-row" @submit=${(event: SubmitEvent) => addFromForm(event, (name) => call("createTodoList", name))}>
+      <input name="text" placeholder="New list" aria-label="New list name" autocomplete="off">
+      <button type="submit">Add</button>
+    </form>
+    ${lists.length === 0 ? html`<p class="muted">No lists yet.</p>` : ""}
+    ${lists.map(
+      (list) => html`
+        <a class="card list-card" href="#/lists/${list.id}">
+          <span>${list.name}</span>
+          <span class="muted">${list.openCount} open${list.doneCount ? `, ${list.doneCount} done` : ""}</span>
+        </a>
+      `,
+    )}
+  `;
+}
 
 route(/^\/lists\/([\w-]+)$/, async ([listId]) => {
   const list = await call("getTodoList", listId);

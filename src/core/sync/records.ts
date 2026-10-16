@@ -12,7 +12,10 @@ import { getDeviceId, getMeta, setMeta } from "../db/meta.ts";
 import { get, utcNow, type Db, type Row } from "../db/types.ts";
 
 /** Tables exchanged during sync. A feature adds its tables here when it creates them. */
-export const SYNCED_TABLES: string[] = ["todo_list", "todo_item", "rule", "nutrition_day", "health_point"];
+export const SYNCED_TABLES: string[] = [
+  "todo_list", "todo_item", "rule", "nutrition_day", "health_point",
+  "calendar", "task_list", "calendar_event", "task", "schedule_change",
+];
 
 /** Column definitions for a synced table's CREATE TABLE. */
 export const syncColumns = `

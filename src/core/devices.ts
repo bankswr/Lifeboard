@@ -1,5 +1,5 @@
 // The latest status of each device an integration reads (Litter-Robots, feeders),
-// for the Home screen. Per device and not synced: each device shows what it last fetched.
+// for the Hub and Pets screens. Per device and not synced: each device shows what it last fetched.
 import { utcNow, type Db } from "./db/types.ts";
 
 export interface DeviceStatus<T = Record<string, any>> {

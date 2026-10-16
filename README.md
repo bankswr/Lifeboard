@@ -47,7 +47,10 @@ Sign in under **Settings → Connections** on each device (sign-ins are never sy
 
 - **Whisker (Litter-Robot)** and **Cronometer**: email and password. The password is saved
   on the device so expired sessions renew themselves; a rejected password raises an alert.
-- **Google Health** (steps, weight, body fat): desktop only for now. Put a "Desktop app"
+- **Google** (Google Health steps, weight, body fat; Google Calendar and Google Tasks for the
+  Schedule): desktop only for now. The Cloud project needs the Google Calendar API and Google
+  Tasks API turned on, and the consent screen needs their scopes (see `GOOGLE_SCOPES` in
+  `src/core/google/oauth.ts`). Put a "Desktop app"
   OAuth client JSON at `data/google_client_secret.json` (FitThing's
   `secrets/client_secret.json` works), and publish the OAuth consent screen in Google Cloud
   ("In production"), or Google ends the sign-in after 7 days. The phone receives this data

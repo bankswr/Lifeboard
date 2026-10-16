@@ -1,5 +1,5 @@
 // Smart Life integration (the pet feeders): each update reads every feeder on the account,
-// keeps its latest status for the Home screen, and produces a "feeder" reading for alert rules.
+// keeps its latest status for the Hub and Pets screens, and produces a "feeder" reading for alert rules.
 // Sign-in: the user enters their Smart Life user code and scans a QR code with the app; after
 // that the refresh token keeps the session going. When Smart Life ends it, the user gets a
 // "signed out" alert and scans again (there is no password to sign in with silently).

@@ -75,6 +75,7 @@ button {
   padding: 10px 14px;
 }
 
+/* Bottom bar with pop-up menus, from FitApp's style.css. */
 .tabbar {
   position: fixed;
   left: 0;
@@ -82,20 +83,60 @@ button {
   bottom: 0;
   display: flex;
   justify-content: center;
-  gap: 8px;
-  padding: 6px 8px calc(6px + var(--inset-bottom));
   background: var(--surface);
   border-top: 1px solid var(--border);
+  padding-bottom: var(--inset-bottom);
+  z-index: 10;
 }
-.tab {
-  flex: 0 1 160px;
-  text-align: center;
-  padding: 8px;
-  border-radius: 8px;
+.tabbar > a, .tab-menu { flex: 1; max-width: 240px; }
+.tabbar > a, .tab-menu-btn {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  background: none;
   color: var(--muted);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.tabbar > a[aria-current="page"], .tab-menu-btn[data-current] { color: var(--accent); box-shadow: inset 0 2px 0 var(--accent); }
+.tab-menu { position: relative; }
+.tabbar > a.tab-icon { flex: 0 0 64px; }
+/* The first menu opens from the left edge so it isn't cut off by the screen. */
+.tabbar > .tab-menu:first-child .tab-menu-list { left: 8px; transform: none; }
+.tab-menu-list {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.45);
+}
+.tab-menu-list[hidden] { display: none; }
+.tab-menu-list a {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 9px;
+  color: var(--text);
+  font-weight: 600;
   text-decoration: none;
 }
-.tab.current { color: var(--accent); background: var(--surface-2); }
+.tab-menu-list a:active, .tab-menu-list a:focus-visible { background: var(--surface-2); outline: none; }
+.tab-menu-list a[aria-current="page"] { color: var(--accent); }
 
 .page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .page-header h1 { flex: 1; margin: 0; }
@@ -129,6 +170,9 @@ a.button {
 }
 
 .status-row { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; }
+.status-row h2 { margin: 0; }
+/* A whole row that links somewhere, without link styling (Hub device lines). */
+.plain-link { color: inherit; text-decoration: none; }
 .qr-code { display: block; width: min(260px, 100%); margin: 12px auto; border-radius: 8px; }
 .status.connected { color: var(--accent); }
 .status.signed_out, .status.error { color: var(--danger); }
@@ -165,3 +209,57 @@ button:disabled { opacity: 0.6; }
 .table-scroll table.data th:first-child, .table-scroll table.data td:first-child {
   position: sticky; left: 0; background: var(--surface); padding-right: 10px;
 }
+
+/* ---------- Schedule ---------- */
+/* [hidden] must win over the display rules below (form parts, Today button). */
+.schedule-form [hidden], .today-button[hidden] { display: none !important; }
+
+.day { padding: 4px 10px 10px; margin-bottom: 10px; border: 1px solid var(--blue); border-radius: var(--radius); scroll-margin-top: 12px; }
+.day-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0 4px; }
+.day-header h2 { margin: 0; font-size: 1rem; }
+.day.today .day-header h2 { color: var(--accent); }
+.day-add {
+  display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px;
+  color: var(--text); background: var(--surface-2); border: 1px solid var(--border);
+  font-size: 1.3rem; line-height: 1; text-decoration: none;
+}
+.day-empty { margin: 2px 0 4px; }
+
+.schedule-item {
+  display: flex; align-items: flex-start; gap: 12px; padding: 8px 10px; margin-top: 6px;
+  border-radius: 10px; background: var(--surface); color: var(--text); text-decoration: none;
+}
+.schedule-item .item-main { flex: 1; display: grid; gap: 2px; color: inherit; text-decoration: none; min-width: 0; }
+.schedule-item .item-title { overflow-wrap: anywhere; }
+.schedule-item .item-detail { display: flex; flex-wrap: wrap; gap: 0 8px; }
+.schedule-item .item-when { flex: 0 0 auto; min-width: 7.5em; color: var(--muted); padding-top: 2px; }
+.schedule-item.all-day { border-left: 3px solid var(--blue); }
+.schedule-item.task input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--accent); margin: 1px 0 0; flex: 0 0 auto; }
+.schedule-item.task.done .item-title { text-decoration: line-through; color: var(--muted); }
+.schedule-item.task.overdue { border-left: 3px solid var(--danger); }
+
+.today-button {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(60px + var(--inset-bottom)); z-index: 9;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.45); border-radius: 999px; padding: 10px 20px;
+}
+
+.segmented { display: flex; gap: 6px; }
+.segmented label {
+  flex: 1; display: flex; justify-content: center; align-items: center; gap: 6px; padding: 8px;
+  border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--surface-2);
+}
+.segmented label:has(input:checked) { border-color: var(--accent); color: var(--accent); }
+label.check { display: flex; align-items: center; gap: 8px; color: var(--text); }
+label.check input { width: 20px; height: 20px; accent-color: var(--accent); margin: 0; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.field-row input { min-width: 0; }
+textarea {
+  font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 12px; resize: vertical;
+}
+.weekdays { display: flex; flex-wrap: wrap; gap: 6px; }
+.weekdays label { display: flex; align-items: center; gap: 4px; color: var(--text); }
+.form-actions { display: grid; gap: 10px; }
+.form-actions button.danger { margin-top: 8px; }
+.calendar-row { padding: 8px 0; }

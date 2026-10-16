@@ -1,4 +1,4 @@
-// Health (#/health): the data fetched so far, one row per day with Cronometer and Google
+// Health (#/health, in the Details menu): the data fetched so far, one row per day with Cronometer and Google
 // columns side by side. Charts and other refinements
 // come later (user, 2026-10-15: "for now, let's just get the data").
 import { html } from "lit-html";
@@ -14,7 +14,9 @@ route(/^\/health$/, async () => {
     section: "health",
     wide: true,
     content: html`
-      <h1>Health</h1>
+      <header class="page-header">
+        <h1>Health</h1>
+      </header>
       <section class="card">
         ${hasAny((d) => d.calories ?? d.weightLbs ?? d.bodyFatPercent ?? d.steps)
           ? html`

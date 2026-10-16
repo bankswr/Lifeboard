@@ -13,6 +13,10 @@ import { listDeviceStatuses } from "./devices.ts";
 import { dailyHealth, recentNutrition } from "./health.ts";
 import { INTEGRATIONS } from "./integrations.ts";
 import { lastUpdateAt, listConnections, runUpdate } from "./updates.ts";
+import * as scheduleEdit from "./schedule/edit.ts";
+import { syncSchedule, syncScheduleQuietly } from "./schedule/push.ts";
+import * as schedule from "./schedule/store.ts";
+import { saveRecord } from "./sync/records.ts";
 
 export interface AppInfo {
   deviceId: string;
@@ -51,7 +55,7 @@ async function updateNow(db: Db) {
   return result;
 }
 
-/** Everything the home screen shows about updates and alerts. */
+/** Everything the Hub and Details screens show about updates, alerts and devices. */
 async function getStatus(db: Db) {
   return {
     lastUpdateAt: await lastUpdateAt(db),
@@ -97,6 +101,42 @@ async function signOut(db: Db, integrationId: string) {
   await db.run("DELETE FROM connection WHERE id = ?", [integrationId]);
 }
 
+// ---------- Schedule ----------
+
+/**
+ * Re-reads Google (after sending any queued edits), for when the Schedule opens. Returns a
+ * problem to show, or null. On the phone it does nothing: the desktop talks to Google.
+ */
+async function refreshSchedule(db: Db): Promise<string | null> {
+  try {
+    await syncSchedule(db);
+    return null;
+  } catch (error) {
+    return (error as Error).message;
+  }
+}
+
+/**
+ * Runs a Schedule edit, then starts sending it to Google when this device can. The screen
+ * doesn't wait for Google: the edit is already saved locally and shows at once.
+ */
+function thenSend<Args extends unknown[], R>(edit: (db: Db, ...args: Args) => Promise<R>) {
+  return async (db: Db, ...args: Args): Promise<R> => {
+    const result = await edit(db, ...args);
+    void syncScheduleQuietly(db);
+    return result;
+  };
+}
+
+/** Shows or hides a calendar on the Schedule (Settings → Calendars). */
+async function setCalendarIncluded(db: Db, calendarId: string, included: boolean) {
+  const row = await get(db, "SELECT * FROM calendar WHERE id = ? AND deleted = 0", [calendarId]);
+  if (!row) throw new Error("That calendar is no longer in your Google account.");
+  if (row.is_primary) throw new Error("Your main calendar is always shown.");
+  await saveRecord(db, "calendar", { ...row, included: included ? 1 : 0 });
+  void syncScheduleQuietly(db);
+}
+
 export const api = {
   getAppInfo,
   getSyncSettings,
@@ -125,6 +165,18 @@ export const api = {
   signOut,
   recentNutrition,
   dailyHealth,
+  getSchedule: schedule.getSchedule,
+  getScheduleOptions: schedule.getScheduleOptions,
+  getEvent: schedule.getEvent,
+  getTask: schedule.getTask,
+  listCalendars: schedule.listCalendars,
+  setCalendarIncluded,
+  refreshSchedule,
+  saveEvent: thenSend(scheduleEdit.saveEvent),
+  deleteEvent: thenSend(scheduleEdit.deleteEvent),
+  saveTask: thenSend(scheduleEdit.saveTask),
+  setTaskDone: thenSend(scheduleEdit.setTaskDone),
+  deleteTask: thenSend(scheduleEdit.deleteTask),
 };
 
 export type Api = typeof api;

@@ -129,7 +129,7 @@ describe("Google integration", () => {
       const db = await newDb();
       await saveCredential(db, "google", { clientId: "id", clientSecret: "secret", refreshToken: "refresh" });
       const result = await runUpdate(db, [google]);
-      expect(result.connections[0]).toMatchObject({ name: "Google Health", status: "connected" });
+      expect(result.connections[0]).toMatchObject({ name: "Google", status: "connected" });
       expect(site.requests.filter((p) => p.includes("dataPoints"))).toHaveLength(3);
       expect(await db.all("SELECT type, value FROM health_point")).toEqual([{ type: "weight", value: 80000 }]);
     });

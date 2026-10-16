@@ -1,10 +1,12 @@
-// Google Health integration: steps, weight and body fat into the health_point table.
+// Google integration: Google Health (steps, weight, body fat into the health_point table),
+// then the Schedule's calendar and tasks (core/schedule/push.ts).
 // Signing in needs a browser redirect, which only the desktop can do for now
 // (src/desktop/googleSignIn.ts); the phone gets this data through LAN sync.
 import { getCredential } from "../credentials.ts";
 import { addDays, localDate } from "../dates.ts";
 import { latestHealthDay, replaceHealthPoints, type HealthPoint, type PointType } from "../health.ts";
 import type { Integration } from "../integration.ts";
+import { syncSchedule } from "../schedule/push.ts";
 import { listDataPoints, type DataPoint } from "./healthApi.ts";
 import { accessToken, type GoogleClient } from "./oauth.ts";
 
@@ -19,7 +21,7 @@ const OVERLAP_DAYS = 3;
 
 export const google: Integration = {
   id: "google",
-  name: "Google Health",
+  name: "Google",
   signInMethod: "google",
 
   async isSetUp(db) {
@@ -38,6 +40,7 @@ export const google: Integration = {
       const stored = points.map((point) => toHealthPoint(type, point)).filter((p): p is HealthPoint => p !== null);
       await replaceHealthPoints(db, type, `${start}T00:00:00Z`, `${end}T00:00:00Z`, stored);
     }
+    await syncSchedule(db);
     return [];
   },
 };

@@ -121,8 +121,10 @@ current intent, not a commitment to details.
    Petory feeders built 2026-10-16 via Smart Life (the user moved them from the Petory app);
    live-verified 2026-10-16.)
 5. **Tasks & reminders**, with Google Tasks sync, plus the generic to-do lists
-   (to-do lists ✅ built 2026-10-15, awaiting user review).
-6. **Calendar**, with Google Calendar sync.
+   (to-do lists ✅ built 2026-10-15, awaiting user review). Tasks built 2026-10-16 together
+   with phase 6 as the Schedule page; reminders deferred (user).
+6. **Calendar**, with Google Calendar sync. Built 2026-10-16 as the Schedule page (see
+   agent-notes/2026-10-16-schedule.md); awaiting the first run against the real account.
 7. **Health data pipeline.** Port FitThing's pulls for calories, macros, weight,
    body fat and steps. Refinements are planned in a later session.
    (Built 2026-10-15 ahead of order while blocked elsewhere; live-verified 2026-10-15.
@@ -161,6 +163,14 @@ current intent, not a commitment to details.
 - **Desktop polling:** at startup, then every 4 hours. No continuous monitoring.
 - **Pets:** read-only, for awareness. Rule actions are notifications only.
 - **Feature plans:** reviewed with the user when each feature is ready to build.
+- **Navigation (user, 2026-10-16):** FitApp's bottom bar: pop-up menus plus a gear icon.
+  Hub → Monitor (alerts, device lines, connection problems; the start screen) and Lists;
+  Details → Pets, Health and Schedule (Google Calendar events and Google Tasks by day). ⚙ is Settings,
+  including Connections with each connection's status.
+- **Schedule (user, 2026-10-16):** per day tasks, then all-day, then timed events; overdue
+  tasks on today, highlighted; done tasks crossed out; tasks may have a Lifeboard-only time;
+  main calendar only, others added in Settings → Calendars; all task lists; repeating-event
+  edits for this / this and following / all. Reminders later.
 - **Google OAuth:** publish the app ("In production"). If a hidden cost turns up,
   fall back to signing in again regularly.
 

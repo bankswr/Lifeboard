@@ -1,5 +1,5 @@
 // Litter-Robot (Whisker) integration: each update reads every LR4 on the account, keeps its
-// latest status for the Home screen, and produces a "litter_robot" reading for alert rules.
+// latest status for the Hub and Pets screens, and produces a "litter_robot" reading for alert rules.
 // Sign-in: the Cognito refresh token is reused; when it stops working, Lifeboard signs in
 // again with the saved password, and only if that fails does the user get a "signed out" alert.
 import { getCredential, saveCredential } from "../credentials.ts";

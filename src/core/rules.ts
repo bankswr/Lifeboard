@@ -162,6 +162,16 @@ function fromRow(row: Record<string, any>): Rule {
   };
 }
 
+/**
+ * Records an alert that comes from something other than a rule (e.g. a Schedule edit Google
+ * refused). It's listed with the others; the caller delivers it.
+ */
+export async function recordAlert(db: Db, subject: string, message: string): Promise<NewAlert> {
+  const alert = { ruleId: "builtin", subject, message };
+  await db.run("INSERT INTO alert (created_at, rule_id, subject, message) VALUES (?, ?, ?, ?)", [utcNow(), alert.ruleId, subject, message]);
+  return alert;
+}
+
 // ---------- evaluating ----------
 
 export function conditionHolds(condition: Condition, data: Reading["data"]): boolean {

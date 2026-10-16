@@ -127,6 +127,60 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
   },
   // 8: the feeder default alert rules (Smart Life).
   insertDefaultRules,
+  // 9: Schedule (core/schedule/): Google calendars, task lists, events and tasks, plus the
+  // queue of changes waiting to go to Google. All synced, so the phone (which has no
+  // Google sign-in) sees them and its edits reach the desktop, which sends them on.
+  `
+  CREATE TABLE calendar (
+    ${syncColumns},
+    name TEXT NOT NULL,
+    is_primary INTEGER NOT NULL,
+    included INTEGER NOT NULL
+  );
+  CREATE TABLE task_list (
+    ${syncColumns},
+    title TEXT NOT NULL,
+    position INTEGER NOT NULL
+  );
+  CREATE TABLE calendar_event (
+    ${syncColumns},
+    calendar_id TEXT NOT NULL,
+    google_id TEXT,
+    recurring_id TEXT,
+    is_series INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    location TEXT NOT NULL,
+    notes TEXT NOT NULL,
+    all_day INTEGER NOT NULL,
+    start_at TEXT NOT NULL,
+    end_at TEXT NOT NULL,
+    time_zone TEXT,
+    recurrence TEXT,
+    original_start TEXT,
+    etag TEXT
+  );
+  CREATE INDEX calendar_event_start ON calendar_event (start_at);
+  CREATE INDEX calendar_event_google ON calendar_event (calendar_id, google_id);
+  CREATE TABLE task (
+    ${syncColumns},
+    list_id TEXT NOT NULL,
+    google_id TEXT,
+    title TEXT NOT NULL,
+    notes TEXT NOT NULL,
+    due TEXT,
+    time TEXT,
+    done INTEGER NOT NULL,
+    completed_at TEXT,
+    repeat TEXT,
+    etag TEXT
+  );
+  CREATE INDEX task_google ON task (list_id, google_id);
+  CREATE TABLE schedule_change (
+    ${syncColumns},
+    created_at TEXT NOT NULL,
+    op TEXT NOT NULL
+  );
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

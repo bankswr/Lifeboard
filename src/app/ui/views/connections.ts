@@ -1,9 +1,12 @@
-// Connections (#/connections): sign in to outside services on this device, or sign out.
-// Sign-ins are kept on this device only; the other device signs in separately.
+// Connections (#/connections, under Settings): how each connection is doing, sign in to
+// outside services on this device, or sign out. Sign-ins are kept on this device only; the
+// other device signs in separately.
 import { html } from "lit-html";
 import QRCode from "qrcode";
 import { call, platform } from "../../backend.ts";
+import type { ConnectionInfo } from "../../../core/updates.ts";
 import { act, refresh, route } from "../app.ts";
+import { formatTime } from "../format.ts";
 
 let message = "";
 /** The QR code of a sign-in in progress, as an image URL, and whose it is. */
@@ -14,7 +17,8 @@ const QR_POLL_MS = 2000;
 const QR_WAIT_MS = 3 * 60 * 1000;
 
 route(/^\/connections$/, async () => {
-  const integrations = await call("listIntegrations");
+  const [integrations, { connections }] = await Promise.all([call("listIntegrations"), call("getStatus")]);
+  const connectionOf = (id: string) => connections.find((connection) => connection.id === id);
   const shownMessage = message;
   message = "";
   return {
@@ -29,9 +33,12 @@ route(/^\/connections$/, async () => {
       ${integrations.map((integration) =>
         integration.signedIn
           ? html`
-              <section class="card status-row">
-                <span>${integration.name}</span>
-                <button class="secondary" @click=${() => signOut(integration.id, integration.name)}>Sign out</button>
+              <section class="card">
+                <div class="status-row">
+                  <h2>${integration.name}</h2>
+                  <button class="secondary" @click=${() => signOut(integration.id, integration.name)}>Sign out</button>
+                </div>
+                ${connectionStatus(connectionOf(integration.id))}
               </section>
             `
           : integration.signInMethod === "google"
@@ -52,6 +59,22 @@ route(/^\/connections$/, async () => {
     `,
   };
 });
+
+const STATUS_TEXT: Record<ConnectionInfo["status"], string> = {
+  connected: "Connected",
+  signed_out: "Signed out: sign in again",
+  error: "Problem",
+};
+
+/** The connection's result at the last update; nothing before its first update. */
+function connectionStatus(connection: ConnectionInfo | undefined) {
+  if (!connection) return html`<p class="muted small">Not checked yet.</p>`;
+  return html`
+    <p class="small"><span class="status ${connection.status}">${STATUS_TEXT[connection.status]}</span></p>
+    ${connection.message ? html`<p class="muted small">${connection.message}</p>` : ""}
+    <p class="muted small">Last success: ${formatTime(connection.lastSuccessAt) ?? "never"}</p>
+  `;
+}
 
 function googleSignIn(name: string) {
   return html`

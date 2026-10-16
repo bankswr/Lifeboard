@@ -9,10 +9,14 @@ import { nativeCookieSession } from "./nativeCookies.ts";
 import { showPhoneNotifications } from "./notify.ts";
 import { syncQuietly } from "./sync.ts";
 import { refresh, start } from "./ui/app.ts";
+import "./ui/views/calendars.ts";
 import "./ui/views/connections.ts";
 import "./ui/views/health.ts";
-import "./ui/views/home.ts";
 import "./ui/views/lists.ts";
+import "./ui/views/monitor.ts";
+import "./ui/views/pets.ts";
+import "./ui/views/schedule.ts";
+import "./ui/views/scheduleForm.ts";
 import "./ui/views/rules.ts";
 import "./ui/views/settings.ts";
 

@@ -11,6 +11,7 @@ import { api, type ApiName } from "../core/api.ts";
 import { getMeta, setMeta } from "../core/db/meta.ts";
 import { setAlertDelivery } from "../core/notify.ts";
 import { migrate } from "../core/db/schema.ts";
+import { hasQueuedChanges, syncScheduleQuietly } from "../core/schedule/push.ts";
 import { answerSync, type SyncRequest } from "../core/sync/sync.ts";
 import { DATA_DIR, DESKTOP_HOST, DESKTOP_PORT } from "./config.ts";
 import { openNodeDb } from "./db/nodeSqlite.ts";
@@ -64,7 +65,12 @@ server.post<{ Params: { name: string }; Body: { args?: unknown[] } }>("/api/:nam
   }
 });
 
-server.post<{ Body: SyncRequest }>("/sync", async (request) => answerSync(db, request.body));
+server.post<{ Body: SyncRequest }>("/sync", async (request) => {
+  const answer = await answerSync(db, request.body);
+  // Schedule edits made on the phone arrive here; send them on to Google straight away.
+  if (await hasQueuedChanges(db)) void syncScheduleQuietly(db);
+  return answer;
+});
 
 /** What the phone needs to pair with this desktop, for the desktop's settings screen. */
 server.get("/desktop/pairing", async () => ({
