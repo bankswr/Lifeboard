@@ -117,14 +117,19 @@ current intent, not a commitment to details.
 3. ✅ **Connections and rules engine** (built 2026-10-15, awaiting user review). Sign-in status for every integration, the
    events/conditions/actions model, and default "connection lost" alerts.
 4. **Pets module.** Status dashboard, events, and default rules.
-   (Litter-Robot 4 built 2026-10-15, awaiting model confirmation and first live run;
+   (Litter-Robot 4 built 2026-10-15; live-verified 2026-10-16 (status and levels on Monitor);
    Petory feeders built 2026-10-16 via Smart Life (the user moved them from the Petory app);
    live-verified 2026-10-16.)
+   - **Later (user, 2026-10-16; not started):** investigate the cat weight readings the
+     Litter-Robot takes, for the Pets screen. Only the latest `catWeight` is read so far.
+     First check whether Whisker keeps a weight per visit or per pet (pylitterbot's pet
+     profiles appear to hold a weight history); if so, a weight trend per cat.
 5. **Tasks & reminders**, with Google Tasks sync, plus the generic to-do lists
    (to-do lists ✅ built 2026-10-15, awaiting user review). Tasks built 2026-10-16 together
    with phase 6 as the Schedule page; reminders deferred (user).
 6. **Calendar**, with Google Calendar sync. Built 2026-10-16 as the Schedule page (see
-   agent-notes/2026-10-16-schedule.md); awaiting the first run against the real account.
+   agent-notes/2026-10-16-schedule.md); live-verified 2026-10-16 against the real account
+   (events and tasks on Monitor).
 7. **Health data pipeline.** Port FitThing's pulls for calories, macros, weight,
    body fat and steps. Refinements are planned in a later session.
    (Built 2026-10-15 ahead of order while blocked elsewhere; live-verified 2026-10-15.
@@ -171,10 +176,26 @@ current intent, not a commitment to details.
      totals under the targets saved for that day. Met ones are green: protein and fat at or
      above target; calories at or below for a loss goal, at or above for a gain goal, within
      ± a tolerance for maintenance (setting, default 5%). Carbs aren't judged.
-   - **Later, with the Health page work (not started):** charts and fuller explanations on the
-     Health page; a side-by-side comparison of the 3,500 kcal/lb and fat/lean split
-     estimates; and the same eaten-vs-target table for about the past week, with an option
-     to look further back through the history (user, 2026-10-16).
+   - **Later, with the Health page work (not started; user, 2026-10-16):**
+     - **Data table, tabbed:** totals (eaten, highlighted by targets hit, with the same rules
+       as Monitor) and deltas (eaten − target). About the past week, with an option to look
+       further back through the history. Above it, a summary of days on target (e.g.
+       "Protein met 5 of 7 days"); built to try, may be hidden.
+     - **Past targets:** days before targets were saved (2026-10-16) get targets worked out
+       the way that day would have had them, marked as worked out after the fact.
+     - **Review card:** at the top while anything awaits review, at the bottom once all of it
+       is addressed.
+     - **Weight graph:** weight and body fat % with their 7-day moving averages; raw readings
+       as dots, with rejected and pending ones marked differently. Below it, the body and
+       expenditure figures grouped into body composition and metabolism.
+     - **Time series graphs:** intake and estimated expenditure on one kcal axis, with both
+       the 3,500 kcal/lb and fat/lean split estimates as lines (this is the comparison of the
+       two); macros, raw and as deltas from target; resting heart rate.
+     - **Graph controls:** one time range for all graphs (2 weeks, 4 weeks, 90 days) and a
+       cursor that moves across them together.
+     - **Library:** uPlot (small, fast time series), for now.
+     - Fuller explanations.
+     - Not planned: a separate fat mass / lean mass graph (body fat % with weight covers it).
 8. **Finances** (stretch).
 
 ## Known risks
