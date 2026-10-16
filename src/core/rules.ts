@@ -225,12 +225,23 @@ export async function evaluateRules(db: Db, readings: Reading[]): Promise<NewAle
 }
 
 export interface AlertEntry {
+  id: number;
   createdAt: string;
   subject: string;
   message: string;
 }
 
+/** The newest alerts not yet dismissed. */
 export async function recentAlerts(db: Db, limit = 20): Promise<AlertEntry[]> {
-  const rows = await db.all("SELECT created_at, subject, message FROM alert ORDER BY id DESC LIMIT ?", [limit]);
-  return rows.map((row) => ({ createdAt: row.created_at, subject: row.subject, message: row.message }));
+  const rows = await db.all("SELECT id, created_at, subject, message FROM alert WHERE dismissed = 0 ORDER BY id DESC LIMIT ?", [limit]);
+  return rows.map((row) => ({ id: row.id, createdAt: row.created_at, subject: row.subject, message: row.message }));
+}
+
+/** Hides an alert from Monitor. Alerts are per device, so this doesn't reach the other one. */
+export async function dismissAlert(db: Db, id: number): Promise<void> {
+  await db.run("UPDATE alert SET dismissed = 1 WHERE id = ?", [id]);
+}
+
+export async function dismissAllAlerts(db: Db): Promise<void> {
+  await db.run("UPDATE alert SET dismissed = 1 WHERE dismissed = 0");
 }

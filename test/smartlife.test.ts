@@ -2,12 +2,16 @@ import { createHash, createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { getCredential } from "../src/core/credentials.ts";
 import { migrate } from "../src/core/db/schema.ts";
-import { listDeviceStatuses } from "../src/core/devices.ts";
+import { listDeviceStatuses, saveDeviceStatus } from "../src/core/devices.ts";
 import { listRules } from "../src/core/rules.ts";
 import {
   decrypt, encrypt, requestSecret, requestSignature, SmartLifeSignInError, type RawDevice, type SmartLifeApi, type SmartLifeTokens,
 } from "../src/core/smartlife/api.ts";
 import { decodeMealPlan, feederStatus, nextMeal } from "../src/core/smartlife/feeder.ts";
+import {
+  checkFeederAlarms, estimateAllFood, estimateFood, hopperCapacity, listRefills, markAllRefilled, markRefilled, median,
+  noteRanDry, portionsPerDay, saveFeederSettings, scheduledPortions,
+} from "../src/core/smartlife/food.ts";
 import { makeSmartLifeIntegration } from "../src/core/smartlife/integration.ts";
 import { runUpdate } from "../src/core/updates.ts";
 import { openNodeDb } from "../src/desktop/db/nodeSqlite.ts";
@@ -151,5 +155,59 @@ describe("Smart Life integration", () => {
     await migrate(db);
     const names = (await listRules(db)).map((r) => r.name);
     expect(names).toEqual(expect.arrayContaining(["Feeder offline", "Feeder dispensed nothing"]));
+  });
+});
+
+describe("feeder food estimate", () => {
+  const meals = decodeMealPlan(MEAL_PLAN); // 4 portions a day at 01:00, 07:00, 13:00, 19:00
+  const at = (day: number, hour: number) => new Date(2026, 9, day, hour, 30);
+
+  async function withFeeders(...ids: string[]) {
+    const db = openNodeDb(":memory:");
+    await migrate(db);
+    for (const id of ids) await saveDeviceStatus(db, `feeder-${id}`, "feeder", id, { ...feederStatus({ ...feeder(), id, name: id }) });
+    return db;
+  }
+
+  it("counts the schedule's portions between two times", () => {
+    expect(scheduledPortions(meals, at(16, 8), at(16, 20))).toBe(2); // 13:00 and 19:00
+    expect(scheduledPortions(meals, at(16, 8), at(18, 8))).toBe(8);
+    expect(portionsPerDay(meals)).toBe(4);
+    expect(median([30, 10, 20, 40])).toBe(25);
+  });
+
+  it("learns the hopper size from refills: first one is only a starting point", async () => {
+    const db = await withFeeders("A", "B");
+    await markAllRefilled(db, at(16, 9)); // the user's first fill: no samples
+    expect(await hopperCapacity(db)).toBeNull();
+    expect((await estimateAllFood(db, at(17, 9))).A).toMatchObject({ lastRefill: at(16, 9).toISOString(), percentLeft: null });
+
+    await markRefilled(db, "A", at(26, 9)); // 10 days × 4 = 40 portions
+    await markRefilled(db, "B", at(28, 9)); // 48 portions
+    await markRefilled(db, "A", at(27, 9)); // a double press the next day: 4 portions
+    expect((await listRefills(db)).map((r) => r.portions)).toEqual([48, 4, 40, null, null]);
+    expect(await hopperCapacity(db)).toBe(40); // median of 40, 4, 48
+
+    const estimate = (await estimateAllFood(db, at(28, 9))).B;
+    expect(estimate).toMatchObject({ portionsLeft: 40, percentLeft: 100, daysLeft: 10, state: "ok" });
+  });
+
+  it("stops counting at the first empty feed and flags the low level", async () => {
+    const db = await withFeeders("A");
+    await saveFeederSettings(db, { warningDays: 3, alarmDays: 1, refillTaskAtAlarm: true });
+    await db.run("INSERT INTO task_list (id, updated_at, updated_by, deleted, seq, title, position) VALUES ('list1', '2026-01-01', 'x', 0, 0, 'My Tasks', 0)");
+    await markRefilled(db, "A", at(1, 9));
+    await markRefilled(db, "A", at(6, 9)); // 20 portions: capacity 20
+    const fed = feederStatus({ ...feeder(), id: "A", name: "A" });
+
+    expect((await estimateFood(db, fed, at(9, 9))).state).toBe("warning"); // 8 left = 2 days
+    const alerts = await checkFeederAlarms(db, [fed], at(10, 9)); // 4 left = 1 day
+    expect(alerts.map((a) => a.message)).toEqual(["Feeders running low: A (about 1.0 days left). Added “Refill the feeders” to today."]);
+    expect(await checkFeederAlarms(db, [fed], at(10, 10))).toEqual([]); // no repeat
+
+    await noteRanDry(db, [{ ...fed, lastFeedPortions: 0 }], at(10, 20));
+    expect((await estimateFood(db, fed, at(10, 21))).portionsLeft).toBe(0);
+    await markRefilled(db, "A", at(12, 9)); // counted only up to the run-dry sighting
+    expect((await listRefills(db))[0].portions).toBe(18);
   });
 });

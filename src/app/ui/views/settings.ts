@@ -4,6 +4,7 @@ import { html } from "lit-html";
 import { call, platform } from "../../backend.ts";
 import { syncNow } from "../../sync.ts";
 import { refresh, route } from "../app.ts";
+import { card } from "../card.ts";
 
 interface Pairing {
   addresses: string[];
@@ -22,20 +23,18 @@ route(/^\/settings$/, async () => {
       <a class="card list-card" href="#/connections"><span>Connections</span><span class="muted">›</span></a>
       <a class="card list-card" href="#/rules"><span>Alert rules</span><span class="muted">›</span></a>
       <a class="card list-card" href="#/calendars"><span>Calendars</span><span class="muted">›</span></a>
+      <a class="card list-card" href="#/litter"><span>Litter-Robot</span><span class="muted">›</span></a>
+      <a class="card list-card" href="#/feeders"><span>Feeders</span><span class="muted">›</span></a>
+      <a class="card list-card" href="#/fountain"><span>Water fountain</span><span class="muted">›</span></a>
       ${platform === "desktop" ? await desktopPairing() : await phoneSync()}
-      <section class="card">
-        <h2>This device</h2>
-        <p class="muted">Device ID ${info.deviceId}</p>
-      </section>
+      ${card("settings-device", "This device", html`<p class="muted">Device ID ${info.deviceId}</p>`)}
     `,
   };
 });
 
 async function desktopPairing() {
   const pairing: Pairing = await (await fetch("./desktop/pairing")).json();
-  return html`
-    <section class="card">
-      <h2>Phone sync</h2>
+  return card("settings-phone-sync", "Phone sync", html`
       ${pairing.lanSyncOn
         ? html`
             <p>In the phone app's Settings, enter one of these addresses and the sync key.</p>
@@ -47,15 +46,12 @@ async function desktopPairing() {
             <p class="mono">${pairing.syncKey}</p>
           `
         : html`<p class="muted">LAN sync is off (LIFEBOARD_HOST=127.0.0.1).</p>`}
-    </section>
-  `;
+  `);
 }
 
 async function phoneSync() {
   const settings = await call("getSyncSettings");
-  return html`
-    <section class="card">
-      <h2>Desktop sync</h2>
+  return card("settings-desktop-sync", "Desktop sync", html`
       <form @submit=${saveAndSync}>
         <label>Desktop address
           <input name="address" type="url" placeholder="http://192.168.1.20:5180" .value=${settings.desktopAddress}>
@@ -67,8 +63,7 @@ async function phoneSync() {
       </form>
       <p class="muted">Last synced: ${settings.lastSyncedAt ? new Date(settings.lastSyncedAt).toLocaleString() : "never"}</p>
       ${syncMessage ? html`<p>${syncMessage}</p>` : ""}
-    </section>
-  `;
+  `);
 }
 
 async function saveAndSync(event: SubmitEvent) {

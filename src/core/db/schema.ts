@@ -181,6 +181,36 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
     op TEXT NOT NULL
   );
   `,
+  // 10: alerts can be dismissed from Monitor.
+  "ALTER TABLE alert ADD COLUMN dismissed INTEGER NOT NULL DEFAULT 0;",
+  // 11: settings both devices share (synced), as JSON per setting id; first user: the
+  // Litter-Robot level thresholds (core/whisker/levels.ts).
+  `
+  CREATE TABLE setting (
+    ${syncColumns},
+    value TEXT NOT NULL
+  );
+  `,
+  // 12: feeder refills and run-dry sightings, for the food estimate (core/smartlife/food.ts).
+  `
+  CREATE TABLE feeder_event (
+    ${syncColumns},
+    feeder_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    at TEXT NOT NULL,
+    portions REAL
+  );
+  CREATE INDEX feeder_event_feeder ON feeder_event (feeder_id, kind, at);
+  `,
+  // 13: water fountain refills (no connection; core/fountain.ts). `days` is the time since
+  // the previous refill, null for the first.
+  `
+  CREATE TABLE fountain_refill (
+    ${syncColumns},
+    at TEXT NOT NULL,
+    days REAL
+  );
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

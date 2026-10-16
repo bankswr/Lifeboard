@@ -7,6 +7,7 @@ import type { Db } from "../db/types.ts";
 import { saveDeviceStatus } from "../devices.ts";
 import { SignedOutError, type Integration } from "../integration.ts";
 import { cognitoWhiskerApi, WhiskerSignInError, type WhiskerApi } from "./api.ts";
+import { checkLitterAlarms } from "./levels.ts";
 import { litterRobotStatus } from "./status.ts";
 
 interface WhiskerCredential {
@@ -35,6 +36,7 @@ export function makeWhiskerIntegration(api: WhiskerApi = cognitoWhiskerApi): Int
       const idToken = await currentIdToken(db, api, credential);
       const robots = (await api.robots(idToken)).map(litterRobotStatus);
       for (const robot of robots) await saveDeviceStatus(db, `litter-robot-${robot.serial}`, "litter_robot", robot.name, robot);
+      await checkLitterAlarms(db, robots);
       return robots.map((robot) => ({
         type: "litter_robot",
         subject: robot.name,

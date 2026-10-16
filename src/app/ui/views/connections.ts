@@ -6,6 +6,7 @@ import QRCode from "qrcode";
 import { call, platform } from "../../backend.ts";
 import type { ConnectionInfo } from "../../../core/updates.ts";
 import { act, refresh, route } from "../app.ts";
+import { card } from "../card.ts";
 import { formatTime } from "../format.ts";
 
 let message = "";
@@ -32,29 +33,20 @@ route(/^\/connections$/, async () => {
       ${shownMessage ? html`<p>${shownMessage}</p>` : ""}
       ${integrations.map((integration) =>
         integration.signedIn
-          ? html`
-              <section class="card">
-                <div class="status-row">
-                  <h2>${integration.name}</h2>
-                  <button class="secondary" @click=${() => signOut(integration.id, integration.name)}>Sign out</button>
-                </div>
-                ${connectionStatus(connectionOf(integration.id))}
-              </section>
-            `
+          ? card(`connection-${integration.id}`, integration.name, connectionStatus(connectionOf(integration.id)), {
+              actions: html`<button class="secondary" @click=${() => signOut(integration.id, integration.name)}>Sign out</button>`,
+            })
           : integration.signInMethod === "google"
-            ? googleSignIn(integration.name)
+            ? googleSignIn(integration.id, integration.name)
             : integration.signInMethod === "qr"
               ? qrSignInCard(integration.id, integration.name)
-              : html`
-              <section class="card">
-                <h2>${integration.name}</h2>
-                <form @submit=${(event: SubmitEvent) => signIn(event, integration.id)}>
-                  <label>Email <input name="email" type="email" autocomplete="username" required></label>
-                  <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
-                  <button type="submit">Sign in</button>
-                </form>
-              </section>
-            `,
+              : card(`connection-${integration.id}`, integration.name, html`
+                  <form @submit=${(event: SubmitEvent) => signIn(event, integration.id)}>
+                    <label>Email <input name="email" type="email" autocomplete="username" required></label>
+                    <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+                    <button type="submit">Sign in</button>
+                  </form>
+                `),
       )}
     `,
   };
@@ -76,41 +68,34 @@ function connectionStatus(connection: ConnectionInfo | undefined) {
   `;
 }
 
-function googleSignIn(name: string) {
-  return html`
-    <section class="card">
-      <h2>${name}</h2>
-      ${platform === "desktop"
-        ? html`<a class="button" href="/oauth/google/start">Sign in with Google</a>`
-        : html`<p class="muted">Sign in on the desktop. Its data reaches this phone when they sync.</p>`}
-    </section>
-  `;
+function googleSignIn(integrationId: string, name: string) {
+  return card(
+    `connection-${integrationId}`,
+    name,
+    platform === "desktop"
+      ? html`<a class="button" href="/oauth/google/start">Sign in with Google</a>`
+      : html`<p class="muted">Sign in on the desktop. Its data reaches this phone when they sync.</p>`,
+  );
 }
 
 function qrSignInCard(integrationId: string, name: string) {
   if (qrSignIn?.integrationId === integrationId) {
-    return html`
-      <section class="card">
-        <h2>${name}</h2>
-        <p>In the Smart Life app, tap <strong>+</strong> → <strong>Scan</strong>, scan this code, and confirm.</p>
-        <img class="qr-code" src=${qrSignIn.image} alt="Smart Life sign-in QR code">
-        <p class="muted small">Waiting for the scan…</p>
-      </section>
-    `;
+    return card(`connection-${integrationId}`, name, html`
+      <p>In the Smart Life app, tap <strong>+</strong> → <strong>Scan</strong>, scan this code, and confirm.</p>
+      <img class="qr-code" src=${qrSignIn.image} alt="Smart Life sign-in QR code">
+      <p class="muted small">Waiting for the scan…</p>
+    `);
   }
-  return html`
-    <section class="card">
-      <h2>${name}</h2>
-      <p class="muted small">
-        Your user code is in the Smart Life app under Me → Settings → Account and Security → User Code.
-        ${platform === "android" ? "On the phone, the QR code has to be scanned from another screen." : ""}
-      </p>
-      <form @submit=${(event: SubmitEvent) => startQrSignIn(event, integrationId)}>
-        <label>User code <input name="userCode" autocomplete="off" required></label>
-        <button type="submit">Show QR code</button>
-      </form>
-    </section>
-  `;
+  return card(`connection-${integrationId}`, name, html`
+    <p class="muted small">
+      Your user code is in the Smart Life app under Me → Settings → Account and Security → User Code.
+      ${platform === "android" ? "On the phone, the QR code has to be scanned from another screen." : ""}
+    </p>
+    <form @submit=${(event: SubmitEvent) => startQrSignIn(event, integrationId)}>
+      <label>User code <input name="userCode" autocomplete="off" required></label>
+      <button type="submit">Show QR code</button>
+    </form>
+  `);
 }
 
 async function startQrSignIn(event: SubmitEvent, integrationId: string) {

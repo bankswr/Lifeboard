@@ -6,6 +6,8 @@ working in this repository.
 ## Scope
 `docs/PLAN.md` defines the project's scope, architecture, and phases. Check work against it;
 do not build features outside it without the user's agreement, and record agreed changes there.
+In particular, Lifeboard never controls devices (no commands to the Litter-Robot, feeders or
+anything else) unless the user changes that rule; see "No device control" in `docs/PLAN.md`.
 
 ## Agent notes
 `agent-notes/` is a shared reference folder for agents. Before starting work, read

@@ -8,7 +8,7 @@ import { latestHealthDay, replaceHealthPoints, type HealthPoint, type PointType 
 import type { Integration } from "../integration.ts";
 import { syncSchedule } from "../schedule/push.ts";
 import { listDataPoints, type DataPoint } from "./healthApi.ts";
-import { accessToken, type GoogleClient } from "./oauth.ts";
+import { accessToken, HEALTH_SCOPES, type GoogleClient } from "./oauth.ts";
 
 export interface GoogleCredential extends GoogleClient {
   refreshToken: string;
@@ -30,7 +30,7 @@ export const google: Integration = {
 
   async update(db) {
     const credential = (await getCredential<GoogleCredential>(db, "google"))!;
-    const token = await accessToken(credential, credential.refreshToken);
+    const token = await accessToken(credential, credential.refreshToken, HEALTH_SCOPES);
     // Up to today (not included), as FitThing did: today isn't complete yet.
     const end = localDate();
     for (const type of TYPES) {

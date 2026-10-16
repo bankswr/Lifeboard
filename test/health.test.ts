@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { saveCredential } from "../src/core/credentials.ts";
+import { HEALTH_SCOPES, SCHEDULE_SCOPES } from "../src/core/google/oauth.ts";
 import { addDays, localDate } from "../src/core/dates.ts";
 import { migrate } from "../src/core/db/schema.ts";
 import { google, toHealthPoint } from "../src/core/google/integration.ts";
@@ -95,10 +96,12 @@ describe("Google integration", () => {
   /** A pretend Google: token endpoint plus the Health API, with `refreshOk` deciding sign-in. */
   function fakeGoogle(refreshOk: boolean) {
     const requests: string[] = [];
-    const fetchFn = async (input: RequestInfo | URL) => {
+    const tokenScopes: string[] = [];
+    const fetchFn = async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input));
       requests.push(url.pathname);
       if (url.host === "oauth2.googleapis.com") {
+        tokenScopes.push(new URLSearchParams(String(init?.body)).get("scope") ?? "");
         return refreshOk
           ? Response.json({ access_token: "token-1" })
           : Response.json({ error: "invalid_grant", error_description: "Token has been expired or revoked." }, { status: 400 });
@@ -110,7 +113,7 @@ describe("Google integration", () => {
         : [];
       return Response.json({ dataPoints: points });
     };
-    return { fetch: fetchFn as typeof fetch, requests };
+    return { fetch: fetchFn as typeof fetch, requests, tokenScopes };
   }
 
   async function withFetch(fake: typeof fetch, test: () => Promise<void>) {
@@ -132,6 +135,8 @@ describe("Google integration", () => {
       expect(result.connections[0]).toMatchObject({ name: "Google", status: "connected" });
       expect(site.requests.filter((p) => p.includes("dataPoints"))).toHaveLength(3);
       expect(await db.all("SELECT type, value FROM health_point")).toEqual([{ type: "weight", value: 80000 }]);
+      // The Health API refuses tokens carrying other scopes, so each API gets its own token.
+      expect(site.tokenScopes).toEqual([HEALTH_SCOPES.join(" "), SCHEDULE_SCOPES.join(" ")]);
     });
   });
 

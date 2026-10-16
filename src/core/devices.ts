@@ -17,6 +17,7 @@ export async function saveDeviceStatus(db: Db, id: string, kind: string, name: s
 }
 
 export async function listDeviceStatuses(db: Db): Promise<DeviceStatus[]> {
-  const rows = await db.all("SELECT * FROM device_status ORDER BY kind, name");
+  // Litter-Robots before feeders (user, 2026-10-16), then by name.
+  const rows = await db.all("SELECT * FROM device_status ORDER BY CASE kind WHEN 'litter_robot' THEN 0 ELSE 1 END, name");
   return rows.map((row) => ({ id: row.id, kind: row.kind, name: row.name, data: JSON.parse(row.data), updatedAt: row.updated_at }));
 }

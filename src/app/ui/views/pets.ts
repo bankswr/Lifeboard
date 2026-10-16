@@ -1,88 +1,172 @@
-// Pets (#/pets, in the Details menu): the latest status of each Litter-Robot and feeder. The
-// Monitor screen shows the same devices as one line each (deviceSummary).
+// Pets (#/pets, in the Details menu): the latest status of each Litter-Robot and feeder.
+// Monitor shows the same cards (deviceCards).
 import { html } from "lit-html";
 import type { DeviceStatus } from "../../../core/devices.ts";
 import { nextMeal, type FeederStatus } from "../../../core/smartlife/feeder.ts";
+import type { FountainEstimate } from "../../../core/fountain.ts";
+import type { FoodEstimate } from "../../../core/smartlife/food.ts";
+import { drawerState, litterState, type LevelState, type LitterSettings } from "../../../core/whisker/levels.ts";
 import type { LitterRobotStatus } from "../../../core/whisker/status.ts";
 import { call } from "../../backend.ts";
-import { route } from "../app.ts";
+import { act, route } from "../app.ts";
+import { card } from "../card.ts";
 import { formatTime } from "../format.ts";
 
-export const NO_DEVICES_HINT = html`<p class="muted">No devices yet. Sign in to Whisker or Smart Life under Settings → Connections.</p>`;
+export const NO_DEVICES_HINT = html`<p class="muted">No connected devices yet. Sign in to Whisker or Smart Life under Settings → Connections.</p>`;
 
 route(/^\/pets$/, async () => {
-  const { devices } = await call("getStatus");
+  const status = await call("getStatus");
   return {
     section: "pets",
     content: html`
       <header class="page-header">
         <h1>Pets</h1>
       </header>
-      ${devices.length === 0 ? NO_DEVICES_HINT : devices.map((device) => html`<section class="card">${deviceCard(device)}</section>`)}
+      ${status.devices.length === 0 ? NO_DEVICES_HINT : ""}
+      ${deviceCards(status.devices, status)}
     `,
   };
 });
 
-/** One line for the Monitor screen: the device's name and whether it needs attention. */
-export function deviceSummary(device: DeviceStatus) {
-  const { label, ok } = deviceState(device);
+interface DeviceContext {
+  litterSettings: LitterSettings;
+  foodEstimates: Record<string, FoodEstimate>;
+  fountain: FountainEstimate;
+}
+
+/** The Litter-Robot cards (each its own), one card for all feeders, then the water fountain. */
+export function deviceCards(devices: DeviceStatus[], status: DeviceContext) {
+  const feeders = devices.filter((device) => device.kind === "feeder");
   return html`
-    <a class="status-row plain-link" href="#/pets">
-      <span>${device.name}${device.kind === "feeder" ? " feeder" : ""}</span>
-      <span class="status ${ok ? "connected" : "error"}">${label}</span>
-    </a>
+    ${devices.filter((device) => device.kind === "litter_robot").map((device) => litterRobotCard(device, status.litterSettings))}
+    ${feeders.length > 0 ? feedersCard(feeders, status.foodEstimates) : ""}
+    ${fountainCard(status.fountain)}
   `;
 }
 
-function deviceState(device: DeviceStatus): { label: string; ok: boolean } {
-  if (device.kind === "feeder") {
-    const feeder = device.data as FeederStatus;
-    if (!feeder.online) return { label: "Offline", ok: false };
-    if (feeder.lastFeedPortions === 0) return { label: "Last feed empty", ok: false };
-    return { label: "OK", ok: true };
-  }
-  const robot = device.data as LitterRobotStatus;
-  return { label: robot.status, ok: robot.status === "Ready" };
+/** The water fountain has no connection: everything shown is estimated from the user's refills. */
+function fountainCard(estimate: FountainEstimate) {
+  return card(
+    "fountain",
+    "Water fountain",
+    html`
+      ${estimate.percentLeft !== null
+        ? levelBar("Water", estimate.percentLeft, estimate.state, `≈${estimate.percentLeft}%`)
+        : html`<div class="level"><span>Water</span><span class="muted small level-none">Learning</span></div>`}
+      <p class="small">
+        ${estimate.daysLeft !== null
+          ? html`<span class=${estimate.state === "ok" ? "" : `status ${estimate.state}`}>≈${estimate.daysLeft.toFixed(1)} days left</span> · `
+          : ""}
+        ${estimate.lastRefill ? html`<span class="muted">Last refill ${shortDateTime(estimate.lastRefill)}</span>` : html`<span class="muted">No refill recorded yet</span>`}
+      </p>
+      <p class="muted small">
+        No connection: estimated from your refills.
+        ${estimate.fillDays === null
+          ? "Press Refill each time you fill it; the estimate starts after the second refill."
+          : `A fill lasts ≈ ${estimate.fillDays.toFixed(1)} days (median of your refills).`}
+      </p>
+    `,
+    { actions: html`<button class="secondary small" @click=${refillFountain}>Refill</button>` },
+  );
 }
 
-function deviceCard(device: DeviceStatus) {
-  if (device.kind === "feeder") return feederCard(device);
-  if (device.kind === "litter_robot") return litterRobotCard(device);
-  return "";
+async function refillFountain() {
+  if (!confirm("Record a refill of the water fountain (full) now?")) return;
+  await act(() => call("refillFountain"));
 }
 
-function litterRobotCard(device: DeviceStatus) {
+function litterRobotCard(device: DeviceStatus, settings: LitterSettings) {
   const robot = device.data as LitterRobotStatus;
-  const warn = (bad: boolean) => (bad ? "status error" : "");
+  return card(
+    device.id,
+    robot.name,
+    html`
+      ${levelBar("Drawer", robot.drawerLevel, drawerState(robot, settings))}
+      ${levelBar("Litter", robot.litterLevel, litterState(robot, settings))}
+      ${robot.laserDirty ? html`<p class="small status error">Sensors need cleaning</p>` : ""}
+      <p class="muted small">Checked ${formatTime(device.updatedAt)}</p>
+    `,
+    { actions: html`<span class="status ${robot.status === "Ready" ? "connected" : "error"}">${robot.status}</span>` },
+  );
+}
+
+/**
+ * One card for all the feeders (same model and food, user 2026-10-16): per feeder its
+ * online state, estimated food and days left, last feed and a Refill button; below, the
+ * learned hopper size and the next meal.
+ */
+function feedersCard(devices: DeviceStatus[], estimates: Record<string, FoodEstimate>) {
+  const feeders = devices.map((device) => device.data as FeederStatus);
+  const capacity = estimates[feeders[0].id]?.capacityPortions ?? null;
+  const next = nextMeal(feeders[0].meals);
+  const sameSchedule = feeders.every((f) => JSON.stringify(f.meals) === JSON.stringify(feeders[0].meals));
+  const checked = devices.map((d) => d.updatedAt).sort()[0];
+  return card(
+    "feeders",
+    "Feeders",
+    html`
+      ${feeders.map((feeder) => feederRow(feeder, estimates[feeder.id]))}
+      <p class="muted small">
+        ${capacity === null
+          ? "Food estimate: learning. Press Refill each time you fill a feeder; the estimate starts after the second refill."
+          : `A full hopper ≈ ${Math.round(capacity)} portions (median of your refills).`}
+        ${sameSchedule && next ? html`<br>Next meal ${next.at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}, ${portions(next.portions)} each.` : ""}
+      </p>
+      <p class="muted small">Checked ${formatTime(checked)}</p>
+    `,
+    { actions: html`<button class="secondary small" @click=${refillAll}>Refill all</button>` },
+  );
+}
+
+function feederRow(feeder: FeederStatus, estimate: FoodEstimate | undefined) {
   return html`
-    <div class="status-row">
-      <h2>${robot.name}</h2>
-      <span class="status ${robot.status === "Ready" ? "connected" : "error"}">${robot.status}</span>
+    <div class="feeder-row">
+      <div class="status-row">
+        <strong>${feeder.name}</strong>
+        <span class="status ${feeder.online ? "connected" : "error"}">${feeder.online ? "Online" : "Offline"}</span>
+      </div>
+      ${estimate?.percentLeft != null
+        ? levelBar("Food", estimate.percentLeft, estimate.state, `≈${estimate.percentLeft}%`)
+        : html`<div class="level"><span>Food</span><span class="muted small level-none">Learning</span></div>`}
+      <div class="feeder-meta small">
+        <span>
+          ${estimate?.daysLeft != null ? html`<span class=${estimate.state === "ok" ? "" : `status ${estimate.state}`}>≈${estimate.daysLeft.toFixed(1)} days left</span> · ` : ""}
+          <span class=${feeder.lastFeedPortions === 0 ? "status error" : ""}>Last feed ${portions(feeder.lastFeedPortions)}</span>
+          ${estimate?.lastRefill ? html` · <span class="muted">Last refill ${shortDateTime(estimate.lastRefill)}</span>` : ""}
+        </span>
+        <button class="secondary small" @click=${() => refill(feeder)}>Refill</button>
+      </div>
     </div>
-    <p class="small">
-      <span class=${warn(robot.drawerFull || robot.drawerLevel >= 80)}>Drawer ${robot.drawerLevel}%</span> ·
-      <span class=${warn(robot.litterLevel < 20)}>Litter ${robot.litterLevel}%</span>
-      ${robot.laserDirty ? html` · <span class="status error">Sensors need cleaning</span>` : ""}
-    </p>
-    <p class="muted small">Checked ${formatTime(device.updatedAt)}</p>
   `;
 }
 
-function feederCard(device: DeviceStatus) {
-  const feeder = device.data as FeederStatus;
-  const next = nextMeal(feeder.meals);
-  const portions = (n: number) => `${n} portion${n === 1 ? "" : "s"}`;
+async function refill(feeder: FeederStatus) {
+  if (!confirm(`Record a refill of ${feeder.name} (full) now?`)) return;
+  await act(() => call("markFeederRefilled", feeder.id));
+}
+
+async function refillAll() {
+  if (!confirm("Record a refill of every feeder (full) now?")) return;
+  await act(() => call("markAllFeedersRefilled"));
+}
+
+function portions(n: number): string {
+  return `${n} portion${n === 1 ? "" : "s"}`;
+}
+
+function shortDateTime(iso: string): string {
+  return new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+/** A labelled 0–100% bar: yellow at warning, red at alarm (thresholds in Settings). */
+function levelBar(label: string, percent: number, state: LevelState, valueText = `${Math.round(percent)}%`) {
+  const clamped = Math.max(0, Math.min(100, Math.round(percent)));
   return html`
-    <div class="status-row">
-      <h2>${feeder.name} feeder</h2>
-      <span class="status ${feeder.online ? "connected" : "error"}">${feeder.online ? "Online" : "Offline"}</span>
+    <div class="level">
+      <span>${label}</span>
+      <div class="level-bar ${state}" role="meter" aria-label=${label}
+        aria-valuemin="0" aria-valuemax="100" aria-valuenow=${clamped}><span style="width: ${clamped}%"></span></div>
+      <span class="level-value small">${valueText}</span>
     </div>
-    <p class="small">
-      <span class=${feeder.lastFeedPortions === 0 ? "status error" : ""}>Last feed: ${portions(feeder.lastFeedPortions)}</span> ·
-      ${next
-        ? `Next: ${next.at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}, ${portions(next.portions)}`
-        : "No meals scheduled"}
-    </p>
-    <p class="muted small">Checked ${formatTime(device.updatedAt)}</p>
   `;
 }

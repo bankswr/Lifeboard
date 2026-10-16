@@ -32,6 +32,26 @@ Plus `online` per device. **No food level, jam/fault, battery or desiccant data*
 per-value timestamps (`update_time` is the pairing time). User's schedule on all three:
 1 portion at 01:00, 07:00, 13:00, 19:00 daily.
 
+## No device control
+The user's rule (2026-10-16, docs/PLAN.md settled decisions): Lifeboard never sends commands
+to the feeders (or any device) unless the user changes that rule. The Smart Life API can
+send commands (`/v1.1/m/thing/{id}/commands`); Lifeboard deliberately has no code for it.
+
+## Food estimate (2026-10-16)
+The F01W has no food level. `core/smartlife/food.ts`: user presses Refilled (always to
+full); each refill after a feeder's first counts the scheduled portions since that feeder's
+previous refill (cut off at the first 0-portion feed seen) as one hopper; all feeders' samples
+are pooled and the median is the capacity. Days left = (capacity − scheduled portions since
+last refill) / portions per day. Thresholds in days (default 3 / 1) and an optional
+"Refill the feeders" task (fixed id per day) in Settings → Feeders. Refills and run-dry
+sightings are synced `feeder_event` rows. The user's first refill (2026-10-16) is a starting
+point only.
+
+## Water fountain (2026-10-16)
+A fourth "device" with no connection: `core/fountain.ts`, same learning scheme in time
+instead of portions (days between refills, median = how long a fill lasts). Its alarm check
+runs in `runUpdate` (no integration). Settings → Water fountain.
+
 ## Integration (built 2026-10-16, user approved the plan; live-verified the same day: 3 feeders read)
 - `core/smartlife/api.ts`: QR sign-in + signed/encrypted GETs, crypto via `@noble/hashes`
   (MD5, HMAC-SHA256) and `@noble/ciphers` (AES-GCM) so it runs on the phone too. Only a

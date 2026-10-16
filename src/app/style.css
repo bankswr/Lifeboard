@@ -10,6 +10,7 @@
   --accent-text: #052e16;
   --danger: #f87171;
   --blue: #60a5fa;
+  --warning: #facc15;
   --radius: 12px;
   /* Space taken by the phone's status bar / camera cutout (top) and gesture bar (bottom).
      Browsers expose env(); the Android app (Capacitor, edge-to-edge) also sets --safe-area-inset-*. */
@@ -263,3 +264,39 @@ textarea {
 .form-actions { display: grid; gap: 10px; }
 .form-actions button.danger { margin-top: 8px; }
 .calendar-row { padding: 8px 0; }
+
+/* ---------- Monitor ---------- */
+.section-title { margin: 20px 0 8px; }
+.alert-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.alert-row p { margin: 6px 0; }
+button.small { padding: 6px 10px; font-size: 0.85rem; }
+/* Device cards sit side by side on a wide screen, stacked on the phone. */
+.device-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 12px; }
+.level { display: grid; grid-template-columns: 4.5em 1fr auto; align-items: center; gap: 8px; margin: 8px 0; color: var(--text); font-size: 0.9rem; }
+.level-none { grid-column: 2 / 4; }
+.level-bar { height: 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; }
+.level-bar > span { display: block; height: 100%; background: var(--accent); }
+.level-bar.warning > span { background: var(--warning); }
+.level-bar.alarm > span { background: var(--danger); }
+.level-value { min-width: 3em; text-align: right; color: var(--muted); }
+.card.attention { border: 1px solid var(--danger); }
+.card .section-header { margin-top: 0; }
+.card .schedule-item { background: var(--surface-2); }
+.feeder-row { padding: 6px 0 8px; border-bottom: 1px solid var(--border); }
+.feeder-row:last-of-type { border-bottom: none; }
+.feeder-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.status.warning { color: var(--warning); }
+.status.alarm { color: var(--danger); }
+
+/* Collapsible cards (ui/card.ts) */
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.card-toggle {
+  flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0;
+  background: none; border: none; padding: 0; color: var(--text); text-align: left; cursor: pointer;
+}
+.card-toggle h2 { margin: 0; }
+.card-toggle .chevron { color: var(--muted); transition: transform 0.15s; }
+.card.collapsed .chevron { transform: rotate(-90deg); }
+.card-actions { display: flex; align-items: center; gap: 8px; }
+.card-body { margin-top: 8px; }
+.card-body[hidden] { display: none; }

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { migrate } from "../src/core/db/schema.ts";
+import { checkFountainAlarm, estimateFountain, fountainFillDays, refillFountain, saveFountainSettings } from "../src/core/fountain.ts";
 import type { Db } from "../src/core/db/types.ts";
 import type { Reading } from "../src/core/readings.ts";
-import { evaluateRules, fillMessage, listRules, recentAlerts, saveRule } from "../src/core/rules.ts";
+import { dismissAlert, dismissAllAlerts, evaluateRules, fillMessage, listRules, recentAlerts, recordAlert, saveRule } from "../src/core/rules.ts";
 import { answerSync, syncWithDesktop } from "../src/core/sync/sync.ts";
 import { SignedOutError, type Integration } from "../src/core/integration.ts";
 import { isUpdateDue, listConnections, runUpdate } from "../src/core/updates.ts";
@@ -142,5 +143,54 @@ describe("isUpdateDue", () => {
     expect(isUpdateDue(null, now)).toBe(true);
     expect(isUpdateDue("2026-10-14T23:59:00Z", now)).toBe(true);
     expect(isUpdateDue("2026-10-15T01:00:00Z", now)).toBe(false);
+  });
+});
+
+describe("dismissing alerts", () => {
+  it("hides dismissed alerts from the recent list", async () => {
+    const db = openNodeDb(":memory:");
+    await migrate(db);
+    await recordAlert(db, "Schedule", "first");
+    await recordAlert(db, "Schedule", "second");
+    await recordAlert(db, "Schedule", "third");
+    const [third] = await recentAlerts(db);
+    await dismissAlert(db, third.id);
+    expect((await recentAlerts(db)).map((a) => a.message)).toEqual(["second", "first"]);
+    await dismissAllAlerts(db);
+    expect(await recentAlerts(db)).toEqual([]);
+  });
+});
+
+describe("water fountain", () => {
+  const day = (n: number, hour = 9) => new Date(2026, 9, n, hour);
+
+  it("learns how long a fill lasts from refills, the first being only a starting point", async () => {
+    const db = openNodeDb(":memory:");
+    await migrate(db);
+    await refillFountain(db, day(16));
+    expect(await estimateFountain(db, day(17))).toMatchObject({ lastRefill: day(16).toISOString(), fillDays: null, percentLeft: null });
+
+    await refillFountain(db, day(20)); // 4 days
+    await refillFountain(db, day(20, 10)); // double press: ignored
+    await refillFountain(db, day(26)); // 6 days (from the double press, ~5.96)
+    expect(Math.round((await fountainFillDays(db))! * 10) / 10).toBe(5);
+    const estimate = await estimateFountain(db, day(30));
+    expect(estimate.state).toBe("alarm");
+    expect(estimate.daysLeft).toBeCloseTo(1, 1);
+  });
+
+  it("adds one refill task and alert at alarm when enabled", async () => {
+    const db = openNodeDb(":memory:");
+    await migrate(db);
+    await db.run("INSERT INTO task_list (id, updated_at, updated_by, deleted, seq, title, position) VALUES ('list1', '2026-01-01', 'x', 0, 0, 'My Tasks', 0)");
+    await saveFountainSettings(db, { warningDays: 2, alarmDays: 1, refillTaskAtAlarm: true });
+    await refillFountain(db, day(1));
+    await refillFountain(db, day(5)); // a fill lasts 4 days
+    expect(await checkFountainAlarm(db, day(7))).toEqual([]); // 2 days left: warning only
+    expect((await checkFountainAlarm(db, day(8, 12))).map((a) => a.message)).toEqual([
+      "Water fountain: about 0.9 days of water left. Added “Refill the water fountain” to today.",
+    ]);
+    expect(await checkFountainAlarm(db, day(8, 13))).toEqual([]);
+    expect((await db.all("SELECT id FROM task")).map((t) => t.id)).toEqual(["auto-fountain-2026-10-08"]);
   });
 });

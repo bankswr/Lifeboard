@@ -6,6 +6,7 @@ import { listRules, saveRule } from "../src/core/rules.ts";
 import { runUpdate } from "../src/core/updates.ts";
 import { WhiskerSignInError, type RawRobot, type WhiskerApi } from "../src/core/whisker/api.ts";
 import { makeWhiskerIntegration } from "../src/core/whisker/integration.ts";
+import { checkLitterAlarms, DEFAULT_LITTER_SETTINGS, drawerState, litterState, saveLitterSettings } from "../src/core/whisker/levels.ts";
 import { litterRobotStatus } from "../src/core/whisker/status.ts";
 import { openNodeDb } from "../src/desktop/db/nodeSqlite.ts";
 
@@ -109,5 +110,31 @@ describe("Whisker integration", () => {
   it("adds the Litter-Robot default rules", async () => {
     const names = (await listRules(await newDb())).map((r) => r.name);
     expect(names).toEqual(expect.arrayContaining(["Litter-Robot drawer full", "Litter-Robot offline", "Litter-Robot litter low"]));
+  });
+});
+
+describe("litter levels", () => {
+  const robot = (drawerLevel: number, litterLevel: number) => ({ ...litterRobotStatus(READY), drawerLevel, litterLevel });
+
+  it("turns levels yellow and red at the set thresholds", async () => {
+    const settings = { ...DEFAULT_LITTER_SETTINGS, drawerWarning: 60, drawerAlarm: 85 };
+    expect([50, 60, 85].map((level) => drawerState(robot(level, 90), settings))).toEqual(["ok", "warning", "alarm"]);
+    expect([50, 40, 20].map((level) => litterState(robot(10, level), settings))).toEqual(["ok", "warning", "alarm"]);
+    await expect(saveLitterSettings(await newDb(), { ...settings, drawerWarning: 90 })).rejects.toThrow(/below its alarm/);
+  });
+
+  it("adds one clean-up task and alert when a level reaches alarm, if enabled", async () => {
+    const db = await newDb();
+    await db.run("INSERT INTO task_list (id, updated_at, updated_by, deleted, seq, title, position) VALUES ('list1', '2026-01-01', 'x', 0, 0, 'My Tasks', 0)");
+    expect(await checkLitterAlarms(db, [robot(95, 90)], "2026-10-16")).toEqual([]); // not enabled
+
+    await saveLitterSettings(db, { ...DEFAULT_LITTER_SETTINGS, cleanTaskAtAlarm: true });
+    await checkLitterAlarms(db, [robot(40, 90)], "2026-10-16");
+    const alerts = await checkLitterAlarms(db, [robot(95, 90)], "2026-10-16");
+    expect(alerts.map((a) => a.message)).toEqual(["Litter-Robot: drawer 95% full. Added “Clean the litter box” to today."]);
+    expect(await checkLitterAlarms(db, [robot(97, 90)], "2026-10-16")).toEqual([]); // still in alarm: no repeat
+    expect(await db.all("SELECT id, title, due FROM task")).toEqual([
+      { id: "auto-litter-LR4C000001-2026-10-16", title: "Clean the litter box", due: "2026-10-16" },
+    ]);
   });
 });

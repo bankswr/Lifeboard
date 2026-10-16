@@ -9,6 +9,7 @@ import { saveDeviceStatus } from "../devices.ts";
 import { SignedOutError, type Integration } from "../integration.ts";
 import { needsRefresh, qrCodeText, SmartLifeSignInError, tuyaSmartLifeApi, type SmartLifeApi, type SmartLifeTokens } from "./api.ts";
 import { FEEDER_CATEGORY, feederStatus } from "./feeder.ts";
+import { checkFeederAlarms, noteRanDry } from "./food.ts";
 
 interface SmartLifeCredential {
   userCode: string;
@@ -49,6 +50,8 @@ export function makeSmartLifeIntegration(api: SmartLifeApi = tuyaSmartLifeApi): 
       const tokens = await currentTokens(db, api);
       const feeders = (await api.devices(tokens)).filter((d) => d.category === FEEDER_CATEGORY).map(feederStatus);
       for (const feeder of feeders) await saveDeviceStatus(db, `feeder-${feeder.id}`, "feeder", feeder.name, feeder);
+      await noteRanDry(db, feeders);
+      await checkFeederAlarms(db, feeders);
       return feeders.map((feeder) => ({
         type: "feeder",
         subject: feeder.name,

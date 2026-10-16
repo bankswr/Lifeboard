@@ -7,18 +7,25 @@ import { SignedOutError } from "../integration.ts";
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 
-/**
- * What Lifeboard asks Google for: read-only Google Health data (steps; weight and body fat),
- * the list of calendars (to choose which the Schedule shows), editing calendar events, and
- * Google Tasks.
- */
-export const GOOGLE_SCOPES = [
+/** Read-only access to the Google Health data Lifeboard uses (steps; weight and body fat). */
+export const HEALTH_SCOPES = [
   "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly",
   "https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly",
+];
+
+/** The Schedule: the list of calendars (to choose which are shown), editing events, and Google Tasks. */
+export const SCHEDULE_SCOPES = [
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/tasks",
 ];
+
+/**
+ * One sign-in asks for everything. Each access token is narrowed to one API's scopes,
+ * though: the Google Health API refuses a token that also carries other scopes ("Request
+ * contains disallowed OAuth scope(s)", seen 2026-10-16).
+ */
+export const GOOGLE_SCOPES = [...HEALTH_SCOPES, ...SCHEDULE_SCOPES];
 
 /** The OAuth client from Google Cloud ("Desktop app" type: the downloaded JSON's `installed` part). */
 export interface GoogleClient {
@@ -61,14 +68,19 @@ export async function exchangeCode(client: GoogleClient, code: string, verifier:
   return tokens.refresh_token;
 }
 
-/** A fresh access token (valid ~1 hour). Throws SignedOutError when the sign-in has expired or was revoked. */
-export async function accessToken(client: GoogleClient, refreshToken: string): Promise<string> {
+/**
+ * A fresh access token (valid ~1 hour) limited to `scopes`, which must be among those the
+ * user granted. Throws SignedOutError when the sign-in has expired or was revoked, or
+ * predates some of these scopes.
+ */
+export async function accessToken(client: GoogleClient, refreshToken: string, scopes: string[]): Promise<string> {
   try {
     const tokens = await tokenRequest({
       client_id: client.clientId,
       client_secret: client.clientSecret,
       refresh_token: refreshToken,
       grant_type: "refresh_token",
+      scope: scopes.join(" "),
     });
     return tokens.access_token;
   } catch (error) {
@@ -76,6 +88,10 @@ export async function accessToken(client: GoogleClient, refreshToken: string): P
     // was revoked, or the password changed.
     if ((error as Error).message.includes("invalid_grant")) {
       throw new SignedOutError("Google sign-in expired. Sign in again under Settings → Connections.");
+    }
+    // Asking for a scope the sign-in never granted (a sign-in from before Calendar and Tasks).
+    if ((error as Error).message.includes("invalid_scope")) {
+      throw new SignedOutError("Google needs a new sign-in to allow Calendar and Tasks. Sign in again under Settings → Connections.");
     }
     throw error;
   }

@@ -24,7 +24,7 @@ When both are on the same network, they sync data with each other.
 | Tasks & reminders | To-dos with due dates, recurring tasks, reminders. Editable; two-way sync with Google Tasks. Repeat rules live in Lifeboard, which creates each occurrence as a plain Google task (the Tasks API doesn't expose recurrence). |
 | To-do lists | Generic checklists, kept in multiple separate lists. No external service; they only sync between Lifeboard's own devices. |
 | Calendar | Events and appointments. Editable; two-way sync with Google Calendar. |
-| Pets | Whisker Litter-Robot and Petory feeders: **read-only** status plus reliable notifications. Lifeboard never sends commands to the devices. **High priority.** |
+| Pets | Whisker Litter-Robot and Petory feeders: **read-only** status plus reliable notifications; feeder food and the (unconnected) water fountain are estimated from the user's "Refill" presses. Lifeboard never sends commands to the devices. **High priority.** |
 | Connections | Every external sign-in reports its status. A lost sign-in raises an alert; it never fails silently. |
 | Rules | User-defined IFTTT-style rules: *when* (an event from any module) *if* (conditions) *then* (actions). v1 has one action type: notify. Built-in alerts such as "signed out" are default rules the user can edit. |
 
@@ -154,7 +154,8 @@ current intent, not a commitment to details.
 - **Phone updates:** on command, or when the app opens if more than 12 hours have
   passed since the last update.
 - **Health v1:** calories, macros, weight, body fat, steps. Data only.
-- **Devices:** Whisker Litter-Robot and Petory feeders.
+- **Devices:** Whisker Litter-Robot, Petory feeders (via Smart Life), and a water fountain
+  with no connection (user, 2026-10-16), tracked only through Refill presses.
 - **Notifications:** the main problem is silent sign-outs. Rules are customizable,
   IFTTT-style.
 - **Calendar and tasks:** editable, with two-way Google sync.
@@ -162,9 +163,16 @@ current intent, not a commitment to details.
 - **To-do lists:** generic, multiple lists, synced only between Lifeboard devices.
 - **Desktop polling:** at startup, then every 4 hours. No continuous monitoring.
 - **Pets:** read-only, for awareness. Rule actions are notifications only.
+- **No device control (user, 2026-10-16, reaffirmed):** Lifeboard must not control the
+  Litter-Robot, the feeders or any other device in any way (no feeding, cycling, settings
+  changes) unless the user changes this rule. Buttons like "Refilled" only record what the
+  user did; they send nothing to the device. Agents must not add device commands, even
+  when a request sounds like one ("feed all" meant "mark all refilled").
 - **Feature plans:** reviewed with the user when each feature is ready to build.
 - **Navigation (user, 2026-10-16):** FitApp's bottom bar: pop-up menus plus a gear icon.
-  Hub → Monitor (alerts, device lines, connection problems; the start screen) and Lists;
+  Hub → Monitor (the start screen; in order: alerts, dismissable, red-bordered when any;
+  today's tasks and events; a card per device with level bars; a Health card, contents to be
+  decided) and Lists;
   Details → Pets, Health and Schedule (Google Calendar events and Google Tasks by day). ⚙ is Settings,
   including Connections with each connection's status.
 - **Schedule (user, 2026-10-16):** per day tasks, then all-day, then timed events; overdue

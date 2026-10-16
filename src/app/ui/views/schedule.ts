@@ -127,7 +127,7 @@ function dayView(day: ScheduleDay, today: string) {
   `;
 }
 
-function taskRow(task: TaskItem & { overdue: boolean }) {
+export function taskRow(task: TaskItem & { overdue: boolean }) {
   return html`
     <div class="schedule-item task ${task.done ? "done" : ""} ${task.overdue ? "overdue" : ""}">
       <input type="checkbox" aria-label="Done" .checked=${live(task.done)}
@@ -144,7 +144,7 @@ function taskRow(task: TaskItem & { overdue: boolean }) {
   `;
 }
 
-function eventRow(event: EventItem, when: string) {
+export function eventRow(event: EventItem, when: string) {
   return html`
     <a class="schedule-item event ${event.allDay ? "all-day" : ""}" href="#/schedule/event/${encodeURIComponent(event.id)}">
       <span class="item-when small">${when}</span>
@@ -181,7 +181,7 @@ export function formatClock(time: string): string {
   return new Date(2000, 0, 1, h, m).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
-function timeRange(event: EventItem): string {
+export function timeRange(event: EventItem): string {
   const format = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   return `${format(event.start)} – ${format(event.end)}`;
 }

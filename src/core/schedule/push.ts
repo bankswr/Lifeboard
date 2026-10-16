@@ -10,7 +10,7 @@ import { getCredential } from "../credentials.ts";
 import { addDays, localDate } from "../dates.ts";
 import { get, type Db, type Row } from "../db/types.ts";
 import type { GoogleCredential } from "../google/integration.ts";
-import { accessToken } from "../google/oauth.ts";
+import { accessToken, SCHEDULE_SCOPES } from "../google/oauth.ts";
 import { deliverAlerts } from "../notify.ts";
 import { recordAlert, type NewAlert } from "../rules.ts";
 import { deleteRecord, saveRecord } from "../sync/records.ts";
@@ -55,7 +55,7 @@ export async function syncScheduleQuietly(db: Db): Promise<void> {
 async function signedInGoogle(db: Db): Promise<ScheduleGoogle | null> {
   const credential = await getCredential<GoogleCredential>(db, "google");
   if (!credential) return null;
-  return googleScheduleApi(await accessToken(credential, credential.refreshToken));
+  return googleScheduleApi(await accessToken(credential, credential.refreshToken, SCHEDULE_SCOPES));
 }
 
 export async function hasQueuedChanges(db: Db): Promise<boolean> {
@@ -142,7 +142,8 @@ async function applyChange(db: Db, google: ScheduleGoogle, op: ScheduleOp, ours:
     }
     case "task.create": {
       const row = await anyRow(db, "task", op.rowId);
-      if (!row || row.deleted) return;
+      // Already in Google: both devices made the same task (e.g. an automatic one).
+      if (!row || row.deleted || row.google_id) return;
       const created = mine(await google.insertTask(op.listId, taskBody(row)));
       await saveRecord(db, "task", { ...row, google_id: created.id, etag: created.etag ?? null });
       return;

@@ -10,6 +10,9 @@ import * as rules from "./rules.ts";
 import * as todos from "./todos.ts";
 import { deleteCredential } from "./credentials.ts";
 import { listDeviceStatuses } from "./devices.ts";
+import * as fountain from "./fountain.ts";
+import * as food from "./smartlife/food.ts";
+import { getLitterSettings, saveLitterSettings } from "./whisker/levels.ts";
 import { dailyHealth, recentNutrition } from "./health.ts";
 import { INTEGRATIONS } from "./integrations.ts";
 import { lastUpdateAt, listConnections, runUpdate } from "./updates.ts";
@@ -62,6 +65,9 @@ async function getStatus(db: Db) {
     connections: await listConnections(db),
     alerts: await rules.recentAlerts(db),
     devices: await listDeviceStatuses(db),
+    litterSettings: await getLitterSettings(db),
+    foodEstimates: await food.estimateAllFood(db),
+    fountain: await fountain.estimateFountain(db),
   };
 }
 
@@ -154,6 +160,22 @@ export const api = {
   updateNow,
   getStatus,
   getReadingTypes: async (_db: Db) => READING_TYPES,
+  getLitterSettings,
+  saveLitterSettings,
+  markFeederRefilled: (db: Db, feederId: string) => food.markRefilled(db, feederId),
+  markAllFeedersRefilled: (db: Db) => food.markAllRefilled(db),
+  getFeederSettings: food.getFeederSettings,
+  saveFeederSettings: food.saveFeederSettings,
+  listFeederRefills: food.listRefills,
+  deleteFeederRefill: food.deleteRefill,
+  getHopperCapacity: food.hopperCapacity,
+  refillFountain: (db: Db) => fountain.refillFountain(db),
+  getFountainSettings: fountain.getFountainSettings,
+  saveFountainSettings: fountain.saveFountainSettings,
+  listFountainRefills: fountain.listFountainRefills,
+  deleteFountainRefill: fountain.deleteFountainRefill,
+  dismissAlert: rules.dismissAlert,
+  dismissAllAlerts: rules.dismissAllAlerts,
   listRules: rules.listRules,
   getRule: rules.getRule,
   saveRule: rules.saveRule,
