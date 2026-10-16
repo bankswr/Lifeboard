@@ -81,8 +81,8 @@ function litterRobotCard(device: DeviceStatus, settings: LitterSettings) {
     device.id,
     robot.name,
     html`
-      ${levelBar("Drawer", robot.drawerLevel, drawerState(robot, settings))}
-      ${levelBar("Litter", robot.litterLevel, litterState(robot, settings))}
+      ${levelBar("Waste Drawer", robot.drawerLevel, drawerState(robot, settings))}
+      ${levelBar("Litter Hopper", robot.litterLevel, litterState(robot, settings))}
       ${robot.laserDirty ? html`<p class="small status error">Sensors need cleaning</p>` : ""}
       <p class="muted small">Checked ${formatTime(device.updatedAt)}</p>
     `,

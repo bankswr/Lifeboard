@@ -36,6 +36,8 @@ export interface TargetSettings {
   gainWarnPercent: number;
   /** BMR multiplier used while there's too little history to fit (the fallback). */
   fallbackActivityFactor: number;
+  /** With a maintenance goal, a day's calories count as on target within ± this % of the target. */
+  maintenanceTolerancePercent: number;
 }
 
 /** One day's inputs, already cleaned: null where there's no value or it was left out. */
@@ -296,4 +298,38 @@ export function datesBetween(start: string, end: string): string[] {
   const dates: string[] = [];
   for (let date = start; date <= end; date = addDays(date, 1)) dates.push(date);
   return dates;
+}
+
+// ---------- a day's intake against its targets ----------
+
+export interface Intake {
+  calories: number;
+  proteinG: number | null;
+  carbsG: number | null;
+  fatG: number | null;
+}
+
+/** Which of a day's totals met their targets. Carbs are only the remainder, so they aren't judged. */
+export interface IntakeCheck {
+  calories: boolean;
+  protein: boolean;
+  fat: boolean;
+}
+
+/**
+ * The user's rules (2026-10-16): protein and fat meet the target at or above it. Calories meet
+ * it at or below for a loss goal, at or above for a gain goal, and within ± the tolerance for
+ * maintenance.
+ */
+export function checkIntake(intake: Intake, targets: Targets, maintenanceTolerancePercent: number): IntakeCheck {
+  const goal = targets.goalLbsPerWeek;
+  let calories: boolean;
+  if (goal < 0) calories = intake.calories <= targets.calories;
+  else if (goal > 0) calories = intake.calories >= targets.calories;
+  else calories = Math.abs(intake.calories - targets.calories) <= (targets.calories * maintenanceTolerancePercent) / 100;
+  return {
+    calories,
+    protein: intake.proteinG !== null && intake.proteinG >= targets.proteinG,
+    fat: intake.fatG !== null && intake.fatG >= targets.fatG,
+  };
 }

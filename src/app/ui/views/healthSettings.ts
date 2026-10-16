@@ -31,6 +31,7 @@ route(/^\/health-settings$/, async () => {
             ${number("fatPerLbLean", "Fat, g per lb lean mass", "0.05")}
           </div>
           <p class="muted small">Carbs fill the calories left after protein and fat.</p>
+          ${number("maintenanceTolerancePercent", "Maintenance: calories on target within ± %", "0.5")}
         </fieldset>
         <fieldset>
           <legend>Goal rate warnings (% of body weight per week)</legend>
@@ -81,6 +82,7 @@ async function save(event: SubmitEvent) {
       lossWarnPercent: value("lossWarnPercent"),
       gainWarnPercent: value("gainWarnPercent"),
       fallbackActivityFactor: value("fallbackActivityFactor"),
+      maintenanceTolerancePercent: value("maintenanceTolerancePercent"),
       lowCaloriesPercent: value("lowCaloriesPercent"),
       lowCaloriesFloor: value("lowCaloriesFloor"),
       maxSteps: value("maxSteps"),

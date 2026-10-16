@@ -5,8 +5,8 @@
 // change later. Today's row is rewritten while today's inputs change (new data, a verdict).
 import { addDays, localDate } from "./dates.ts";
 import { get, type Db } from "./db/types.ts";
-import { computeTargets, AVERAGE_DAYS, type TargetSettings, type Targets } from "./energy.ts";
-import { healthDays } from "./health.ts";
+import { checkIntake, computeTargets, AVERAGE_DAYS, type EnergyDay, type Intake, type IntakeCheck, type TargetSettings, type Targets } from "./energy.ts";
+import { healthDays, type HealthDay } from "./health.ts";
 import { alertNewFlags, loadVerdicts, reviewDays, type Flag, type FlagSettings } from "./healthReview.ts";
 import type { NewAlert } from "./rules.ts";
 import { saveRecord } from "./sync/records.ts";
@@ -22,6 +22,7 @@ export const DEFAULT_HEALTH_SETTINGS: HealthSettings = {
   lossWarnPercent: 1,
   gainWarnPercent: 0.5,
   fallbackActivityFactor: 1.375,
+  maintenanceTolerancePercent: 5,
   lowCaloriesPercent: 50,
   lowCaloriesFloor: 1000,
   maxSteps: 40000,
@@ -45,6 +46,7 @@ export async function saveHealthSettings(db: Db, settings: HealthSettings): Prom
     ["lossWarnPercent", "The loss warning", 0, 5],
     ["gainWarnPercent", "The gain warning", 0, 5],
     ["fallbackActivityFactor", "The activity factor", 1, 2.5],
+    ["maintenanceTolerancePercent", "The maintenance tolerance", 0, 25],
     ["lowCaloriesPercent", "The low-calorie percentage", 0, 100],
     ["lowCaloriesFloor", "The low-calorie floor", 0, 5000],
     ["maxSteps", "The step limit", 1000, 200000],
@@ -69,7 +71,18 @@ export interface HealthAnalysis {
   flags: Flag[];
   /** Flags awaiting review (they're left out until then). */
   pendingCount: number;
+  /** Yesterday's totals against the targets that applied to it. */
+  yesterday: DayComparison;
   settings: HealthSettings;
+}
+
+export interface DayComparison {
+  date: string;
+  /** What was logged; null when nothing was. */
+  intake: Intake | null;
+  targets: Targets | null;
+  /** null unless both intake and targets are known. */
+  met: IntakeCheck | null;
 }
 
 /**
@@ -90,7 +103,24 @@ export async function analyzeHealth(db: Db, today = localDate()): Promise<Health
     targets.warnings.unshift(`${pendingCount} item${pendingCount === 1 ? "" : "s"} awaiting review ${pendingCount === 1 ? "is" : "are"} left out.`);
   }
   if (targets) await saveTargets(db, targets);
-  return { targets, flags: flags.reverse(), pendingCount, settings };
+  const yesterday = await compareYesterday(db, today, days, cleaned, settings);
+  return { targets, flags: flags.reverse(), pendingCount, yesterday, settings };
+}
+
+/**
+ * Yesterday's intake against the targets saved for it. Before targets were first saved there's
+ * no row, so they're worked out the way yesterday would have (from the days before it).
+ */
+async function compareYesterday(
+  db: Db, today: string, days: HealthDay[], cleaned: EnergyDay[], settings: HealthSettings,
+): Promise<DayComparison> {
+  const date = addDays(today, -1);
+  const saved = await get(db, "SELECT data FROM health_target WHERE id = ? AND deleted = 0", [`targets-${date}`]);
+  const targets: Targets | null = saved ? JSON.parse(saved.data) : computeTargets(date, cleaned, settings);
+  const day = days.find((d) => d.date === date);
+  const intake = day?.calories ? { calories: day.calories, proteinG: day.proteinG, carbsG: day.carbsG, fatG: day.fatG } : null;
+  const met = intake && targets ? checkIntake(intake, targets, settings.maintenanceTolerancePercent) : null;
+  return { date, intake, targets, met };
 }
 
 /** Saves a day's targets unless the stored copy is the same (so re-reading doesn't churn sync). */

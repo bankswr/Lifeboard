@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { addDays } from "../src/core/dates.ts";
 import { migrate } from "../src/core/db/schema.ts";
 import {
-  computeTargets, datesBetween, katchMcArdle, KCAL_PER_LB_FAT, KCAL_PER_LB_LEAN, slope, trailingAverages, type EnergyDay,
+  checkIntake, computeTargets, datesBetween, katchMcArdle, KCAL_PER_LB_FAT, KCAL_PER_LB_LEAN, slope, trailingAverages, type EnergyDay,
 } from "../src/core/energy.ts";
 import { replaceHealthPoints, saveNutritionDays, type HealthDay } from "../src/core/health.ts";
 import { alertNewFlags, reviewDays, setVerdict, type Verdict } from "../src/core/healthReview.ts";
@@ -146,6 +146,10 @@ describe("analyzeHealth (database)", () => {
     const history = await targetHistory(db);
     expect(history).toHaveLength(1);
     expect(history[0].targets.date).toBe(TODAY);
+    // Yesterday: 2,000 kcal eaten against a maintenance target worked out for that day.
+    expect(analysis.yesterday.intake!.calories).toBe(2000);
+    expect(analysis.yesterday.targets!.date).toBe(addDays(TODAY, -1));
+    expect(analysis.yesterday.met!.protein).toBe(false);
   });
 
   it("a flagged day is left out until accepted, alerts once, and a settings change reaches today's saved targets", async () => {
@@ -171,5 +175,24 @@ describe("analyzeHealth (database)", () => {
     const db = await seededDb();
     await expect(saveHealthSettings(db, { ...DEFAULT_HEALTH_SETTINGS, windowDays: 3 })).rejects.toThrow(/fit window/);
     await expect(setVerdict(db, "2026-10-10-no-log", "accepted")).rejects.toThrow(/skipped/);
+  });
+});
+
+describe("checkIntake", () => {
+  const targets = (goalLbsPerWeek: number) =>
+    ({ ...computeTargets(TODAY, steadyLoss(30), settings)!, calories: 2000, proteinG: 150, fatG: 60, goalLbsPerWeek });
+  const intake = (calories: number) => ({ calories, proteinG: 150, carbsG: 200, fatG: 59 });
+
+  it("protein and fat meet the target at or above it", () => {
+    expect(checkIntake(intake(2000), targets(-1), 5)).toMatchObject({ protein: true, fat: false });
+  });
+
+  it("calories: at or below to lose, at or above to gain, within the tolerance to maintain", () => {
+    expect(checkIntake(intake(1950), targets(-1), 5).calories).toBe(true);
+    expect(checkIntake(intake(2050), targets(-1), 5).calories).toBe(false);
+    expect(checkIntake(intake(2050), targets(1), 5).calories).toBe(true);
+    expect(checkIntake(intake(1950), targets(1), 5).calories).toBe(false);
+    expect(checkIntake(intake(2100), targets(0), 5).calories).toBe(true);
+    expect(checkIntake(intake(2101), targets(0), 5).calories).toBe(false);
   });
 });

@@ -5,6 +5,7 @@
 // Health page work later (docs/PLAN.md phase 7a).
 import { html } from "lit-html";
 import type { Targets } from "../../../core/energy.ts";
+import type { DayComparison } from "../../../core/healthTargets.ts";
 import type { HealthDay } from "../../../core/health.ts";
 import type { Flag } from "../../../core/healthReview.ts";
 import { call } from "../../backend.ts";
@@ -51,6 +52,35 @@ export function targetsBody(targets: Targets | null) {
       ${targets.method === "fallback" ? "· estimate from BMR (fallback)" : ""}
     </p>
     ${targets.warnings.map((warning) => html`<p class="small danger-text">${warning}</p>`)}
+  `;
+}
+
+/**
+ * Yesterday's totals under the targets that applied to it, met ones in green (Monitor's
+ * Health card). Carbs are the remainder, so they aren't judged.
+ */
+export function yesterdayBody({ intake, targets, met }: DayComparison) {
+  if (!intake) return html`<p class="muted small">Nothing logged yesterday.</p>`;
+  const mark = (ok: boolean | undefined) => (ok ? "good-text" : "");
+  const round = (value: number | null | undefined) => (value == null ? "–" : Math.round(value));
+  return html`
+    <p class="label">Yesterday</p>
+    <table class="data">
+      <thead><tr><th></th><th>kcal</th><th>Protein g</th><th>Carbs g</th><th>Fat g</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Eaten</td>
+          <td class=${mark(met?.calories)}>${round(intake.calories)}</td>
+          <td class=${mark(met?.protein)}>${round(intake.proteinG)}</td>
+          <td>${round(intake.carbsG)}</td>
+          <td class=${mark(met?.fat)}>${round(intake.fatG)}</td>
+        </tr>
+        ${targets ? html`<tr class="muted">
+          <td>Target</td><td>${round(targets.calories)}</td><td>${round(targets.proteinG)}</td>
+          <td>${round(targets.carbsG)}</td><td>${round(targets.fatG)}</td>
+        </tr>` : ""}
+      </tbody>
+    </table>
   `;
 }
 

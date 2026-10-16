@@ -1,7 +1,7 @@
 // Monitor (#/monitor, in the Hub menu; the start screen): what needs attention today, in the
-// user's order (2026-10-16): alerts (dismissable; red border when there are any), today's
-// tasks and events from the Schedule, a card per device with its levels, and a Health card
-// with today's targets (docs/PLAN.md phase 7a).
+// user's order (2026-10-16): alerts (dismissable; red border when there are any), a Health
+// card with today's targets and yesterday's totals against its targets (docs/PLAN.md phase 7a), today's tasks and events from the
+// Schedule, and a card per device with its levels.
 import { html } from "lit-html";
 import { localDate } from "../../../core/dates.ts";
 import type { ScheduleDay } from "../../../core/schedule/store.ts";
@@ -9,7 +9,7 @@ import { call } from "../../backend.ts";
 import { act, route } from "../app.ts";
 import { card } from "../card.ts";
 import { formatTime } from "../format.ts";
-import { targetsBody } from "./health.ts";
+import { targetsBody, yesterdayBody } from "./health.ts";
 import { deviceCards, NO_DEVICES_HINT } from "./pets.ts";
 import { eventRow, taskRow, timeRange } from "./schedule.ts";
 
@@ -59,18 +59,19 @@ route(/^\/monitor$/, async () => {
         },
       )}
 
+      ${card("monitor-health", "Health", html`
+        ${targetsBody(health.targets)}
+        ${yesterdayBody(health.yesterday)}
+        ${health.pendingCount && !health.targets
+          ? html`<p class="small danger-text">${health.pendingCount} flagged item${health.pendingCount === 1 ? "" : "s"} to review.</p>`
+          : ""}
+      `, { actions: html`<a class="small" href="#/health">Health ›</a>` })}
+
       ${card("monitor-today", "Today", todayItems(schedule), { actions: html`<a class="small" href="#/schedule">Schedule ›</a>` })}
 
       <h2 class="section-title">Devices</h2>
       ${status.devices.length === 0 ? html`<section class="card">${NO_DEVICES_HINT}</section>` : ""}
       <div class="device-grid">${deviceCards(status.devices, status)}</div>
-
-      ${card("monitor-health", "Health", html`
-        ${targetsBody(health.targets)}
-        ${health.pendingCount && !health.targets
-          ? html`<p class="small danger-text">${health.pendingCount} flagged item${health.pendingCount === 1 ? "" : "s"} to review.</p>`
-          : ""}
-      `, { actions: html`<a class="small" href="#/health">Health ›</a>` })}
     `,
   };
 });

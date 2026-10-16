@@ -167,9 +167,14 @@ current intent, not a commitment to details.
    - **History:** each day's targets are saved when computed (synced) and listed from a button.
    - **Where:** a Health card on Monitor and basic cards on the Health page. Settings → Health
      holds the settings.
+   - **Yesterday vs targets (user, 2026-10-16):** Monitor's Health card shows yesterday's
+     totals under the targets saved for that day. Met ones are green: protein and fat at or
+     above target; calories at or below for a loss goal, at or above for a gain goal, within
+     ± a tolerance for maintenance (setting, default 5%). Carbs aren't judged.
    - **Later, with the Health page work (not started):** charts and fuller explanations on the
-     Health page, and a side-by-side comparison of the 3,500 kcal/lb and fat/lean split
-     estimates.
+     Health page; a side-by-side comparison of the 3,500 kcal/lb and fat/lean split
+     estimates; and the same eaten-vs-target table for about the past week, with an option
+     to look further back through the history (user, 2026-10-16).
 8. **Finances** (stretch).
 
 ## Known risks
@@ -208,8 +213,8 @@ current intent, not a commitment to details.
 - **Feature plans:** reviewed with the user when each feature is ready to build.
 - **Navigation (user, 2026-10-16):** FitApp's bottom bar: pop-up menus plus a gear icon.
   Hub → Monitor (the start screen; in order: alerts, dismissable, red-bordered when any;
-  today's tasks and events; a card per device with level bars; a Health card, contents to be
-  decided) and Lists;
+  a Health card with today's targets (moved below alerts 2026-10-16); today's tasks and
+  events; a card per device with level bars) and Lists;
   Details → Pets, Health, Schedule (Google Calendar events and Google Tasks by day) and
   Maintenance (see below). ⚙ is Settings,
   including Connections with each connection's status.

@@ -272,7 +272,7 @@ textarea {
 button.small { padding: 6px 10px; font-size: 0.85rem; }
 /* Device cards sit side by side on a wide screen, stacked on the phone. */
 .device-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 12px; }
-.level { display: grid; grid-template-columns: 4.5em 1fr auto; align-items: center; gap: 8px; margin: 8px 0; color: var(--text); font-size: 0.9rem; }
+.level { display: grid; grid-template-columns: 7.5em 1fr auto; align-items: center; gap: 8px; margin: 8px 0; color: var(--text); font-size: 0.9rem; }
 .level-none { grid-column: 2 / 4; }
 .level-bar { height: 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; }
 .level-bar > span { display: block; height: 100%; background: var(--accent); }
@@ -310,6 +310,7 @@ button.small { padding: 6px 10px; font-size: 0.85rem; }
 .list-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
 .list-actions .copy-select { max-width: 12em; }
 .danger-text { color: var(--danger) !important; }
+.good-text { color: var(--accent) !important; }
 .item.selected .item-text { color: var(--accent); }
 
 /* ⚙ menu on a list card */
