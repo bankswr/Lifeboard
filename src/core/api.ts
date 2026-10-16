@@ -11,6 +11,7 @@ import * as todos from "./todos.ts";
 import { deleteCredential } from "./credentials.ts";
 import { listDeviceStatuses } from "./devices.ts";
 import * as fountain from "./fountain.ts";
+import * as maintenance from "./maintenance.ts";
 import * as food from "./smartlife/food.ts";
 import { getLitterSettings, saveLitterSettings } from "./whisker/levels.ts";
 import { dailyHealth, recentNutrition } from "./health.ts";
@@ -169,6 +170,10 @@ export const api = {
   listFeederRefills: food.listRefills,
   deleteFeederRefill: food.deleteRefill,
   getHopperCapacity: food.hopperCapacity,
+  listMaintenance: (db: Db) => maintenance.listMaintenance(db),
+  getMaintenance: maintenance.getMaintenance,
+  saveMaintenance: thenSend((db: Db, input: maintenance.MaintenanceInput) => maintenance.saveMaintenance(db, input)),
+  deleteMaintenance: maintenance.deleteMaintenance,
   refillFountain: (db: Db) => fountain.refillFountain(db),
   getFountainSettings: fountain.getFountainSettings,
   saveFountainSettings: fountain.saveFountainSettings,

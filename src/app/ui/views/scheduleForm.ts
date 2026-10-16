@@ -8,10 +8,11 @@
 import { html } from "lit-html";
 import { localDate } from "../../../core/dates.ts";
 import type { Scope } from "../../../core/schedule/edit.ts";
-import { describeRepeat, mondayFirstWeekday, type Frequency, type Repeat } from "../../../core/schedule/repeat.ts";
+import type { Repeat } from "../../../core/schedule/repeat.ts";
 import type { ScheduleOptions } from "../../../core/schedule/store.ts";
 import { call } from "../../backend.ts";
 import { route } from "../app.ts";
+import { applyVisibility, readRepeat, repeatFieldset, repeatVisibility } from "../repeatFields.ts";
 import { returnToSchedule } from "./schedule.ts";
 
 type Kind = "event" | "task";
@@ -134,33 +135,7 @@ function formView(initial: Initial, options: ScheduleOptions) {
             </select></label>`
           : ""}
 
-        <fieldset class="repeat" data-show="repeat">
-          <legend>Repeat</legend>
-          <select name="freq" aria-label="Repeat">
-            <option value="" ?selected=${!repeat}>Never</option>
-            ${repeat?.custom ? html`<option value="custom" selected>${describeRepeat(repeat)}</option>` : ""}
-            ${(["daily", "weekly", "monthly", "yearly"] as Frequency[]).map(
-              (freq) => html`<option value=${freq} ?selected=${!repeat?.custom && repeat?.freq === freq}>${FREQ_LABELS[freq]}</option>`,
-            )}
-          </select>
-          <label data-show="interval">Every <input type="number" name="interval" min="1" .value=${String(repeat?.interval ?? 1)}>
-            <span class="interval-unit"></span></label>
-          <div class="weekdays" data-show="weekly">
-            ${WEEKDAY_LABELS.map(
-              (label, day) => html`<label><input type="checkbox" name="weekday" value=${day}
-                ?checked=${repeat?.freq === "weekly" && repeat.weekdays.includes(day)}> ${label}</label>`,
-            )}
-          </div>
-          <label data-show="interval">Ends <select name="endKind">
-            <option value="never" ?selected=${!repeat || repeat.end.kind === "never"}>Never</option>
-            <option value="until" ?selected=${repeat?.end.kind === "until"}>On a date</option>
-            <option value="count" ?selected=${repeat?.end.kind === "count"}>After a number of times</option>
-          </select></label>
-          <label data-show="until">Last date <input type="date" name="untilDate"
-            .value=${repeat?.end.kind === "until" ? repeat.end.date : ""}></label>
-          <label data-show="count">Times <input type="number" name="count" min="1"
-            .value=${String(repeat?.end.kind === "count" ? repeat.end.count : 10)}></label>
-        </fieldset>
+        ${repeatFieldset(repeat)}
 
         <p class="form-error status error" hidden></p>
         <div class="form-actions">
@@ -178,52 +153,21 @@ function formView(initial: Initial, options: ScheduleOptions) {
   };
 }
 
-const FREQ_LABELS: Record<Frequency, string> = { daily: "Daily", weekly: "Weekly", monthly: "Monthly", yearly: "Yearly" };
-const UNIT_LABELS: Record<Frequency, string> = { daily: "day(s)", weekly: "week(s)", monthly: "month(s)", yearly: "year(s)" };
-const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 /** Shows each [data-show] part only when it applies to the current choices. */
 function updateVisibility(form: HTMLFormElement) {
   const fields = new FormData(form);
   const kind = fields.get("kind") as Kind;
-  const freq = String(fields.get("freq") ?? "");
-  const endKind = String(fields.get("endKind"));
-  const scope = fields.get("scope");
-  const shown: Record<string, boolean> = {
+  applyVisibility(form, {
     event: kind === "event",
     task: kind === "task",
     timed: kind === "event" && !fields.has("allDay"),
     // One occurrence can't change the series' repeat.
-    repeat: scope !== "this",
-    interval: freq !== "" && freq !== "custom",
-    weekly: freq === "weekly",
-    until: freq !== "" && freq !== "custom" && endKind === "until",
-    count: freq !== "" && freq !== "custom" && endKind === "count",
-  };
-  for (const element of form.querySelectorAll<HTMLElement>("[data-show]")) element.hidden = !shown[element.dataset.show!];
-  const unit = form.querySelector(".interval-unit");
-  if (unit && freq in UNIT_LABELS) unit.textContent = UNIT_LABELS[freq as Frequency];
+    repeat: fields.get("scope") !== "this",
+    ...repeatVisibility(fields),
+  });
 }
 
-/** The repeat the form describes, or null for none. */
-function repeatFromForm(fields: FormData, date: string): Repeat | null {
-  const freq = String(fields.get("freq") ?? "");
-  if (!freq) return null;
-  if (freq === "custom") return originalRepeat;
-  const endKind = String(fields.get("endKind"));
-  let weekdays = fields.getAll("weekday").map(Number);
-  // Weekly with no day ticked: the event's own weekday.
-  if (freq === "weekly" && weekdays.length === 0 && date) weekdays = [mondayFirstWeekday(date)];
-  return {
-    freq: freq as Frequency,
-    interval: Math.max(1, Number(fields.get("interval")) || 1),
-    weekdays: freq === "weekly" ? weekdays : [],
-    end:
-      endKind === "until" ? { kind: "until", date: String(fields.get("untilDate")) }
-      : endKind === "count" ? { kind: "count", count: Math.max(1, Number(fields.get("count")) || 1) }
-      : { kind: "never" },
-  };
-}
 
 async function save(event: SubmitEvent, initial: Initial) {
   event.preventDefault();
@@ -231,7 +175,7 @@ async function save(event: SubmitEvent, initial: Initial) {
   const fields = new FormData(form);
   const text = (name: string) => String(fields.get(name) ?? "");
   const date = text("date");
-  const repeat = repeatFromForm(fields, date);
+  const repeat = readRepeat(fields, date, originalRepeat);
   try {
     if (fields.get("kind") === "event") {
       await call("saveEvent", {

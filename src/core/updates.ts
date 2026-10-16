@@ -8,6 +8,7 @@ import { SignedOutError, type Integration } from "./integration.ts";
 import { INTEGRATIONS } from "./integrations.ts";
 import type { ConnectionStatus, Reading } from "./readings.ts";
 import { checkFountainAlarm } from "./fountain.ts";
+import { generateMaintenanceTasks } from "./maintenance.ts";
 import { evaluateRules, type NewAlert } from "./rules.ts";
 
 export interface ConnectionInfo {
@@ -28,6 +29,8 @@ export interface UpdateResult {
 export const PHONE_UPDATE_AFTER_HOURS = 12;
 
 export async function runUpdate(db: Db, integrations: Integration[] = INTEGRATIONS): Promise<UpdateResult> {
+  // Before the integrations, so the Google one sends the new maintenance tasks in this run.
+  await generateMaintenanceTasks(db);
   const readings: Reading[] = [];
   for (const integration of integrations) {
     if (!(await integration.isSetUp(db))) continue;

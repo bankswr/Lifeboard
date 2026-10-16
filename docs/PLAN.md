@@ -173,12 +173,17 @@ current intent, not a commitment to details.
   Hub → Monitor (the start screen; in order: alerts, dismissable, red-bordered when any;
   today's tasks and events; a card per device with level bars; a Health card, contents to be
   decided) and Lists;
-  Details → Pets, Health and Schedule (Google Calendar events and Google Tasks by day). ⚙ is Settings,
+  Details → Pets, Health, Schedule (Google Calendar events and Google Tasks by day) and
+  Maintenance (see below). ⚙ is Settings,
   including Connections with each connection's status.
 - **Schedule (user, 2026-10-16):** per day tasks, then all-day, then timed events; overdue
   tasks on today, highlighted; done tasks crossed out; tasks may have a Lifeboard-only time;
   main calendar only, others added in Settings → Calendars; all task lists; repeating-event
   edits for this / this and following / all. Reminders later.
+- **Maintenance (user, 2026-10-16):** Details → Maintenance holds recurring chores entered
+  like a calendar entry, repeating by default (monthly). On each day one comes due, Lifeboard
+  adds a Google task for it that day (fixed id per item and date; after missed days only the
+  latest gets a task). Items are synced; the tasks go to the first Google task list.
 - **Google OAuth:** publish the app ("In production"). If a hidden cost turns up,
   fall back to signing in again regularly.
 

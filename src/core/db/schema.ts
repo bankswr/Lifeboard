@@ -211,6 +211,19 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
     days REAL
   );
   `,
+  // 14: maintenance items (core/maintenance.ts): repeating chores that each make a task on
+  // the day they come due.
+  `
+  CREATE TABLE maintenance_item (
+    ${syncColumns},
+    name TEXT NOT NULL,
+    notes TEXT NOT NULL,
+    start_date TEXT NOT NULL,
+    time TEXT,
+    repeat TEXT,
+    last_generated TEXT
+  );
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
