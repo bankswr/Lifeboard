@@ -11,12 +11,19 @@ export interface Integration {
   id: string;
   /** Shown to the user, e.g. "Cronometer". */
   name: string;
-  /** How the user signs in: an email/password form, or Google's sign-in page (desktop only for now). */
-  signInMethod: "password" | "google";
+  /**
+   * How the user signs in: an email/password form, Google's sign-in page (desktop only for
+   * now), or a QR code scanned with the service's phone app (Smart Life).
+   */
+  signInMethod: "password" | "google" | "qr";
   /** False until the user has signed in on this device; not-set-up integrations are skipped. */
   isSetUp(db: Db): Promise<boolean>;
   /** For password sign-in: checks the email and password with the service and saves the sign-in. */
   signIn?(db: Db, email: string, password: string): Promise<void>;
+  /** For QR sign-in: starts one with the user's account code; returns the text to show as a QR code. */
+  startQrSignIn?(db: Db, userCode: string): Promise<string>;
+  /** For QR sign-in: true (and the sign-in saved) once the code was scanned; false while waiting. */
+  finishQrSignIn?(db: Db): Promise<boolean>;
   /** Fetches fresh data, stores it, and returns readings for the alert rules. */
   update(db: Db): Promise<Reading[]>;
 }

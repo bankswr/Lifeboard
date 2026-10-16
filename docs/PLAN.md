@@ -98,7 +98,7 @@ reasons:
 | Project skeleton, Vite/TS/Capacitor setup, SQLite adapters, local notifications, APK signing | `../FitApp/mobile` |
 | Google Health client, Cronometer login and parsing, daily aggregation, dashboard charts | `../FitThing`, ported to TS; read its `agent-notes/` first |
 | Litter-Robot (Whisker) API | `pylitterbot` (unofficial Python library used by Home Assistant) as the reference; check npm for an existing TS client first |
-| Petory feeders | No public API or known library. Phase 1 spike, in order: (a) check whether the feeders are Tuya white-label hardware, which would allow the Tuya cloud API; (b) otherwise inspect the Petory app's API traffic |
+| Petory feeders | Tuya white-label hardware, now paired to the Smart Life app. Tuya's `tuya-device-sharing-sdk` (MIT, Home Assistant's QR sign-in), ported to TS |
 | Calendar / tasks | Google Calendar API and Google Tasks API (same OAuth as Google Health) |
 
 ## Phases
@@ -118,7 +118,8 @@ current intent, not a commitment to details.
    events/conditions/actions model, and default "connection lost" alerts.
 4. **Pets module.** Status dashboard, events, and default rules.
    (Litter-Robot 4 built 2026-10-15, awaiting model confirmation and first live run;
-   Petory feeders not started.)
+   Petory feeders built 2026-10-16 via Smart Life (the user moved them from the Petory app);
+   live-verified 2026-10-16.)
 5. **Tasks & reminders**, with Google Tasks sync, plus the generic to-do lists
    (to-do lists ✅ built 2026-10-15, awaiting user review).
 6. **Calendar**, with Google Calendar sync.

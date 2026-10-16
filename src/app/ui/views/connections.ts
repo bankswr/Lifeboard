@@ -1,10 +1,17 @@
 // Connections (#/connections): sign in to outside services on this device, or sign out.
 // Sign-ins are kept on this device only; the other device signs in separately.
 import { html } from "lit-html";
+import QRCode from "qrcode";
 import { call, platform } from "../../backend.ts";
 import { act, refresh, route } from "../app.ts";
 
 let message = "";
+/** The QR code of a sign-in in progress, as an image URL, and whose it is. */
+let qrSignIn: { integrationId: string; image: string } | null = null;
+
+/** How often to ask whether the QR code was scanned, and for how long (Smart Life's codes expire). */
+const QR_POLL_MS = 2000;
+const QR_WAIT_MS = 3 * 60 * 1000;
 
 route(/^\/connections$/, async () => {
   const integrations = await call("listIntegrations");
@@ -29,7 +36,9 @@ route(/^\/connections$/, async () => {
             `
           : integration.signInMethod === "google"
             ? googleSignIn(integration.name)
-            : html`
+            : integration.signInMethod === "qr"
+              ? qrSignInCard(integration.id, integration.name)
+              : html`
               <section class="card">
                 <h2>${integration.name}</h2>
                 <form @submit=${(event: SubmitEvent) => signIn(event, integration.id)}>
@@ -53,6 +62,69 @@ function googleSignIn(name: string) {
         : html`<p class="muted">Sign in on the desktop. Its data reaches this phone when they sync.</p>`}
     </section>
   `;
+}
+
+function qrSignInCard(integrationId: string, name: string) {
+  if (qrSignIn?.integrationId === integrationId) {
+    return html`
+      <section class="card">
+        <h2>${name}</h2>
+        <p>In the Smart Life app, tap <strong>+</strong> → <strong>Scan</strong>, scan this code, and confirm.</p>
+        <img class="qr-code" src=${qrSignIn.image} alt="Smart Life sign-in QR code">
+        <p class="muted small">Waiting for the scan…</p>
+      </section>
+    `;
+  }
+  return html`
+    <section class="card">
+      <h2>${name}</h2>
+      <p class="muted small">
+        Your user code is in the Smart Life app under Me → Settings → Account and Security → User Code.
+        ${platform === "android" ? "On the phone, the QR code has to be scanned from another screen." : ""}
+      </p>
+      <form @submit=${(event: SubmitEvent) => startQrSignIn(event, integrationId)}>
+        <label>User code <input name="userCode" autocomplete="off" required></label>
+        <button type="submit">Show QR code</button>
+      </form>
+    </section>
+  `;
+}
+
+async function startQrSignIn(event: SubmitEvent, integrationId: string) {
+  event.preventDefault();
+  const userCode = String(new FormData(event.target as HTMLFormElement).get("userCode"));
+  try {
+    const text = await call("startQrSignIn", integrationId, userCode);
+    const svg = await QRCode.toString(text, { type: "svg", margin: 4 });
+    qrSignIn = { integrationId, image: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}` };
+  } catch (error) {
+    message = (error as Error).message;
+  }
+  await refresh();
+  if (qrSignIn) await waitForScan(integrationId);
+}
+
+async function waitForScan(integrationId: string) {
+  const deadline = Date.now() + QR_WAIT_MS;
+  try {
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, QR_POLL_MS));
+      if (await call("finishQrSignIn", integrationId)) {
+        qrSignIn = null;
+        message = "Signed in. Fetching data…";
+        await refresh();
+        await call("updateNow");
+        message = "Signed in and up to date.";
+        return;
+      }
+    }
+    message = "The QR code wasn't scanned in time. Try again.";
+  } catch (error) {
+    message = (error as Error).message;
+  } finally {
+    qrSignIn = null;
+    await refresh();
+  }
 }
 
 async function signIn(event: SubmitEvent, integrationId: string) {

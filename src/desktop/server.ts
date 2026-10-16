@@ -53,8 +53,10 @@ server.post<{ Params: { name: string }; Body: { args?: unknown[] } }>("/api/:nam
   if (!Object.hasOwn(api, name)) return reply.code(404).send({ error: `Unknown API call: ${name}` });
   const fn = api[name as ApiName] as (...args: unknown[]) => Promise<unknown>;
   try {
-    // null for functions that return nothing: an empty reply isn't valid JSON for the UI.
-    return (await fn(db, ...(request.body?.args ?? []))) ?? null;
+    // Always JSON: Fastify would send a plain string as text, which the UI can't parse, and
+    // null stands in for functions that return nothing.
+    const result = (await fn(db, ...(request.body?.args ?? []))) ?? null;
+    return reply.type("application/json").send(JSON.stringify(result));
   } catch (error) {
     // Core errors are messages meant for the user ("List name can't be empty.").
     request.log.warn(error);

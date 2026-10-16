@@ -125,6 +125,8 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
     `);
     await insertDefaultRules(db);
   },
+  // 8: the feeder default alert rules (Smart Life).
+  insertDefaultRules,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

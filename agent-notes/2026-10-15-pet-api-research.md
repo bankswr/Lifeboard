@@ -34,7 +34,7 @@ only in the session scratchpad, not in the repo). Its code is Tuya's OEM app SDK
 Tuya's 2023 rename of "TuyaSmart"). So the feeders are ordinary Tuya cloud devices, and the
 plan's option (a) applies; decompiling Petory's private API is not needed. Choice of Tuya
 route (Smart Life re-pair vs developer cloud project vs others) is with the user; see
-whichever note records it.
+whichever note records it. **Resolved 2026-10-16:** Smart Life QR sign-in; see [[2026-10-16-smartlife-feeders]].
 
 **LAN finding:** three Tuya devices broadcast on the home LAN (UDP 6667, decrypted with the
 public broadcast key): same productKey `kf5grvjfxbmaijbo`, protocol **3.3**, so almost

@@ -17,11 +17,14 @@
     "@capacitor/core": "^8.5.2",
     "@capacitor/local-notifications": "^8.3.1",
     "@fastify/static": "^10.1.6",
+    "@noble/ciphers": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
     "amazon-cognito-identity-js": "^6.3.22",
     "fastify": "^5.12.7",
     "fetch-cookie": "^3.2.0",
     "lit-html": "^3.3.3",
     "papaparse": "^5.7.0",
+    "qrcode": "^1.5.4",
     "tough-cookie": "^6.0.2"
   },
   "devDependencies": {
@@ -29,6 +32,7 @@
     "@capacitor/cli": "^8.5.2",
     "@types/node": "^26.6.3",
     "@types/papaparse": "^5.5.2",
+    "@types/qrcode": "^1.5.6",
     "typescript": "^7.0.2",
     "vite": "^8.3.1",
     "vitest": "^5.0.3"

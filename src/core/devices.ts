@@ -1,4 +1,4 @@
-// The latest status of each device an integration reads (Litter-Robots now; feeders later),
+// The latest status of each device an integration reads (Litter-Robots, feeders),
 // for the Home screen. Per device and not synced: each device shows what it last fetched.
 import { utcNow, type Db } from "./db/types.ts";
 

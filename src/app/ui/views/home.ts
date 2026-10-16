@@ -2,6 +2,7 @@
 // Module dashboards (pets, health, ...) will be added here as they're built.
 import { html } from "lit-html";
 import type { DeviceStatus } from "../../../core/devices.ts";
+import { nextMeal, type FeederStatus } from "../../../core/smartlife/feeder.ts";
 import type { ConnectionInfo } from "../../../core/updates.ts";
 import type { LitterRobotStatus } from "../../../core/whisker/status.ts";
 import { call } from "../../backend.ts";
@@ -27,7 +28,7 @@ route(/^\/$/, async () => {
       <section class="card">
         <h2>Pets</h2>
         ${status.devices.length === 0
-          ? html`<p class="muted">No devices yet. Sign in to Whisker under Settings → Connections.</p>`
+          ? html`<p class="muted">No devices yet. Sign in to Whisker or Smart Life under Settings → Connections.</p>`
           : status.devices.map(deviceCard)}
       </section>
 
@@ -59,6 +60,7 @@ route(/^\/$/, async () => {
 });
 
 function deviceCard(device: DeviceStatus) {
+  if (device.kind === "feeder") return feederCard(device);
   if (device.kind !== "litter_robot") return "";
   const robot = device.data as LitterRobotStatus;
   const warn = (bad: boolean) => (bad ? "status error" : "");
@@ -71,6 +73,25 @@ function deviceCard(device: DeviceStatus) {
       <span class=${warn(robot.drawerFull || robot.drawerLevel >= 80)}>Drawer ${robot.drawerLevel}%</span> ·
       <span class=${warn(robot.litterLevel < 20)}>Litter ${robot.litterLevel}%</span>
       ${robot.laserDirty ? html` · <span class="status error">Sensors need cleaning</span>` : ""}
+    </p>
+    <p class="muted small">Checked ${formatTime(device.updatedAt)}</p>
+  `;
+}
+
+function feederCard(device: DeviceStatus) {
+  const feeder = device.data as FeederStatus;
+  const next = nextMeal(feeder.meals);
+  const portions = (n: number) => `${n} portion${n === 1 ? "" : "s"}`;
+  return html`
+    <div class="status-row">
+      <span>${feeder.name} feeder</span>
+      <span class="status ${feeder.online ? "connected" : "error"}">${feeder.online ? "Online" : "Offline"}</span>
+    </div>
+    <p class="small">
+      <span class=${feeder.lastFeedPortions === 0 ? "status error" : ""}>Last feed: ${portions(feeder.lastFeedPortions)}</span> ·
+      ${next
+        ? `Next: ${next.at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}, ${portions(next.portions)}`
+        : "No meals scheduled"}
     </p>
     <p class="muted small">Checked ${formatTime(device.updatedAt)}</p>
   `;

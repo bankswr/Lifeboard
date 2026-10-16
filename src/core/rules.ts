@@ -74,6 +74,24 @@ const DEFAULT_RULES: Rule[] = [
     conditions: [{ field: "litterLevel", operator: "less", value: 20 }],
     message: "{subject}: litter is down to {litterLevel}%.",
   },
+  {
+    id: "default-feeder-offline",
+    name: "Feeder offline",
+    enabled: true,
+    readingType: "feeder",
+    conditions: [{ field: "online", operator: "equals", value: false }],
+    message: "{subject} feeder is offline.",
+  },
+  {
+    // Unconfirmed that the F01W reports 0 when it fails to dispense (user to test by
+    // letting one run empty); see agent-notes/2026-10-16-smartlife-feeders.md.
+    id: "default-feeder-dispensed-nothing",
+    name: "Feeder dispensed nothing",
+    enabled: true,
+    readingType: "feeder",
+    conditions: [{ field: "lastFeedPortions", operator: "equals", value: 0 }],
+    message: "{subject} feeder: the last meal dispensed nothing. It may be empty or jammed.",
+  },
 ];
 
 /** Adds the default rules this database doesn't have yet (never overwrites the user's edits). */

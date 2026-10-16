@@ -27,6 +27,7 @@ export interface ReadingType {
   fields: ReadingField[];
 }
 
+import { FEED_STATES } from "./smartlife/feeder.ts";
 import { LITTER_ROBOT_STATUSES } from "./whisker/status.ts";
 
 export const CONNECTION_STATUSES = ["connected", "signed_out", "error"] as const;
@@ -52,6 +53,15 @@ export const READING_TYPES: ReadingType[] = [
       { name: "litterLevel", label: "Litter level (%)", type: "number" },
       { name: "catWeight", label: "Cat weight (lb)", type: "number" },
       { name: "laserDirty", label: "Sensors need cleaning", type: "boolean" },
+    ],
+  },
+  {
+    id: "feeder",
+    label: "Feeder checked",
+    fields: [
+      { name: "online", label: "Online", type: "boolean" },
+      { name: "feedState", label: "Feeding state", type: "text", options: FEED_STATES },
+      { name: "lastFeedPortions", label: "Portions in last feed", type: "number" },
     ],
   },
 ];

@@ -75,6 +75,22 @@ async function signInWithPassword(db: Db, integrationId: string, email: string, 
   await integration.signIn(db, email, password);
 }
 
+/** QR sign-in from the Connections screen: returns the text to show as a QR code. */
+async function startQrSignIn(db: Db, integrationId: string, userCode: string) {
+  return qrIntegration(integrationId).startQrSignIn!(db, userCode);
+}
+
+/** True once the QR code has been scanned and the sign-in saved; the screen asks every few seconds. */
+async function finishQrSignIn(db: Db, integrationId: string) {
+  return qrIntegration(integrationId).finishQrSignIn!(db);
+}
+
+function qrIntegration(integrationId: string) {
+  const integration = INTEGRATIONS.find((i) => i.id === integrationId);
+  if (!integration?.startQrSignIn || !integration.finishQrSignIn) throw new Error(`${integrationId} doesn't use a QR sign-in.`);
+  return integration;
+}
+
 /** Forgets this device's sign-in to an integration. Data already fetched is kept. */
 async function signOut(db: Db, integrationId: string) {
   await deleteCredential(db, integrationId);
@@ -104,6 +120,8 @@ export const api = {
   deleteRule: rules.deleteRule,
   listIntegrations,
   signInWithPassword,
+  startQrSignIn,
+  finishQrSignIn,
   signOut,
   recentNutrition,
   dailyHealth,
