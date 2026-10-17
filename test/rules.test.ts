@@ -138,11 +138,12 @@ describe("custom rules", () => {
 });
 
 describe("isUpdateDue", () => {
-  const now = new Date("2026-10-15T12:00:00Z");
-  it("is due when never updated or more than 12 hours ago", () => {
+  // Local times, so the test doesn't depend on the machine's time zone.
+  const now = new Date(2026, 9, 15, 12, 0);
+  it("is due when never updated or not yet updated today", () => {
     expect(isUpdateDue(null, now)).toBe(true);
-    expect(isUpdateDue("2026-10-14T23:59:00Z", now)).toBe(true);
-    expect(isUpdateDue("2026-10-15T01:00:00Z", now)).toBe(false);
+    expect(isUpdateDue(new Date(2026, 9, 14, 23, 59).toISOString(), now)).toBe(true);
+    expect(isUpdateDue(new Date(2026, 9, 15, 0, 5).toISOString(), now)).toBe(false);
   });
 });
 

@@ -3,6 +3,7 @@
 // and today is never fetched (the day isn't logged yet), so a second pull would add nothing.
 import { getCredential, saveCredential } from "../credentials.ts";
 import { addDays, localDate } from "../dates.ts";
+import type { Db } from "../db/types.ts";
 import { saveNutritionDays, latestNutritionDate } from "../health.ts";
 import { SignedOutError, type Integration } from "../integration.ts";
 import { CronometerClient, CronometerSessionExpiredError, CronometerSignInError } from "./client.ts";
@@ -84,6 +85,12 @@ export const cronometer: Integration = {
     return [];
   },
 };
+
+/** Lets the next update pull again today (the Re-pull button, user 2026-10-17). */
+export async function allowCronometerRepull(db: Db) {
+  const credential = await getCredential<CronometerCredential>(db, "cronometer");
+  if (credential) await saveCredential(db, "cronometer", { ...credential, lastPulledOn: undefined });
+}
 
 /** Signs in with the saved email and password; if Cronometer refuses them, the user must sign in again. */
 async function signInWithSaved(client: CronometerClient, credential: CronometerCredential) {

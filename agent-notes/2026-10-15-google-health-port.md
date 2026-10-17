@@ -9,6 +9,9 @@ Google API** (needs the user's interactive sign-in); tested against a fake API.
   also run on the phone. Scopes: `googlehealth.activity_and_fitness.readonly` +
   `googlehealth.health_metrics_and_measurements.readonly` (subset of FitThing's).
   `invalid_grant` on refresh → `SignedOutError` → "signed out" alert.
+- Once a day (user, 2026-10-17): the health pull runs only if `healthPulledOn` (in the
+  credential) isn't today or the history is missing (`needsHealthPull`). The Schedule sync
+  still runs every update, so a revoked refresh token is still noticed hourly.
 - `core/google/healthApi.ts`: paginated `dataPoints` list with FitThing's AIP-160 filters
   (UTC-midnight bounds) for `steps`, `weight`, `body-fat`.
 - `core/google/integration.ts`: first pull 30 days (90 since 2026-10-16, see

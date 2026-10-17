@@ -93,8 +93,8 @@ await server.register(fastifyStatic, { root: resolve("dist") });
 await server.listen({ host: DESKTOP_HOST, port: DESKTOP_PORT });
 console.log(`Lifeboard is running at http://127.0.0.1:${DESKTOP_PORT}`);
 
-// Updates: once at start, then every 4 hours while the server runs (docs/PLAN.md).
-const UPDATE_EVERY_HOURS = 4;
+// Updates: once at start, then every hour while the server runs (docs/PLAN.md).
+const UPDATE_EVERY_HOURS = 1;
 setAlertDelivery(showDesktopNotifications);
 async function scheduledUpdate() {
   try {

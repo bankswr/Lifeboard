@@ -1,7 +1,8 @@
 // Updating: asks every set-up integration (Litter-Robot, Google, ...) for fresh readings,
 // records how each connection went, and runs the alert rules over the results.
-// When updates run is up to each device: the desktop at start and every 4 hours, the phone
-// on command or when opened more than 12 hours after the last update (docs/PLAN.md).
+// When updates run is up to each device: the desktop at start and every hour, the phone
+// on command or when first opened each day (docs/PLAN.md).
+import { localDate } from "./dates.ts";
 import { getMeta, setMeta } from "./db/meta.ts";
 import { utcNow, type Db } from "./db/types.ts";
 import { SignedOutError, type Integration } from "./integration.ts";
@@ -25,9 +26,6 @@ export interface UpdateResult {
   alerts: NewAlert[];
   connections: ConnectionInfo[];
 }
-
-/** Hours after which the phone updates on its own when opened. */
-export const PHONE_UPDATE_AFTER_HOURS = 12;
 
 export async function runUpdate(db: Db, integrations: Integration[] = INTEGRATIONS): Promise<UpdateResult> {
   // Before the integrations, so the Google one sends the new maintenance tasks in this run.
@@ -85,8 +83,8 @@ export async function lastUpdateAt(db: Db): Promise<string | null> {
   return (await getMeta(db, "last_update_at")) ?? null;
 }
 
-/** True when the phone should update on opening: never updated, or not for 12 hours. */
+/** True when the phone should update on opening: never updated, or not yet today (local time). */
 export function isUpdateDue(lastUpdate: string | null, now = new Date()): boolean {
   if (!lastUpdate) return true;
-  return now.getTime() - new Date(lastUpdate).getTime() > PHONE_UPDATE_AFTER_HOURS * 60 * 60 * 1000;
+  return localDate(new Date(lastUpdate)) !== localDate(now);
 }

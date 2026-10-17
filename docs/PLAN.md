@@ -80,9 +80,14 @@ reasons:
 ### Updating and notifications
 
 - **Phone:** there is no background polling. Data updates on command, or when the
-  app is opened and more than 12 hours have passed since the last update.
-- **Desktop:** the server polls when it starts, then every 4 hours while it keeps
+  app is first opened each day.
+- **Desktop:** the server polls when it starts, then every hour while it keeps
   running, and notifies on the desktop. It doesn't need to monitor continuously.
+- **Health pulls (user, 2026-10-17):** Cronometer and Google Health are pulled at most
+  once per calendar day on each device, at its first update that day. The analysis uses
+  only days before today, so later pulls the same day would change nothing it shows. The
+  rest of Google (Calendar, Tasks) syncs on every update. After fixing an entry, the user
+  can pull again with **Re-pull health data** under Settings → Health.
 - **Shared rules:** the rules engine lives in `core/`, and rules sync like other
   data. Each alert has a dedupe key, so an alert is not repeated across polls or
   across devices after a sync.
@@ -196,7 +201,21 @@ current intent, not a commitment to details.
      - **Library:** uPlot (small, fast time series), for now.
      - Fuller explanations.
      - Not planned: a separate fat mass / lean mass graph (body fat % with weight covers it).
-8. **Finances** (stretch).
+8. **Android home-screen widgets** (user, 2026-10-17; not started; details to be reviewed
+   with the user before building). Widgets for:
+   - **Health:** today's targets.
+   - **Calendar:** upcoming events (and presumably tasks, as on the Schedule page; to confirm).
+   - **Alerts:** current, undismissed alerts.
+   - **Pets:** estimated time until each device needs attention (e.g. feeder food days
+     left, fountain refill, Litter-Robot drawer full). The feeders and the fountain already
+     have estimates; the Litter-Robot has only its current levels, so a time estimate for
+     it is new work.
+   - **Lists:** a chosen to-do list.
+
+   Widgets are display only, like the rest of Lifeboard's device handling (see "No device
+   control"). Questions for the review: one widget per function or a configurable one;
+   whether lists can be ticked from the widget; sizes.
+9. **Finances** (stretch).
 
 ## Known risks
 
@@ -208,13 +227,16 @@ current intent, not a commitment to details.
   the phone as well.
 - **Phone alerts** arrive only when the phone app updates, because the phone does no
   background polling.
+- **Android widgets** need native Android code (Capacitor has no widget support), and the
+  app has to hand its data to them. Without background polling they show the data from the
+  last update, so each widget should show how old its data is.
 - **Two-way Google sync** (Calendar, Tasks) on top of LAN sync means three-way
   conflicts. Google stays the source of truth for those records.
 
 ## Settled decisions (2026-10-15)
 
-- **Phone updates:** on command, or when the app opens if more than 12 hours have
-  passed since the last update.
+- **Phone updates:** on command, or when the app is first opened each day (changed from
+  12 hours, user, 2026-10-17).
 - **Health v1:** calories, macros, weight, body fat, steps (heart rate added 2026-10-16).
   Analysis (expenditure and adaptive targets) agreed 2026-10-16, see phase 7a.
 - **Devices:** Whisker Litter-Robot, Petory feeders (via Smart Life), and a water fountain
@@ -224,7 +246,9 @@ current intent, not a commitment to details.
 - **Calendar and tasks:** editable, with two-way Google sync.
 - **Sign-in:** each device signs in separately; credentials never sync.
 - **To-do lists:** generic, multiple lists, synced only between Lifeboard devices.
-- **Desktop polling:** at startup, then every 4 hours. No continuous monitoring.
+- **Desktop polling:** at startup, then every hour (changed from 4 hours, user,
+  2026-10-17). No continuous monitoring. Health data once a day (see "Updating and
+  notifications").
 - **Pets:** read-only, for awareness. Rule actions are notifications only.
 - **No device control (user, 2026-10-16, reaffirmed):** Lifeboard must not control the
   Litter-Robot, the feeders or any other device in any way (no feeding, cycling, settings

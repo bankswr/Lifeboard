@@ -28,10 +28,14 @@
   built) in isolation, records `connection` rows (per device: status, message, last
   checked, last success), turns each into a `connection` reading, evaluates rules, stores
   `alert` rows. `SignedOutError` → signed_out; any other error → error.
-- Desktop server: update at start, then every 4 h (`setInterval`), notifications via
-  `notify-send` (`src/desktop/notify.ts`).
-- Phone: on open, sync quietly, then update if `isUpdateDue` (never, or > 12 h); "Update
-  now" button on Home. Notifications via `@capacitor/local-notifications` (8.3.1, same as
+- Desktop server: update at start, then every hour (`setInterval`; was 4 h until
+  2026-10-17), notifications via `notify-send` (`src/desktop/notify.ts`).
+- Phone: on open, sync quietly, then update if `isUpdateDue` (never, or not yet today in
+  local time; was > 12 h until 2026-10-17); "Update now" button on Home.
+- Health pulls (2026-10-17, user): Cronometer and Google Health run at most once per local
+  day per device, even on Update now; Google's Calendar/Tasks sync still runs every update.
+  Settings → Health → "Re-pull health data" (`api.repullHealth`) clears both day markers
+  and runs a full update. Notifications via `@capacitor/local-notifications` (8.3.1, same as
   FitApp); permission is requested on first alert (Android 13+).
 - `core/notify.ts` holds the platform's delivery function (`setAlertDelivery`); delivery
   failures are logged and never break an update.

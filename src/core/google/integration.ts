@@ -1,10 +1,14 @@
 // Google integration: Google Health (steps, weight, body fat, heart rate into the
 // health_point table),
 // then the Schedule's calendar and tasks (core/schedule/push.ts).
+// Health is pulled at most once per calendar day per device (user, 2026-10-17): the analysis
+// uses only days before today, so later pulls the same day would change nothing it shows.
+// The Schedule syncs on every update.
 // Signing in needs a browser redirect, which only the desktop can do for now
 // (src/desktop/googleSignIn.ts); the phone gets this data through LAN sync.
 import { getCredential, saveCredential } from "../credentials.ts";
 import { addDays, localDate } from "../dates.ts";
+import type { Db } from "../db/types.ts";
 import { latestHealthDay, replaceHealthPoints, type HealthPoint, type PointType } from "../health.ts";
 import type { Integration } from "../integration.ts";
 import { syncSchedule } from "../schedule/push.ts";
@@ -15,6 +19,8 @@ export interface GoogleCredential extends GoogleClient {
   refreshToken: string;
   /** Earliest day the history pull has covered; absent until it has run. */
   historyFrom?: string;
+  /** Local date of the last successful health pull. */
+  healthPulledOn?: string;
 }
 
 const TYPES: PointType[] = ["steps", "weight", "body-fat", "heart-rate", "daily-resting-heart-rate"];
@@ -37,23 +43,41 @@ export const google: Integration = {
 
   async update(db) {
     const credential = (await getCredential<GoogleCredential>(db, "google"))!;
-    const token = await accessToken(credential, credential.refreshToken, HEALTH_SCOPES);
-    // Up to today (not included), as FitThing did: today isn't complete yet.
-    const end = localDate();
-    const historyStart = addDays(end, -HISTORY_DAYS);
-    const needsHistory = !credential.historyFrom || credential.historyFrom > historyStart;
-    for (const type of TYPES) {
-      const latest = await latestHealthDay(db, type);
-      const start = latest && !needsHistory ? addDays(latest, -OVERLAP_DAYS) : historyStart;
-      const points = await listDataPoints(token, type, start, end);
-      const stored = points.map((point) => toHealthPoint(type, point)).filter((p): p is HealthPoint => p !== null);
-      await replaceHealthPoints(db, type, `${start}T00:00:00Z`, `${end}T00:00:00Z`, stored);
-    }
-    if (needsHistory) await saveCredential(db, "google", { ...credential, historyFrom: historyStart });
+    if (needsHealthPull(credential, localDate())) await pullHealth(db, credential);
     await syncSchedule(db);
     return [];
   },
 };
+
+/** Lets the next update pull health again today (the Re-pull button, user 2026-10-17). */
+export async function allowGoogleHealthRepull(db: Db) {
+  const credential = await getCredential<GoogleCredential>(db, "google");
+  if (credential) await saveCredential(db, "google", { ...credential, healthPulledOn: undefined });
+}
+
+/** True unless health was already pulled today and the history has been fetched. */
+export function needsHealthPull(credential: GoogleCredential, today: string): boolean {
+  const needsHistory = !credential.historyFrom || credential.historyFrom > addDays(today, -HISTORY_DAYS);
+  return needsHistory || credential.healthPulledOn !== today;
+}
+
+async function pullHealth(db: Db, credential: GoogleCredential) {
+  const token = await accessToken(credential, credential.refreshToken, HEALTH_SCOPES);
+  // Up to today (not included), as FitThing did: today isn't complete yet.
+  const end = localDate();
+  const historyStart = addDays(end, -HISTORY_DAYS);
+  const needsHistory = !credential.historyFrom || credential.historyFrom > historyStart;
+  for (const type of TYPES) {
+    const latest = await latestHealthDay(db, type);
+    const start = latest && !needsHistory ? addDays(latest, -OVERLAP_DAYS) : historyStart;
+    const points = await listDataPoints(token, type, start, end);
+    const stored = points.map((point) => toHealthPoint(type, point)).filter((p): p is HealthPoint => p !== null);
+    await replaceHealthPoints(db, type, `${start}T00:00:00Z`, `${end}T00:00:00Z`, stored);
+  }
+  await saveCredential(db, "google", {
+    ...credential, healthPulledOn: end, historyFrom: needsHistory ? historyStart : credential.historyFrom,
+  });
+}
 
 /** Converts one API point to the stored form; null if it lacks what's needed. */
 export function toHealthPoint(type: PointType, point: DataPoint): HealthPoint | null {

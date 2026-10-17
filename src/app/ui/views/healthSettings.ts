@@ -7,6 +7,9 @@ import { call } from "../../backend.ts";
 import { refresh, route } from "../app.ts";
 
 let message = "";
+let repulling = false;
+/** Shown in the Health data card, next to the button, rather than at the top of the page. */
+let repullMessage = "";
 
 route(/^\/health-settings$/, async () => {
   const settings = await call("getHealthSettings");
@@ -64,6 +67,17 @@ route(/^\/health-settings$/, async () => {
         </fieldset>
         <button type="submit">Save</button>
       </form>
+      <section class="card">
+        <h2>Health data</h2>
+        <p class="muted small">
+          Cronometer and Google Health are pulled once a day. After fixing an entry, pull again
+          to update today's targets.
+        </p>
+        <button class="secondary" ?disabled=${repulling} @click=${repull}>
+          ${repulling ? "Pulling…" : "Re-pull health data"}
+        </button>
+        ${repullMessage ? html`<p>${repullMessage}</p>` : ""}
+      </section>
     `,
   };
 });
@@ -93,5 +107,22 @@ async function save(event: SubmitEvent) {
   } catch (error) {
     message = (error as Error).message;
   }
+  await refresh();
+}
+
+async function repull() {
+  repulling = true;
+  repullMessage = "";
+  await refresh();
+  try {
+    const { connections } = await call("repullHealth");
+    const failed = connections.filter((c) => (c.id === "cronometer" || c.id === "google") && c.status !== "connected");
+    repullMessage = failed.length
+      ? `Not pulled from ${failed.map((c) => c.name).join(" and ")}: ${failed.map((c) => c.message).join("; ")}`
+      : "Health data pulled again.";
+  } catch (error) {
+    repullMessage = (error as Error).message;
+  }
+  repulling = false;
   await refresh();
 }

@@ -31,3 +31,6 @@ data/
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Local launch script (personal, not shared)
+/start-lifeboard.sh

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { api } from "../src/core/api.ts";
 import { getCredential, saveCredential } from "../src/core/credentials.ts";
 import { HEALTH_SCOPES, SCHEDULE_SCOPES } from "../src/core/google/oauth.ts";
 import { addDays, localDate } from "../src/core/dates.ts";
@@ -158,6 +159,33 @@ describe("Google integration", () => {
       expect(site.tokenScopes).toEqual([HEALTH_SCOPES.join(" "), SCHEDULE_SCOPES.join(" ")]);
       // The history pull is remembered, so later updates only re-read recent days of stored types.
       expect((await getCredential<{ historyFrom: string }>(db, "google"))!.historyFrom).toBe(addDays(localDate(), -90));
+    });
+  });
+
+  it("pulls health once a day but syncs the Schedule on every update", async () => {
+    const site = fakeGoogle(true);
+    await withFetch(site.fetch, async () => {
+      const db = await newDb();
+      await saveCredential(db, "google", { clientId: "id", clientSecret: "secret", refreshToken: "refresh" });
+      await runUpdate(db, [google]);
+      site.requests.length = 0;
+      site.tokenScopes.length = 0;
+      await runUpdate(db, [google]);
+      expect(site.requests.filter((p) => p.includes("dataPoints"))).toEqual([]);
+      expect(site.tokenScopes).toEqual([SCHEDULE_SCOPES.join(" ")]);
+      expect((await getCredential<{ healthPulledOn: string }>(db, "google"))!.healthPulledOn).toBe(localDate());
+    });
+  });
+
+  it("pulls health again the same day after a re-pull is asked for", async () => {
+    const site = fakeGoogle(true);
+    await withFetch(site.fetch, async () => {
+      const db = await newDb();
+      await saveCredential(db, "google", { clientId: "id", clientSecret: "secret", refreshToken: "refresh" });
+      await runUpdate(db, [google]);
+      site.requests.length = 0;
+      await api.repullHealth(db);
+      expect(site.requests.filter((p) => p.includes("dataPoints")).length).toBeGreaterThan(0);
     });
   });
 

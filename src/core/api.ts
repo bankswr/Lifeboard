@@ -17,6 +17,8 @@ import { getLitterSettings, saveLitterSettings } from "./whisker/levels.ts";
 import { dailyHealth, recentNutrition } from "./health.ts";
 import { clearVerdict, setVerdict } from "./healthReview.ts";
 import { analyzeHealth, getHealthSettings, saveHealthSettings, targetHistory } from "./healthTargets.ts";
+import { allowCronometerRepull } from "./cronometer/integration.ts";
+import { allowGoogleHealthRepull } from "./google/integration.ts";
 import { INTEGRATIONS } from "./integrations.ts";
 import { lastUpdateAt, listConnections, runUpdate } from "./updates.ts";
 import * as scheduleEdit from "./schedule/edit.ts";
@@ -59,6 +61,13 @@ async function updateNow(db: Db) {
   const result = await runUpdate(db);
   await deliverAlerts(result.alerts);
   return result;
+}
+
+/** Pulls health data again even if it was already pulled today, as part of a full update. */
+async function repullHealth(db: Db) {
+  await allowCronometerRepull(db);
+  await allowGoogleHealthRepull(db);
+  return updateNow(db);
 }
 
 /** Everything the Hub and Details screens show about updates, alerts and devices. */
@@ -165,6 +174,7 @@ export const api = {
   deleteTodoItem: todos.deleteTodoItem,
   clearDoneTodoItems: todos.clearDoneTodoItems,
   updateNow,
+  repullHealth,
   getStatus,
   getReadingTypes: async (_db: Db) => READING_TYPES,
   getLitterSettings,
