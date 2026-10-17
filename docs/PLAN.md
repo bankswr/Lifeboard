@@ -159,8 +159,14 @@ current intent, not a commitment to details.
 7. ✅ **Health data pipeline.** Port FitThing's pulls for calories, macros, weight,
    body fat and steps. Refinements are planned in a later session.
    (Built 2026-10-15 ahead of order while blocked elsewhere; live-verified 2026-10-15.
-   Google sign-in is desktop-only so far.) Checked off by the user 2026-10-17; phone Google
-   sign-in remains open (see Known risks).
+   Google sign-in is desktop-only so far.) Checked off by the user 2026-10-17.
+   **Phone Google sign-in as a backup (user, 2026-10-17; not started):** the phone signs
+   in to Google with Android's own sign-in (Google Play services keeps the grant, so no
+   refresh token is stored and there's no 7-day expiry). It uses Google only when it hasn't
+   synced with the desktop for 12 hours or more (away from home); otherwise the desktop
+   stays the only device talking to Google, so the two don't push the same Calendar and
+   Tasks changes. Needs the user to create an Android OAuth client in Google Cloud (package
+   name and signing certificate fingerprint); exact steps to be given at build time.
    **Queued for the refinements session (user, 2026-10-15; not started):** flag days whose
    data looks wrong, e.g. outrageous step counts or strangely low calories (likely a
    partly logged day). The user must be able to accept or reject a flagged day as valid,
@@ -223,28 +229,44 @@ current intent, not a commitment to details.
      - **Library:** uPlot (small, fast time series), for now.
      - Fuller explanations.
      - Not planned: a separate fat mass / lean mass graph (body fat % with weight covers it).
-8. **Android home-screen widgets** (user, 2026-10-17; not started; details to be reviewed
-   with the user before building). Widgets for:
+8. **Android home-screen widgets** (user, 2026-10-17; reviewed and agreed the same day;
+   not started). One widget per function, each placed and sized on its own:
    - **Health:** today's targets.
-   - **Calendar:** upcoming events (and presumably tasks, as on the Schedule page; to confirm).
+   - **Calendar:** two sections. *Today*: overdue and today's tasks, and today's events.
+     *Upcoming*: events of the next 7 days, no tasks (tasks repeat a lot and work as
+     reminders at their time; see phase 5).
    - **Alerts:** current, undismissed alerts.
-   - **Pets:** estimated time until each device needs attention (e.g. feeder food days
-     left, fountain refill, Litter-Robot drawer full). The feeders and the fountain already
-     have estimates; the Litter-Robot has only its current levels, so a time estimate for
-     it is new work.
-   - **Lists:** a chosen to-do list.
+   - **Pets:** when each device needs attention, as a date and time (not a countdown,
+     which would go stale between updates): feeder food, fountain refill, Litter-Robot
+     drawer full and litter low (see below).
+   - **Lists:** a chosen to-do list; items can be ticked on the widget.
 
-   Widgets are display only, like the rest of Lifeboard's device handling (see "No device
-   control"). Questions for the review: one widget per function or a configurable one;
-   whether lists can be ticked from the widget; sizes.
-9. **Finances** (stretch).
+   **How it's built:** the app stays a Capacitor app. The widgets are native Android
+   (Kotlin layouts and drawing) inside `android/`, and only display a snapshot the
+   TypeScript app prepares: whenever the app runs (open, update, sync), it saves what each
+   widget shows and asks Android to redraw them, through a small Capacitor plugin. No
+   health, pet or list logic is written in Kotlin. Each widget shows how old its data is;
+   tapping a widget opens the matching page.
+   **Ticking a list item on the widget:** the widget crosses it out at once and queues the
+   tick on the phone; the app applies queued ticks through the normal TypeScript code the
+   next time it runs, and they sync from there. Kotlin never writes to the database.
+   **Litter-Robot estimates (new):** the drawer level is recorded at each update; from its
+   rise since the drawer was last emptied, Lifeboard estimates when it reaches the alarm
+   level (Settings → Litter-Robot). Likewise when the litter falls to its alarm level.
+   Shown on the Pets page as well.
+   Widgets are display only apart from list ticks, like the rest of Lifeboard's device
+   handling (see "No device control").
+9. **Finances** (stretch). Not in the 2026-10-17 build batch (user: pin down the base
+   functionality first, if at all).
 
 ## Known risks
 
 - **Pet APIs are unofficial.** They can break or change sign-in without notice.
 - **Google OAuth on Android** needs its own OAuth client. While the OAuth app is in
   "Testing" status, Google expires sign-ins after 7 days. Publishing it (status "In
-  production") fixes that. See the settled decisions below.
+  production") fixes that. See the settled decisions below. Two devices pushing to
+  Google could repeat a change; the 12-hour backup rule (phase 7) keeps that to times
+  the desktop is out of reach.
 - **Cronometer sign-in** is scraped (GWT-RPC) and fragile, and now has to work from
   the phone as well.
 - **Phone alerts** arrive only when the phone app updates, because the phone does no
