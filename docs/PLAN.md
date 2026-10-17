@@ -120,6 +120,8 @@ current intent, not a commitment to details.
    the APIs are unofficial and may change, and the Petory API is still unknown.
    (Superseded, user 2026-10-17: phase 4 built and live-verified both integrations.)
 2. ✅ **Data model and LAN sync.** Build both, tested with a throwaway record type.
+   - **Later (user, 2026-10-17; not started):** pair the phone by scanning the desktop's sync
+     key with the phone's camera (a QR code), instead of typing it.
 3. ✅ **Connections and rules engine** (built 2026-10-15, accepted by the user 2026-10-17). Sign-in status for every integration, the
    events/conditions/actions model, and default "connection lost" alerts.
 4. **Pets module.** Status dashboard, events, and default rules.
