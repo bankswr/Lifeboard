@@ -2,6 +2,7 @@
 // and can sync on demand (it also syncs on its own when opened, see main.ts).
 import { html } from "lit-html";
 import { call, platform } from "../../backend.ts";
+import { allowExactAlarms, exactAlarmsAllowed } from "../../reminders.ts";
 import { syncNow } from "../../sync.ts";
 import { refresh, route } from "../app.ts";
 import { card } from "../card.ts";
@@ -27,7 +28,7 @@ route(/^\/settings$/, async () => {
       <a class="card list-card" href="#/litter"><span>Litter-Robot</span><span class="muted">›</span></a>
       <a class="card list-card" href="#/feeders"><span>Feeders</span><span class="muted">›</span></a>
       <a class="card list-card" href="#/fountain"><span>Water fountain</span><span class="muted">›</span></a>
-      ${platform === "desktop" ? await desktopPairing() : await phoneSync()}
+      ${platform === "desktop" ? await desktopPairing() : html`${await phoneSync()}${await remindersCard()}`}
       ${card("settings-device", "This device", html`<p class="muted">Device ID ${info.deviceId}</p>`)}
     `,
   };
@@ -64,6 +65,19 @@ async function phoneSync() {
       </form>
       <p class="muted">Last synced: ${settings.lastSyncedAt ? new Date(settings.lastSyncedAt).toLocaleString() : "never"}</p>
       ${syncMessage ? html`<p>${syncMessage}</p>` : ""}
+  `);
+}
+
+/** Phone only: task reminders arrive on time only with Android's "Alarms & reminders" access. */
+async function remindersCard() {
+  const exact = await exactAlarmsAllowed();
+  return card("settings-reminders", "Task reminders", html`
+      <p class="muted small">Tasks with a time get a reminder on this phone at that time, with Done and Snooze (10 minutes).</p>
+      ${exact
+        ? html`<p class="small">On time to the minute.</p>`
+        : html`
+            <p class="small">Android may deliver them a few minutes late. Allow Lifeboard "Alarms &amp; reminders" to have them on time.</p>
+            <button class="secondary" @click=${async () => { await allowExactAlarms(); await refresh(); }}>Allow exact timing</button>`}
   `);
 }
 

@@ -143,7 +143,8 @@ current intent, not a commitment to details.
 5. **Tasks & reminders**, with Google Tasks sync, plus the generic to-do lists
    (to-do lists ✅ built 2026-10-15, accepted by the user 2026-10-17). Tasks built 2026-10-16
    together with phase 6 as the Schedule page; reminders deferred (user), the only part left.
-   **Reminders, planned 2026-10-17 (user; not started):**
+   **Reminders, planned 2026-10-17 (user); built 2026-10-17 and verified on the emulator
+   (agent-notes/2026-10-17-task-reminders.md):**
    - **What:** tasks that have a (Lifeboard-only) time, not done. Not calendar events
      (Google Calendar already notifies), no morning summary, nothing for date-only tasks.
    - **Where:** the phone only, as notifications scheduled in advance with Android's local
@@ -153,6 +154,9 @@ current intent, not a commitment to details.
    - **When:** at the task's time, no lead time.
    - **Buttons:** Done (marks the task done; it reaches Google through the desktop at the
      next sync) and Snooze (10 minutes). Android opens the app briefly to run a button.
+   - **Timing (built):** exact to the minute only with Android's "Alarms & reminders"
+     access, which Settings offers ("Allow exact timing"); without it Android may deliver
+     a few minutes late.
 6. ✅ **Calendar**, with Google Calendar sync. Built 2026-10-16 as the Schedule page (see
    agent-notes/2026-10-16-schedule.md); live-verified 2026-10-16 against the real account
    (events and tasks on Monitor).
