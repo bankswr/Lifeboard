@@ -51,3 +51,16 @@
   tasks; that list never came from Google.
 - `adb shell dumpsys notification` contains the word "snoozed" on its own (Android's snooze
   section); match the notification text exactly.
+
+## Follow-ups (2026-10-17, user decisions after Lane B)
+- **Exact timing:** the opt-in "Allow exact timing" button is enough (user).
+- **Missed reminders (built on main, 6dc3e4d):** `takeMissedReminders` (core) returns open
+  tasks whose reminder time passed since the last check (meta `reminders_checked_at`, at most
+  48 h back) and whose reminder isn't in the shade (`getDeliveredNotifications`); the app posts
+  them at once as "Missed reminder: <time>" with the same id and buttons. The first check only
+  records the time. Trade-off accepted: a reminder swiped away without Done comes back once.
+  Unit-tested; **not yet run on the emulator**.
+- **Sign-out revokes the grant (built, 6dc3e4d):** `GoogleAuthorizationPlugin.revoke` gets the
+  account from a silent authorization and calls `revokeAccess`; Connections signs out of
+  Lifeboard even if that fails and says where to remove access. **Untested**: needs the user's
+  Android OAuth client.
