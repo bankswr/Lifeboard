@@ -115,9 +115,10 @@ current intent, not a commitment to details.
 0. ✅ **Scaffold.** Copy the FitApp skeleton and set up the `core/` / `app/` /
    `desktop/` / `android/` layout. Get an empty app running on desktop and on the
    phone.
-1. **Pet API spike.** Prove we can sign in to and read the Litter-Robot and the
+1. ✅ **Pet API spike.** Prove we can sign in to and read the Litter-Robot and the
    Petory feeders from Node and from the phone. This is the riskiest dependency:
    the APIs are unofficial and may change, and the Petory API is still unknown.
+   (Superseded, user 2026-10-17: phase 4 built and live-verified both integrations.)
 2. ✅ **Data model and LAN sync.** Build both, tested with a throwaway record type.
 3. ✅ **Connections and rules engine** (built 2026-10-15, awaiting user review). Sign-in status for every integration, the
    events/conditions/actions model, and default "connection lost" alerts.
@@ -132,13 +133,14 @@ current intent, not a commitment to details.
 5. **Tasks & reminders**, with Google Tasks sync, plus the generic to-do lists
    (to-do lists ✅ built 2026-10-15, awaiting user review). Tasks built 2026-10-16 together
    with phase 6 as the Schedule page; reminders deferred (user).
-6. **Calendar**, with Google Calendar sync. Built 2026-10-16 as the Schedule page (see
+6. ✅ **Calendar**, with Google Calendar sync. Built 2026-10-16 as the Schedule page (see
    agent-notes/2026-10-16-schedule.md); live-verified 2026-10-16 against the real account
    (events and tasks on Monitor).
-7. **Health data pipeline.** Port FitThing's pulls for calories, macros, weight,
+7. ✅ **Health data pipeline.** Port FitThing's pulls for calories, macros, weight,
    body fat and steps. Refinements are planned in a later session.
    (Built 2026-10-15 ahead of order while blocked elsewhere; live-verified 2026-10-15.
-   Google sign-in is desktop-only so far.)
+   Google sign-in is desktop-only so far.) Checked off by the user 2026-10-17; phone Google
+   sign-in remains open (see Known risks).
    **Queued for the refinements session (user, 2026-10-15; not started):** flag days whose
    data looks wrong, e.g. outrageous step counts or strangely low calories (likely a
    partly logged day). The user must be able to accept or reject a flagged day as valid,
