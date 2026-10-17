@@ -34,11 +34,28 @@ async function scheduleNow(): Promise<void> {
   const pending = await LocalNotifications.getPending();
   const stale = pending.notifications.filter((n) => n.extra?.kind === KIND);
   if (stale.length > 0) await LocalNotifications.cancel({ notifications: stale.map((n) => ({ id: n.id })) });
-  if (reminders.length === 0) return;
+  // Reminders still in the notification shade weren't missed.
+  const delivered = await LocalNotifications.getDeliveredNotifications();
+  const showing = delivered.notifications.filter((n) => n.extra?.kind === KIND).map((n) => String(n.extra.taskId));
+  const missed = await call("takeMissedReminders", showing);
+  if (reminders.length === 0 && missed.length === 0) return;
 
   // Android 13+ asks once; afterwards this returns the saved answer.
   const { display } = await LocalNotifications.requestPermissions();
   if (display !== "granted") return;
+  if (missed.length > 0) {
+    // Shown now (no schedule), with the same buttons and ids as the reminder itself.
+    await LocalNotifications.schedule({
+      notifications: missed.map((reminder) => ({
+        id: reminder.notificationId,
+        title: reminder.title,
+        body: `Missed reminder: ${new Date(reminder.at).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}`,
+        actionTypeId: ACTION_TYPE,
+        extra: { kind: KIND, taskId: reminder.taskId },
+      })),
+    });
+  }
+  if (reminders.length === 0) return;
   // Exact timing needs "Alarms & reminders" access. Without it the plugin would open that
   // settings screen on every schedule, so ask only from Settings (exactAlarmsAllowed) and
   // otherwise accept Android's inexact timing (usually within minutes).

@@ -37,3 +37,6 @@ data/
 
 # Claude Code agent worktrees
 .claude/worktrees/
+
+# Latest built APK (npm run apk)
+release/

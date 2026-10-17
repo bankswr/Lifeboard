@@ -24,7 +24,7 @@ import { analyzeHealth, getHealthSettings, saveHealthSettings, targetHistory } f
 import { allowCronometerRepull } from "./cronometer/integration.ts";
 import { allowGoogleHealthRepull } from "./google/integration.ts";
 import { INTEGRATIONS } from "./integrations.ts";
-import { snoozeReminder, upcomingReminders } from "./reminders.ts";
+import { snoozeReminder, takeMissedReminders, upcomingReminders } from "./reminders.ts";
 import { lastUpdateAt, listConnections, runUpdate } from "./updates.ts";
 import * as scheduleEdit from "./schedule/edit.ts";
 import { sendInBackground, syncSchedule } from "./schedule/push.ts";
@@ -119,12 +119,12 @@ function qrIntegration(integrationId: string) {
   return integration;
 }
 
-/** Forgets this device's sign-in to an integration. Data already fetched is kept. */
 /** Records the phone's backup Google sign-in, after the app got Android's authorization. */
 async function savePhoneGoogleSignIn(db: Db) {
   await saveCredential<PhoneGoogleCredential>(db, "google", { android: true });
 }
 
+/** Forgets this device's sign-in to an integration. Data already fetched is kept. */
 async function signOut(db: Db, integrationId: string) {
   await deleteCredential(db, integrationId);
   await db.run("DELETE FROM connection WHERE id = ?", [integrationId]);
@@ -244,6 +244,7 @@ export const api = {
   setTaskDone: thenSend(scheduleEdit.setTaskDone),
   deleteTask: thenSend(scheduleEdit.deleteTask),
   getReminders: (db: Db) => upcomingReminders(db),
+  takeMissedReminders: (db: Db, showingTaskIds: string[]) => takeMissedReminders(db, showingTaskIds),
   snoozeReminder: (db: Db, taskId: string) => snoozeReminder(db, taskId),
 };
 

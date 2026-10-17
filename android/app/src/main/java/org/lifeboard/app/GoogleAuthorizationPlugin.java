@@ -13,6 +13,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.google.android.gms.auth.api.identity.AuthorizationRequest;
 import com.google.android.gms.auth.api.identity.AuthorizationResult;
 import com.google.android.gms.auth.api.identity.Identity;
+import com.google.android.gms.auth.api.identity.RevokeAccessRequest;
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.common.api.CommonStatusCodes;
 import com.google.android.gms.common.api.Scope;
@@ -72,6 +74,49 @@ public class GoogleAuthorizationPlugin extends Plugin {
                     waitingForConsent = call;
                     consentLauncher.launch(new IntentSenderRequest.Builder(result.getPendingIntent().getIntentSender()).build());
                 }
+            })
+            .addOnFailureListener(error -> reject(call, error));
+    }
+
+    /**
+     * Options: scopes (string[]). Withdraws the user's grant for those scopes, so signing out
+     * in Lifeboard fully undoes the sign-in (user, 2026-10-17). Revoking needs the account,
+     * which a silent authorization gives. Resolves { revoked: false } when there was no grant.
+     */
+    @PluginMethod
+    public void revoke(PluginCall call) {
+        List<Scope> scopes = new ArrayList<>();
+        JSArray requested = call.getArray("scopes", new JSArray());
+        for (int i = 0; i < requested.length(); i++) {
+            scopes.add(new Scope(requested.optString(i)));
+        }
+        AuthorizationRequest request = AuthorizationRequest.builder().setRequestedScopes(scopes).build();
+        Identity.getAuthorizationClient(getActivity())
+            .authorize(request)
+            .addOnSuccessListener(result -> {
+                if (result.hasResolution()) {
+                    JSObject answer = new JSObject();
+                    answer.put("revoked", false); // nothing granted, so nothing to withdraw
+                    call.resolve(answer);
+                    return;
+                }
+                GoogleSignInAccount account = result.toGoogleSignInAccount();
+                if (account == null || account.getAccount() == null) {
+                    call.reject("Google didn't say which account to withdraw access from.", "NO_ACCOUNT");
+                    return;
+                }
+                RevokeAccessRequest revokeRequest = RevokeAccessRequest.builder()
+                    .setAccount(account.getAccount())
+                    .setScopes(scopes)
+                    .build();
+                Identity.getAuthorizationClient(getActivity())
+                    .revokeAccess(revokeRequest)
+                    .addOnSuccessListener(done -> {
+                        JSObject answer = new JSObject();
+                        answer.put("revoked", true);
+                        call.resolve(answer);
+                    })
+                    .addOnFailureListener(error -> reject(call, error));
             })
             .addOnFailureListener(error -> reject(call, error));
     }

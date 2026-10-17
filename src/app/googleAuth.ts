@@ -2,10 +2,12 @@
 // native plugin (android/.../GoogleAuthorizationPlugin.java). core/google/token.ts decides
 // when the phone uses Google; this file only reaches the plugin.
 import { registerPlugin } from "@capacitor/core";
+import { GOOGLE_SCOPES } from "../core/google/oauth.ts";
 import { NativeGoogleConsentNeeded, type NativeGoogleAuthorizer } from "../core/google/token.ts";
 
 interface GoogleAuthorizationPlugin {
   authorize(options: { scopes: string[]; interactive: boolean }): Promise<{ accessToken: string }>;
+  revoke(options: { scopes: string[] }): Promise<{ revoked: boolean }>;
 }
 
 const GoogleAuthorization = registerPlugin<GoogleAuthorizationPlugin>("GoogleAuthorization");
@@ -19,3 +21,15 @@ export const nativeGoogleAuthorizer: NativeGoogleAuthorizer = async (scopes, int
     throw new Error(message);
   }
 };
+
+/**
+ * Withdraws Android's grant to Lifeboard for all its Google scopes (user, 2026-10-17: signing
+ * out should fully undo the sign-in). Throws with a readable message if Google refuses.
+ */
+export async function revokeNativeGoogle(): Promise<void> {
+  try {
+    await GoogleAuthorization.revoke({ scopes: GOOGLE_SCOPES });
+  } catch (error) {
+    throw new Error((error as { message: string }).message);
+  }
+}

@@ -6,6 +6,7 @@ import QRCode from "qrcode";
 import { authorizeOnPhone } from "../../../core/google/token.ts";
 import { HEALTH_SCOPES, SCHEDULE_SCOPES } from "../../../core/google/oauth.ts";
 import { call, platform } from "../../backend.ts";
+import { revokeNativeGoogle } from "../../googleAuth.ts";
 import type { ConnectionInfo } from "../../../core/updates.ts";
 import { act, refresh, route } from "../app.ts";
 import { card } from "../card.ts";
@@ -177,5 +178,13 @@ async function signIn(event: SubmitEvent, integrationId: string) {
 
 async function signOut(integrationId: string, name: string) {
   if (!confirm(`Sign out of ${name} on this device? Data already fetched is kept.`)) return;
+  if (platform === "android" && integrationId === "google") {
+    // On the phone, also withdraw Android's grant; sign out of Lifeboard even if that fails.
+    try {
+      await revokeNativeGoogle();
+    } catch (error) {
+      message = `Signed out, but Google's access wasn't withdrawn (${(error as Error).message}). Remove it under myaccount.google.com → Security → Third-party connections.`;
+    }
+  }
   await act(() => call("signOut", integrationId));
 }

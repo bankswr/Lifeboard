@@ -5,6 +5,12 @@
 //
 // Snoozes are kept per device in the meta table (not synced): a snooze is about this phone's
 // notification, not about the task.
+//
+// Missed reminders (user, 2026-10-17): when the app runs, any open task whose reminder time
+// passed since the app last checked (at most MISSED_LOOKBACK_HOURS back) and whose reminder
+// isn't showing is notified then, once, as "missed": the phone was off, the task reached
+// the phone only after its time (set on the desktop), or the reminder was swiped away
+// without Done.
 import { localDate } from "./dates.ts";
 import { getMeta, setMeta } from "./db/meta.ts";
 import type { Db } from "./db/types.ts";
@@ -25,6 +31,10 @@ export interface Reminder {
 }
 
 const SNOOZE_KEY = "reminder_snoozes";
+/** When missed reminders were last looked for, ISO 8601. */
+const CHECKED_KEY = "reminders_checked_at";
+/** Missed reminders older than this aren't shown: a stale "missed" isn't useful. */
+export const MISSED_LOOKBACK_HOURS = 48;
 
 /**
  * The reminders that should be pending now: open tasks with a date and time still ahead
@@ -48,6 +58,35 @@ export async function upcomingReminders(db: Db, now = new Date()): Promise<Remin
     reminders.push({ taskId: task.id, title: task.title, at: at.toISOString(), notificationId: notificationId(task.id), snoozed: Boolean(snoozedUntil) });
   }
   return reminders;
+}
+
+/**
+ * The reminders missed since the last check, oldest first, and records this check, so each
+ * is returned once. `showingTaskIds`: tasks whose reminder is still in the notification
+ * shade (not missed). The very first check only records the time, so installing or
+ * updating the app doesn't bring up old reminders.
+ */
+export async function takeMissedReminders(db: Db, showingTaskIds: string[], now = new Date()): Promise<Reminder[]> {
+  const checked = await getMeta(db, CHECKED_KEY);
+  await setMeta(db, CHECKED_KEY, now.toISOString());
+  if (!checked) return [];
+  const since = Math.max(new Date(checked).getTime(), now.getTime() - MISSED_LOOKBACK_HOURS * 3_600_000);
+  const tasks = await db.all(
+    `SELECT id, title, due, time FROM task
+     WHERE deleted = 0 AND done = 0 AND due IS NOT NULL AND time IS NOT NULL AND due BETWEEN ? AND ?
+     ORDER BY due, time`,
+    [localDate(new Date(since - 86_400_000)), localDate(now)],
+  );
+  const snoozes = await readSnoozes(db);
+  const missed: Reminder[] = [];
+  for (const task of tasks) {
+    if (showingTaskIds.includes(task.id)) continue;
+    const snoozedUntil = snoozes[task.id];
+    const at = snoozedUntil ? new Date(snoozedUntil) : localDateTime(task.due, task.time);
+    if (at.getTime() <= since || at.getTime() > now.getTime()) continue;
+    missed.push({ taskId: task.id, title: task.title, at: at.toISOString(), notificationId: notificationId(task.id), snoozed: Boolean(snoozedUntil) });
+  }
+  return missed;
 }
 
 /** Puts a task's reminder off by SNOOZE_MINUTES from now. */

@@ -41,6 +41,9 @@ JAVA_HOME=~/android-studio/jbr ANDROID_HOME=~/Android/Sdk ./gradlew assembleDebu
 # → android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
+Or `npm run apk`, which does all of the above and copies the APK to `release/lifeboard.apk`
+(gitignored; named so it isn't mixed up with FitApp's).
+
 ## Connections
 
 Sign in under **Settings → Connections** on each device (sign-ins are never synced):

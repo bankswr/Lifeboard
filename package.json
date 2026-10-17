@@ -9,7 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "desktop": "npm run build && node src/desktop/server.ts",
-    "android": "npm run build && cap sync android"
+    "android": "npm run build && cap sync android",
+    "apk": "bash scripts/build-apk.sh"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^8.1.1",

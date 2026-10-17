@@ -154,6 +154,10 @@ current intent, not a commitment to details.
    - **When:** at the task's time, no lead time.
    - **Buttons:** Done (marks the task done; it reaches Google through the desktop at the
      next sync) and Snooze (10 minutes). Android opens the app briefly to run a button.
+   - **Decided 2026-10-17 (user):** exact timing is a one-time "Allow exact timing" button in
+     Settings; reminders missed since the app last ran (up to 48 h; phone off, task synced
+     late, or swiped away without Done) are shown once when it next runs; signing out of
+     Google on the phone also withdraws Android's grant.
    - **Timing (built):** exact to the minute only with Android's "Alarms & reminders"
      access, which Settings offers ("Allow exact timing"); without it Android may deliver
      a few minutes late.

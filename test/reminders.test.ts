@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { migrate } from "../src/core/db/schema.ts";
-import { notificationId, snoozeReminder, upcomingReminders } from "../src/core/reminders.ts";
+import { notificationId, snoozeReminder, takeMissedReminders, upcomingReminders } from "../src/core/reminders.ts";
 import { saveTask, setTaskDone } from "../src/core/schedule/edit.ts";
 import { openNodeDb } from "../src/desktop/db/nodeSqlite.ts";
 
@@ -50,5 +50,28 @@ describe("task reminders", () => {
     expect(id).toBe(notificationId("6f1c2d0e-1111-4c4c-9999-123456789abc"));
     expect(id).toBeGreaterThanOrEqual(1_000_000_000);
     expect(id).toBeLessThanOrEqual(2_147_483_647);
+  });
+
+  it("returns reminders missed since the last check once, skipping ones still showing", async () => {
+    const db = await newDb();
+    expect(await takeMissedReminders(db, [], now)).toEqual([]); // first check: only records the time
+    const missed = await saveTask(db, task("Missed it", "2026-10-17", "10:00"));
+    const showing = await saveTask(db, task("Still in the shade", "2026-10-17", "10:30"));
+    await saveTask(db, task("Not yet", "2026-10-17", "13:00"));
+    const done = await saveTask(db, task("Done anyway", "2026-10-17", "10:15"));
+    await setTaskDone(db, done, true);
+
+    const later = new Date(2026, 9, 17, 12, 0);
+    const result = await takeMissedReminders(db, [showing], later);
+    expect(result.map((r) => r.taskId)).toEqual([missed]);
+    expect(await takeMissedReminders(db, [], later)).toEqual([]); // already returned
+  });
+
+  it("doesn't bring up reminders older than 48 hours", async () => {
+    const db = await newDb();
+    await takeMissedReminders(db, [], new Date(2026, 9, 10, 9, 0));
+    await saveTask(db, task("Long ago", "2026-10-11", "09:00"));
+    const recent = await saveTask(db, task("Yesterday", "2026-10-16", "18:00"));
+    expect((await takeMissedReminders(db, [], now)).map((r) => r.taskId)).toEqual([recent]);
   });
 });
