@@ -34,8 +34,29 @@ days with missing data. Read-only analysis on a copy of the real database (2026-
   difference between activity measures (~±200 kcal). Windows rose with steps (r 0.61) but
   steps, intake and logging all rose over the same weeks, so that isn't evidence.
 
-## Recommendation given to the user
+## First recommendation given to the user (superseded below)
 No meaningful difference. Keep steps as the only activity input (fixed physiological cost,
 nothing fitted). As the backup for a day without steps, use the typical day (median of the
 previous 14 days), marked as estimated; heart rate isn't worth two fitted numbers for ~11
 kcal/day. Resting heart rate stays a graph on the Health page, informational only.
+
+## Follow-up: lifting (same day)
+- The user lifts ~4 mornings a week for ~1 hour. The first test missed it because it only
+  looked at 10-minute bins with zero steps; lifting has ~1,100 steps an hour (walking
+  between sets, the ring counting arm movement). Lifting hours: ~40 bpm above rest at
+  ~1,100 steps/h; treadmill hours: ~31 bpm above rest at ~2,900 steps/h.
+- Steps alone credit a lifting hour ~45 kcal; Compendium resistance training is 3.5–6 METs
+  (~250 kcal net for an hour at 3.5). Heart-rate equations overestimate lifting (pressor
+  response), so heart rate is used only to *detect* sessions, not to size them.
+- FitApp logs `log_set.completed_at`, which would give exact sessions, but the user wants
+  FitApp to keep no external connections, so it isn't used.
+- Detection rule tuned on the data (runs of samples ≥ rest + T for ≥ M minutes, one low
+  sample allowed, steps/h below a pace, no treadmill):
+  | T | M | pace | per week | share 5–10 AM |
+  |---|---|---|---|---|
+  | 20 | 30 | 3,000 | 5.5 | 43% |
+  | 25 | 30 | 3,000 | 4.7 | 59% |
+  | **30** | **30** | **3,000** | **3.6** | **68%** |
+  | 30 | 40 | 2,000 | 2.6 | 73% |
+  Chosen: 30 / 30 / 3,000. Lower thresholds drift away from the user's mornings (likely
+  false matches). Decision recorded in docs/PLAN.md phase 7a.

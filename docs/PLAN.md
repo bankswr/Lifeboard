@@ -186,8 +186,26 @@ current intent, not a commitment to details.
      an advanced fat/lean split (fat mass vs lean mass change from body fat %). Steps are the
      activity proxy: they spread the window's expenditure over its days. A given day's steps
      are informational and don't change that day's target.
-   - **Heart rate:** pulled from Google Health (samples and daily resting heart rate), to be
-     examined as an alternative activity proxy before deciding how to use it.
+   - **Heart rate:** pulled from Google Health (samples and daily resting heart rate).
+     **Decided 2026-10-17 (user; investigation in agent-notes/2026-10-17-heart-rate-vs-steps.md):**
+     steps stay the main activity measure. Heart rate only adds workouts steps miss (the
+     user lifts about 4 mornings a week, ~1,100 steps an hour at ~40 bpm above rest):
+     - **Detection:** a run of 10-minute heart-rate samples at or above resting + 30 bpm,
+       lasting at least 30 minutes (one lower sample allowed inside), under 3,000 steps an
+       hour and no treadmill steps (walks are already counted by steps). On past data this
+       finds about 3.6 sessions a week, two-thirds between 5 and 10 AM. Thresholds are
+       settings. Missed sessions are accepted (user: a slow workout that doesn't raise the
+       heart rate shouldn't count; it works as an incentive).
+     - **Energy:** a fixed cost from the Compendium of Physical Activities, not fitted:
+       (METs − 1) × weight (kg) × hours, default 3.5 METs (setting), minus the steps'
+       energy in the same span so nothing counts twice. Targets are unchanged on average
+       (the fitted part shrinks by the same amount); the per-day burn moves to workout days.
+     - **Shown:** each detected workout on the Health page ("Workout 6:50–7:50 AM, +240 kcal").
+     - **Days without steps:** filled with the typical day (median of the previous 14 days),
+       marked as estimated.
+     - FitApp stays fully offline (user): its workout log is not connected to Lifeboard.
+     - Resting heart rate: a graph on the Health page, informational only (it doesn't
+       follow activity).
    - **History (user, 2026-10-16):** Google and Cronometer fetch 90 days of history once per
      device, then only recent days. Body water isn't available: the Google Health API has no
      such type.
