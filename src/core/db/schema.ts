@@ -242,6 +242,21 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
   );
   CREATE INDEX health_target_date ON health_target (date);
   `,
+  // 17: cats and their Litter-Robot weigh-ins (core/whisker/cats.ts). Weigh-in ids are
+  // "<pet id>-<time>", so both devices store the same rows.
+  `
+  CREATE TABLE cat (
+    ${syncColumns},
+    name TEXT NOT NULL
+  );
+  CREATE TABLE cat_weigh_in (
+    ${syncColumns},
+    cat_id TEXT NOT NULL,
+    at TEXT NOT NULL,
+    weight_lbs REAL NOT NULL
+  );
+  CREATE INDEX cat_weigh_in_cat ON cat_weigh_in (cat_id, at);
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

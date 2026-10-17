@@ -29,3 +29,19 @@ Probed the user's real account with read-only GraphQL queries (no commands sent)
 Throwaway, in the session scratchpad (not kept): read the saved Whisker credential from
 `data/lifeboard.db` read-only, refreshed the ID token with `cognitoWhiskerApi.refresh`, and
 ran the queries above.
+
+## Built (2026-10-17, user decisions)
+- No backfill from the robot's log (user: Scout and Big O used to weigh about the same).
+- `core/whisker/cats.ts`: synced `cat` and `cat_weigh_in` tables (migration 17); weigh-in id
+  `<petId>-<ISO time>` so both devices store the same rows; existing ids are skipped, not
+  re-saved (no sync churn). Every weigh-in counts as a visit.
+- Alerts (Settings → Litter-Robot, synced setting `cat_alerts`): weight = median of the last
+  7 days vs the 7 days ending `weightCompareDays` (default 14) earlier, each needing ≥3
+  weigh-ins, alert at ≥ `weightChangePercent` (default 5) either way, edge-triggered. Visits =
+  today's count above the cat's limit, once per cat per day. Automatic limit (blank setting):
+  max(2 × median, median + 3) visits/day over up to 14 full days, ≥3 days needed; the first
+  stored day is skipped as partial. With the real data: Big O 5, Norm 5, Scout 24.
+- Pets page: a card per cat with uPlot charts (`app/ui/chart.ts`, first use of uPlot; the
+  Health page graphs can reuse it): day's median weight and visits per day, from the first
+  stored day (at least a week, at most 30 days). Colors: dark-surface reference categorical
+  slots in name order, first three validated against `--surface` (#1e293b); never reused.

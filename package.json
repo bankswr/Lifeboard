@@ -25,7 +25,8 @@
     "lit-html": "^3.3.3",
     "papaparse": "^5.7.0",
     "qrcode": "^1.5.4",
-    "tough-cookie": "^6.0.2"
+    "tough-cookie": "^6.0.2",
+    "uplot": "^1.6.32"
   },
   "devDependencies": {
     "@capacitor/android": "^8.5.2",

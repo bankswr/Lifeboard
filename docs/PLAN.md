@@ -132,7 +132,14 @@ current intent, not a commitment to details.
      profiles appear to hold a weight history); if so, a weight trend per cat.
      **Investigated 2026-10-17** (agent-notes/2026-10-17-cat-weights.md): per-cat weigh-ins
      are available, but Whisker keeps only about 7 days of them; the robot's own log keeps
-     every weigh-in for a year or more, without saying which cat. Design to be agreed.
+     every weigh-in for a year or more, without saying which cat.
+     **Agreed 2026-10-17 (user):** store each cat's weigh-ins at every update, from now on
+     (no backfill from the robot's log: Scout and Big O used to weigh about the same, so
+     old readings can't be told apart by weight). On the Pets page, per cat: weight over
+     time and visits per day. Alerts, with thresholds in Settings: a weight change of 5%
+     or more (default) between recent weigh-ins and those two weeks earlier; and more
+     visits in a day than a per-cat limit (cats differ: Scout visits far more often).
+     Built 2026-10-17; live-verified the same day (113 weigh-ins stored for three cats).
 5. **Tasks & reminders**, with Google Tasks sync, plus the generic to-do lists
    (to-do lists ✅ built 2026-10-15, accepted by the user 2026-10-17). Tasks built 2026-10-16
    together with phase 6 as the Schedule page; reminders deferred (user), the only part left.

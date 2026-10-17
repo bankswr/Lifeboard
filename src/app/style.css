@@ -353,3 +353,8 @@ dialog.sheet h2 { margin: 0 0 4px; }
 .card-group { margin: 16px 0; }
 .card-group > .card-head .card-toggle h2 { font-size: 1.15rem; }
 .card-group > .card-body { margin-top: 0; }
+
+/* uPlot charts (ui/chart.ts): fill the card's width; the hover readout sits under the plot. */
+.chart { width: 100%; margin: 8px 0; }
+.chart .u-legend { color: var(--muted); font-size: 0.8rem; text-align: left; }
+.chart .u-legend .u-marker { border-radius: 2px; }

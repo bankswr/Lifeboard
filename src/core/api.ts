@@ -13,6 +13,7 @@ import { listDeviceStatuses } from "./devices.ts";
 import * as fountain from "./fountain.ts";
 import * as maintenance from "./maintenance.ts";
 import * as food from "./smartlife/food.ts";
+import { catSummaries, getCatSettings, saveCatSettings } from "./whisker/cats.ts";
 import { getLitterSettings, saveLitterSettings } from "./whisker/levels.ts";
 import { dailyHealth, recentNutrition } from "./health.ts";
 import { clearVerdict, setVerdict } from "./healthReview.ts";
@@ -178,6 +179,9 @@ export const api = {
   getStatus,
   getReadingTypes: async (_db: Db) => READING_TYPES,
   getLitterSettings,
+  getCats: (db: Db) => catSummaries(db),
+  getCatSettings,
+  saveCatSettings,
   saveLitterSettings,
   markFeederRefilled: (db: Db, feederId: string) => food.markRefilled(db, feederId),
   markAllFeedersRefilled: (db: Db) => food.markAllRefilled(db),

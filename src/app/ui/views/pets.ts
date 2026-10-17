@@ -1,21 +1,24 @@
-// Pets (#/pets, in the Details menu): the latest status of each Litter-Robot and feeder.
-// Monitor shows the same cards (deviceCards).
+// Pets (#/pets, in the Details menu): the latest status of each Litter-Robot and feeder,
+// then a card per cat with its weight and visits (core/whisker/cats.ts).
+// Monitor shows the same device cards (deviceCards).
 import { html } from "lit-html";
 import type { DeviceStatus } from "../../../core/devices.ts";
 import { nextMeal, type FeederStatus } from "../../../core/smartlife/feeder.ts";
 import type { FountainEstimate } from "../../../core/fountain.ts";
 import type { FoodEstimate } from "../../../core/smartlife/food.ts";
 import { drawerState, litterState, type LevelState, type LitterSettings } from "../../../core/whisker/levels.ts";
+import type { CatSummary } from "../../../core/whisker/cats.ts";
 import type { LitterRobotStatus } from "../../../core/whisker/status.ts";
 import { call } from "../../backend.ts";
 import { act, route } from "../app.ts";
 import { card } from "../card.ts";
+import { chartSlot, mountCharts, type ChartSpec } from "../chart.ts";
 import { formatTime } from "../format.ts";
 
 export const NO_DEVICES_HINT = html`<p class="muted">No connected devices yet. Sign in to Whisker or Smart Life under Settings → Connections.</p>`;
 
 route(/^\/pets$/, async () => {
-  const status = await call("getStatus");
+  const [status, cats] = await Promise.all([call("getStatus"), call("getCats")]);
   return {
     section: "pets",
     content: html`
@@ -24,9 +27,56 @@ route(/^\/pets$/, async () => {
       </header>
       ${status.devices.length === 0 ? NO_DEVICES_HINT : ""}
       ${deviceCards(status.devices, status)}
+      ${cats.length > 0 ? html`<h2 class="section-title">Cats</h2>` : ""}
+      ${cats.map((cat) => catCard(cat))}
     `,
+    mount: (signal) => mountCharts(catCharts(cats), signal),
   };
 });
+
+/**
+ * Each cat keeps one color on every chart, assigned by its place in name order (dark-surface
+ * steps of the reference categorical palette; the first three checked for color-blind
+ * separation on --surface).
+ */
+const CAT_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
+
+function catCard(cat: CatSummary) {
+  const change = cat.weightChange;
+  return card(
+    `cat-${cat.id}`,
+    cat.name,
+    html`
+      <p>
+        ${cat.recentWeight !== null ? html`<strong>${cat.recentWeight.toFixed(1)} lb</strong> <span class="muted small">7-day median</span>` : "No weigh-ins this week"}
+        ${change !== null
+          ? html` · <span>${change > 0 ? "+" : ""}${change.toFixed(1)}%</span> <span class="muted small">vs ${cat.weightCompareDays} days earlier</span>`
+          : html`<br><span class="muted small">Weight change shows once there are ${cat.weightCompareDays + 7} days of weigh-ins.</span>`}
+      </p>
+      ${chartSlot(`${cat.id}-weight`)}
+      <p>
+        <span class=${cat.visitLimit !== null && cat.todayVisits > cat.visitLimit ? "status error" : ""}>${cat.todayVisits} visit${cat.todayVisits === 1 ? "" : "s"} today</span>
+        <span class="muted small">
+          ${cat.visitLimit !== null ? `· alert above ${cat.visitLimit}${cat.visitLimitIsAuto ? " (automatic)" : ""}` : "· alert limit: learning"}
+        </span>
+      </p>
+      ${chartSlot(`${cat.id}-visits`)}
+      ${cat.latestAt ? html`<p class="muted small">Last weighed ${shortDateTime(cat.latestAt)}: ${cat.latestWeight!.toFixed(2)} lb</p>` : ""}
+    `,
+  );
+}
+
+function catCharts(cats: CatSummary[]): Record<string, ChartSpec> {
+  const specs: Record<string, ChartSpec> = {};
+  cats.forEach((cat, index) => {
+    // Colors are never reused: a ninth cat onward is drawn in the muted gray.
+    const color = CAT_COLORS[index] ?? "#94a3b8";
+    const dates = cat.days.map((day) => day.date);
+    specs[`${cat.id}-weight`] = { dates, values: cat.days.map((day) => day.weight), label: "Weight, lb (day's median)", color, kind: "line", decimals: 2 };
+    specs[`${cat.id}-visits`] = { dates, values: cat.days.map((day) => day.visits), label: "Visits", color, kind: "bars", decimals: 0 };
+  });
+  return specs;
+}
 
 interface DeviceContext {
   litterSettings: LitterSettings;

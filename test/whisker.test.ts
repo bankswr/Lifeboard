@@ -4,7 +4,8 @@ import { migrate } from "../src/core/db/schema.ts";
 import { listDeviceStatuses } from "../src/core/devices.ts";
 import { listRules, saveRule } from "../src/core/rules.ts";
 import { runUpdate } from "../src/core/updates.ts";
-import { WhiskerSignInError, type RawRobot, type WhiskerApi } from "../src/core/whisker/api.ts";
+import { WhiskerSignInError, type RawPet, type RawRobot, type WhiskerApi } from "../src/core/whisker/api.ts";
+import { catSummaries, checkCatAlerts, saveCatSettings, saveCats, DEFAULT_CAT_SETTINGS } from "../src/core/whisker/cats.ts";
 import { makeWhiskerIntegration } from "../src/core/whisker/integration.ts";
 import { checkLitterAlarms, DEFAULT_LITTER_SETTINGS, drawerState, litterState, saveLitterSettings } from "../src/core/whisker/levels.ts";
 import { litterRobotStatus } from "../src/core/whisker/status.ts";
@@ -30,7 +31,7 @@ describe("litterRobotStatus (pylitterbot's rules)", () => {
 });
 
 /** A pretend Whisker account. */
-function fakeWhisker(options: { password: string; refreshWorks: boolean; robot: () => RawRobot }) {
+function fakeWhisker(options: { password: string; refreshWorks: boolean; robot: () => RawRobot; pets?: RawPet[] }) {
   const calls: string[] = [];
   const api: WhiskerApi = {
     async signIn(_email, password) {
@@ -45,6 +46,9 @@ function fakeWhisker(options: { password: string; refreshWorks: boolean; robot: 
     },
     async robots() {
       return [options.robot()];
+    },
+    async pets() {
+      return options.pets ?? [];
     },
   };
   return { api, calls };
@@ -136,5 +140,63 @@ describe("litter levels", () => {
     expect(await db.all("SELECT id, title, due FROM task")).toEqual([
       { id: "auto-litter-LR4C000001-2026-10-16", title: "Clean the litter box", due: "2026-10-16" },
     ]);
+  });
+});
+
+describe("cats", () => {
+  // Local times, so day boundaries don't depend on the machine's time zone.
+  const now = new Date(2026, 9, 17, 20, 0);
+  /** Whisker's UTC timestamp without a zone, for a local time `daysAgo` days before `now`. */
+  const stamp = (daysAgo: number, hour = 12) =>
+    new Date(2026, 9, 17 - daysAgo, hour).toISOString().slice(0, 19);
+  const pet = (entries: [number, number, number?][]): RawPet => ({
+    petId: "pet-1", name: "Scout",
+    weightHistory: entries.map(([daysAgo, weight, hour]) => ({ weight, timestamp: stamp(daysAgo, hour) })),
+  });
+
+  it("stores each cat and new weigh-ins once, from either device", async () => {
+    const db = await newDb();
+    await saveCats(db, [pet([[1, 7.7], [0, 7.8]])]);
+    await saveCats(db, [pet([[1, 7.7], [0, 7.8]])]); // the same 7-day list again
+    expect(await db.all("SELECT name FROM cat")).toEqual([{ name: "Scout" }]);
+    expect(await db.all("SELECT weight_lbs FROM cat_weigh_in ORDER BY at")).toEqual([{ weight_lbs: 7.7 }, { weight_lbs: 7.8 }]);
+  });
+
+  it("alerts once when the weight changes by the set percentage", async () => {
+    const db = await newDb();
+    const earlier: [number, number][] = [15, 16, 17, 18].map((d) => [d, 10]);
+    await saveCats(db, [pet([...earlier, [1, 9.6], [2, 9.6], [3, 9.6]])]); // −4%
+    expect(await checkCatAlerts(db, now)).toEqual([]);
+    // Five more at another hour (new weigh-ins): the 7-day median drops to 9.0, −10%.
+    await saveCats(db, [pet([0, 1, 2, 3, 4].map((d) => [d, 9.0, 8]))]);
+    const alerts = await checkCatAlerts(db, now);
+    expect(alerts.map((a) => a.message)).toEqual(["Scout has lost 10.0% over 14 days (now ≈ 9.0 lb)."]);
+    expect(await checkCatAlerts(db, now)).toEqual([]); // no repeat while it stays changed
+  });
+
+  it("works out a visit limit from the cat's own days and alerts once a day above it", async () => {
+    const db = await newDb();
+    // 2 visits a day for 5 full days (the first stored day is partial and left out).
+    const history: [number, number, number][] = [6, 5, 4, 3, 2, 1].flatMap((d) => [[d, 8, 9], [d, 8, 15]] as [number, number, number][]);
+    await saveCats(db, [pet(history)]);
+    const [cat] = await catSummaries(db, now);
+    expect(cat).toMatchObject({ visitLimit: 5, visitLimitIsAuto: true }); // max(2 × 2, 2 + 3)
+
+    await saveCats(db, [pet([8, 9, 10, 11, 12, 13].map((hour) => [0, 8, hour]))]);
+    expect((await checkCatAlerts(db, now)).map((a) => a.message)).toEqual(["Scout has used the litter box 6 times today (limit 5)."]);
+    expect(await checkCatAlerts(db, now)).toEqual([]);
+
+    await saveCatSettings(db, { ...DEFAULT_CAT_SETTINGS, visitLimits: { "pet-1": 10 } });
+    expect((await catSummaries(db, now))[0]).toMatchObject({ visitLimit: 10, visitLimitIsAuto: false });
+    await expect(saveCatSettings(db, { ...DEFAULT_CAT_SETTINGS, visitLimits: { "pet-1": 2.5 } })).rejects.toThrow(/whole numbers/);
+  });
+
+  it("reads the cats at each update", async () => {
+    const site = fakeWhisker({ password: "pw", refreshWorks: true, robot: () => READY, pets: [pet([[0, 7.8]])] });
+    const whisker = makeWhiskerIntegration(site.api);
+    const db = await newDb();
+    await whisker.signIn!(db, "me@example.com", "pw");
+    await runUpdate(db, [whisker]);
+    expect(await db.all("SELECT cat_id, weight_lbs FROM cat_weigh_in")).toEqual([{ cat_id: "pet-1", weight_lbs: 7.8 }]);
   });
 });
