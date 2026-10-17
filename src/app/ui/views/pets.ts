@@ -74,8 +74,14 @@ function catCharts(cats: CatSummary[]): Record<string, ChartSpec> {
     // Colors are never reused: a ninth cat onward is drawn in the muted gray.
     const color = CAT_COLORS[index] ?? "#94a3b8";
     const dates = cat.days.map((day) => day.date);
-    specs[`${cat.id}-weight`] = { dates, values: cat.days.map((day) => day.weight), label: "Weight, lb (day's median)", color, kind: "line", decimals: 2 };
-    specs[`${cat.id}-visits`] = { dates, values: cat.days.map((day) => day.visits), label: "Visits", color, kind: "bars", decimals: 0 };
+    specs[`${cat.id}-weight`] = {
+      dates, decimals: 2, yRange: "span",
+      series: [{ label: "Weight, lb (day's median)", values: cat.days.map((day) => day.weight), color, kind: "line" }],
+    };
+    specs[`${cat.id}-visits`] = {
+      dates, decimals: 0, yRange: "zero", counts: true,
+      series: [{ label: "Visits", values: cat.days.map((day) => day.visits), color, kind: "bars" }],
+    };
   });
   return specs;
 }

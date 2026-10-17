@@ -1,24 +1,54 @@
 // Small time series charts with uPlot (the library the plan names for graphs, docs/PLAN.md).
 // A template places `chartSlot(id)`; the view's `mount` calls `mountCharts` with each slot's
-// data, which draws the charts and keeps them sized to their slot. One series per chart:
-// a cat's weight, a cat's visits. Hovering shows the day and value in the legend line.
+// data, which draws the charts and keeps them sized to their slot. Used by the Pets page (a
+// cat's weight and visits) and the Health page (several series per chart, one range shown
+// across all charts, and a cursor that moves across them together). Hovering shows the day
+// and each series' value in the legend under the plot.
 import { html } from "lit-html";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 
+export interface SeriesSpec {
+  label: string;
+  /** One value per date; null leaves a gap. */
+  values: (number | null)[];
+  color: string;
+  /** "points": dots only (raw readings); "bars": from zero. */
+  kind: "line" | "bars" | "points";
+  /** A dashed line, for targets. */
+  dashed?: boolean;
+  /** Join the line across missing days (default true). */
+  spanGaps?: boolean;
+  /** Dot size for points and lines, px. */
+  pointSize?: number;
+  /** Dots drawn as rings (for readings left out). */
+  hollow?: boolean;
+}
+
 export interface ChartSpec {
   /** Local dates, "YYYY-MM-DD", oldest first. */
   dates: string[];
-  /** One value per date; null leaves a gap. */
-  values: (number | null)[];
-  label: string;
-  color: string;
-  kind: "line" | "bars";
-  /** Digits after the decimal point in the hover readout. */
+  series: SeriesSpec[];
+  /** Digits after the decimal point in the hover readout and the y axis. */
   decimals: number;
+  /**
+   * "zero": from zero (counts, bars); "span": at least `minSpan` around the data (a weight that
+   * moves by tenths); "symmetric": centered on zero (deltas).
+   */
+  yRange: "zero" | "span" | "symmetric";
+  minSpan?: number;
+  /** Small whole-number counts (visits): ticks at whole steps only, so no two read the same. */
+  counts?: boolean;
+  /** Show only the last this many dates; the rest stay loaded. */
+  visibleDays?: number;
+  /** Charts with the same key share their cursor. */
+  syncKey?: string;
 }
 
-const HEIGHT = 140;
+const HEIGHT = 160;
+const HALF_DAY_S = 43_200;
+/** Card background (--surface), for hollow dots. */
+const SURFACE = "#1e293b";
 
 export function chartSlot(id: string) {
   return html`<div class="chart" data-chart=${id}></div>`;
@@ -36,24 +66,10 @@ export function mountCharts(specs: Record<string, ChartSpec>, signal: AbortSigna
   signal.addEventListener("abort", () => charts.forEach(([chart]) => chart.destroy()));
 }
 
-/** Half a day of room at each end, so the first and last bars aren't cut in half. */
-const dayRange: uPlot.Range.Function = (_u, min, max) => [min - 43_200, max + 43_200];
-
-/** Bars start at zero. */
-const barRange: uPlot.Range.Function = (_u, _min, max) => [0, Math.max(1, Math.ceil(max))];
-
-/** At least a 1-unit span around a line (a cat's weight moves by tenths of a pound). */
-const lineRange: uPlot.Range.Function = (_u, min, max) => {
-  if (min == null || max == null) return [0, 1];
-  const middle = (min + max) / 2;
-  const half = Math.max(0.5, (max - min) / 2 * 1.2);
-  return [middle - half, middle + half];
-};
-
 /** uPlot's x values are seconds; each date sits at its local midnight. */
 function data(spec: ChartSpec): uPlot.AlignedData {
   const seconds = spec.dates.map((date) => new Date(`${date}T00:00:00`).getTime() / 1000);
-  return [seconds, spec.values];
+  return [seconds, ...spec.series.map((series) => series.values)];
 }
 
 function options(spec: ChartSpec, width: number): uPlot.Options {
@@ -65,29 +81,56 @@ function options(spec: ChartSpec, width: number): uPlot.Options {
     width,
     height: HEIGHT,
     legend: { show: true, live: true },
-    cursor: { y: false, points: { size: 8 } },
-    scales: { x: { time: true, range: dayRange }, y: { range: spec.kind === "bars" ? barRange : lineRange } },
+    cursor: { y: false, points: { size: 8 }, ...(spec.syncKey ? { sync: { key: spec.syncKey } } : {}) },
+    scales: { x: { time: true, range: xRange(spec.visibleDays) }, y: { range: yRange(spec) } },
     axes: [
       { ...axis, values: (_u, ticks) => ticks.map((t) => new Date(t * 1000).toLocaleDateString([], { month: "short", day: "numeric" })) },
       {
         ...axis,
-        size: 44,
-        // Counts get whole-number steps only, so no two ticks read the same.
-        ...(spec.kind === "bars" ? { incrs: [1, 2, 5, 10, 20, 50] } : {}),
-        values: (_u, ticks) => ticks.map((t) => t.toFixed(spec.kind === "bars" ? 0 : 1)),
+        size: 48,
+        space: 22, // the plots are short; uPlot's default (30 px) leaves some with a single tick
+        ...(spec.counts ? { incrs: [1, 2, 5, 10, 20, 50, 100] } : {}),
+        // uPlot's own labels: as many decimals as the tick step needs (9.25, not a rounded 9.3).
       },
     ],
     series: [
       { label: "Day", value: (_u, t) => (t == null ? "" : new Date(t * 1000).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })) },
-      {
-        label: spec.label,
-        stroke: spec.color,
-        width: 2,
-        value: (_u, v) => (v == null ? "–" : v.toFixed(spec.decimals)),
-        ...(spec.kind === "bars"
-          ? { fill: spec.color, paths: uPlot.paths.bars!({ size: [0.6, 16], radius: 0.25 }), points: { show: false } }
-          : { points: { show: true, size: 5, fill: spec.color }, spanGaps: true }),
-      },
+      ...spec.series.map((series) => seriesOptions(series, spec.decimals)),
     ],
+  };
+}
+
+function seriesOptions(series: SeriesSpec, decimals: number): uPlot.Series {
+  const base: uPlot.Series = {
+    label: series.label,
+    stroke: series.color,
+    width: 2,
+    value: (_u, v) => (v == null ? "–" : v.toLocaleString([], { minimumFractionDigits: decimals, maximumFractionDigits: decimals })),
+  };
+  const dot = { size: series.pointSize ?? 5, fill: series.hollow ? SURFACE : series.color, stroke: series.color, width: series.hollow ? 2 : 1 };
+  if (series.kind === "bars") {
+    return { ...base, fill: series.color, fillTo: 0, paths: uPlot.paths.bars!({ size: [0.6, 16], radius: 0.25 }), points: { show: false } };
+  }
+  if (series.kind === "points") return { ...base, paths: () => null, points: { show: true, ...dot } };
+  const showDots = !series.dashed && series.pointSize !== 0;
+  return { ...base, dash: series.dashed ? [6, 4] : undefined, spanGaps: series.spanGaps ?? true, points: { show: showDots, ...dot } };
+}
+
+/** The last `visibleDays` dates (all when unset), with half a day of room at each end for bars. */
+function xRange(visibleDays: number | undefined): uPlot.Range.Function {
+  return (_u, min, max) => [visibleDays ? Math.max(min, max - (visibleDays - 1) * 86_400) - HALF_DAY_S : min - HALF_DAY_S, max + HALF_DAY_S];
+}
+
+function yRange(spec: ChartSpec): uPlot.Range.Function {
+  return (_u, min, max) => {
+    if (min == null || max == null) return [0, 1];
+    if (spec.yRange === "zero") return [0, Math.max(1, Math.ceil(max * 1.05))];
+    if (spec.yRange === "symmetric") {
+      const reach = Math.max(1, Math.abs(min), Math.abs(max)) * 1.1;
+      return [-reach, reach];
+    }
+    const middle = (min + max) / 2;
+    const half = Math.max((spec.minSpan ?? 1) / 2, ((max - min) / 2) * 1.15);
+    return [middle - half, middle + half];
   };
 }

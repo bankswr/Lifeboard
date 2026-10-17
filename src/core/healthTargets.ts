@@ -5,13 +5,16 @@
 // change later. Today's row is rewritten while today's inputs change (new data, a verdict).
 import { addDays, localDate } from "./dates.ts";
 import { get, type Db } from "./db/types.ts";
-import { checkIntake, computeTargets, AVERAGE_DAYS, type EnergyDay, type Intake, type IntakeCheck, type TargetSettings, type Targets } from "./energy.ts";
+import {
+  checkIntake, computeTargets, fillMissingSteps, AVERAGE_DAYS, type EnergyDay, type Intake, type IntakeCheck, type TargetSettings, type Targets,
+} from "./energy.ts";
 import { healthDays, type HealthDay } from "./health.ts";
 import { alertNewFlags, loadVerdicts, reviewDays, type Flag, type FlagSettings } from "./healthReview.ts";
 import type { NewAlert } from "./rules.ts";
 import { saveRecord } from "./sync/records.ts";
+import { DEFAULT_WORKOUT_SETTINGS, detectWorkouts, workoutEnergy, type Workout, type WorkoutSettings } from "./workouts.ts";
 
-export type HealthSettings = TargetSettings & FlagSettings;
+export type HealthSettings = TargetSettings & FlagSettings & WorkoutSettings;
 
 export const DEFAULT_HEALTH_SETTINGS: HealthSettings = {
   goalLbsPerWeek: 0,
@@ -28,6 +31,7 @@ export const DEFAULT_HEALTH_SETTINGS: HealthSettings = {
   maxSteps: 40000,
   weightJumpLbs: 3,
   bodyFatJumpPoints: 2,
+  ...DEFAULT_WORKOUT_SETTINGS,
 };
 
 const SETTING_ID = "health_targets";
@@ -52,6 +56,10 @@ export async function saveHealthSettings(db: Db, settings: HealthSettings): Prom
     ["maxSteps", "The step limit", 1000, 200000],
     ["weightJumpLbs", "The weigh-in limit", 0.5, 50],
     ["bodyFatJumpPoints", "The body fat limit", 0.5, 20],
+    ["workoutHeartRateAbove", "The workout heart rate", 5, 100],
+    ["workoutMinMinutes", "The workout length", 10, 240],
+    ["workoutMaxStepsPerHour", "The workout step pace", 0, 20000],
+    ["workoutMets", "The workout METs", 1, 15],
   ];
   for (const [key, label, min, max] of numbers) {
     const value = settings[key] as number;
@@ -93,9 +101,7 @@ export interface DayComparison {
 export async function analyzeHealth(db: Db, today = localDate()): Promise<HealthAnalysis> {
   const settings = await getHealthSettings(db);
   const start = addDays(today, -(settings.windowDays + 2 * AVERAGE_DAYS));
-  const days = await healthDays(db, start, addDays(today, -1));
-  const firstLogged = (await get(db, "SELECT MIN(date) AS date FROM nutrition_day WHERE deleted = 0 AND calories > 0"))?.date ?? null;
-  const { flags, cleaned } = reviewDays(days, await loadVerdicts(db), settings, settings.fallbackActivityFactor, firstLogged);
+  const { days, flags, cleaned } = await prepareDays(db, start, addDays(today, -1), settings);
 
   const pendingCount = flags.filter((flag) => flag.verdict === null).length;
   const targets = computeTargets(today, cleaned, settings);
@@ -105,6 +111,61 @@ export async function analyzeHealth(db: Db, today = localDate()): Promise<Health
   if (targets) await saveTargets(db, targets);
   const yesterday = await compareYesterday(db, today, days, cleaned, settings);
   return { targets, flags: flags.reverse(), pendingCount, yesterday, settings };
+}
+
+export interface PreparedDays {
+  /** As stored, newest first. */
+  days: HealthDay[];
+  flags: Flag[];
+  /** Ready for the estimate: flagged items left out, missing steps filled in, workout energy added. */
+  cleaned: EnergyDay[];
+  workouts: Workout[];
+}
+
+/**
+ * Loads `start`..`end` and gets the days ready for the calculations: the review (flags and
+ * verdicts), the typical day for days without steps, and each day's workout energy.
+ */
+export async function prepareDays(db: Db, start: string, end: string, settings: HealthSettings): Promise<PreparedDays> {
+  const days = await healthDays(db, start, end);
+  const firstLogged = (await get(db, "SELECT MIN(date) AS date FROM nutrition_day WHERE deleted = 0 AND calories > 0"))?.date ?? null;
+  const { flags, cleaned } = reviewDays(days, await loadVerdicts(db), settings, settings.fallbackActivityFactor, firstLogged);
+  const workouts = await loadWorkouts(db, start, end, settings);
+  const weightOn = latestWeight(cleaned);
+  const workoutKcal = new Map<string, number>();
+  for (const workout of workouts) {
+    const weight = weightOn(workout.date);
+    if (weight !== null) workoutKcal.set(workout.date, (workoutKcal.get(workout.date) ?? 0) + workoutEnergy(workout, weight, settings));
+  }
+  const withWorkouts = fillMissingSteps(cleaned).map((day) => ({ ...day, workoutKcal: workoutKcal.get(day.date) ?? 0 }));
+  return { days, flags, cleaned: withWorkouts, workouts };
+}
+
+/** The latest valid weigh-in on or up to 30 days before a date, for sizing workouts. */
+function latestWeight(cleaned: EnergyDay[]): (date: string) => number | null {
+  const weights = new Map(cleaned.filter((d) => d.weightLbs !== null).map((d) => [d.date, d.weightLbs!]));
+  return (date) => {
+    for (let back = 0; back <= 30; back++) {
+      const weight = weights.get(addDays(date, -back));
+      if (weight !== undefined) return weight;
+    }
+    return null;
+  };
+}
+
+/** Workouts found in the stored heart rate between two dates (core/workouts.ts). */
+export async function loadWorkouts(db: Db, start: string, end: string, settings: WorkoutSettings): Promise<Workout[]> {
+  const samples = (await db.all(
+    "SELECT day, start_time, value FROM health_point WHERE type = 'heart-rate' AND day BETWEEN ? AND ? AND deleted = 0",
+    [start, end],
+  )).map((row) => ({ day: row.day, time: Date.parse(row.start_time), bpm: row.value }));
+  const resting = new Map<string, number>((await db.all(
+    "SELECT day, AVG(value) AS value FROM health_point WHERE type = 'daily-resting-heart-rate' AND day BETWEEN ? AND ? AND deleted = 0 GROUP BY day",
+    [start, end],
+  )).map((row) => [row.day, row.value]));
+  const steps = (await db.all("SELECT * FROM health_point WHERE type = 'steps' AND day BETWEEN ? AND ? AND deleted = 0", [start, end]))
+    .map((p) => ({ day: p.day, start: Date.parse(p.start_time), end: Date.parse(p.end_time), count: p.value, source: p.source }));
+  return detectWorkouts(samples, resting, steps, settings);
 }
 
 /**

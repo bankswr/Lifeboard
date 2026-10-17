@@ -19,6 +19,7 @@ import { queueChange } from "../schedule/edit.ts";
 import { deleteRecord, saveRecord } from "../sync/records.ts";
 import type { LevelState } from "../whisker/levels.ts";
 import type { FeederStatus, Meal } from "./feeder.ts";
+import { median } from "../energy.ts";
 
 export interface FeederSettings {
   /** Days of food left at which the bar turns yellow, and red (alarm). */
@@ -72,12 +73,8 @@ export function portionsPerDay(meals: Meal[]): number {
   return week / 7;
 }
 
-export function median(values: number[]): number | null {
-  if (values.length === 0) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-}
+// median moved to core/energy.ts; re-exported for the callers that import it from here.
+export { median };
 
 // ---------- settings ----------
 

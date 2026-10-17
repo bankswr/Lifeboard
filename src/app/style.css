@@ -358,3 +358,15 @@ dialog.sheet h2 { margin: 0 0 4px; }
 .chart { width: 100%; margin: 8px 0; }
 .chart .u-legend { color: var(--muted); font-size: 0.8rem; text-align: left; }
 .chart .u-legend .u-marker { border-radius: 2px; }
+
+/* Health page (views/health.ts): compact range and tab switches, the "How this is worked out"
+   fold-outs, and readings left out of the calculations. */
+.small-segmented { margin: 4px 0 12px; }
+.small-segmented label { padding: 4px 8px; font-size: 0.85rem; }
+.small-segmented input { margin: 0; }
+.label-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.label-row .small-segmented { margin: 12px 0 0; }
+.explained { margin-top: 8px; }
+.explained > summary { color: var(--blue); cursor: pointer; font-size: 0.9rem; }
+.explained p { margin: 6px 0; }
+.struck { text-decoration: line-through; }

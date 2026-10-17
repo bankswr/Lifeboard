@@ -18,6 +18,7 @@ import { litterEstimates } from "./whisker/estimates.ts";
 import { getLitterSettings, saveLitterSettings } from "./whisker/levels.ts";
 import { dailyHealth, recentNutrition } from "./health.ts";
 import { clearVerdict, setVerdict } from "./healthReview.ts";
+import { healthPage } from "./healthPage.ts";
 import { analyzeHealth, getHealthSettings, saveHealthSettings, targetHistory } from "./healthTargets.ts";
 import { allowCronometerRepull } from "./cronometer/integration.ts";
 import { allowGoogleHealthRepull } from "./google/integration.ts";
@@ -215,6 +216,7 @@ export const api = {
   recentNutrition,
   dailyHealth,
   analyzeHealth: (db: Db) => analyzeHealth(db),
+  getHealthPage: (db: Db) => healthPage(db),
   getHealthSettings,
   saveHealthSettings,
   setHealthVerdict: setVerdict,

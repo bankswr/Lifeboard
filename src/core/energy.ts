@@ -46,6 +46,10 @@ export interface EnergyDay {
   /** Intake; null when the day doesn't count toward the fit (not logged, flagged, rejected). */
   calories: number | null;
   steps: number | null;
+  /** True when `steps` is the typical day filled in for a day without steps. */
+  stepsEstimated?: boolean;
+  /** Net energy of the day's detected workouts beyond their steps (core/workouts.ts). */
+  workoutKcal?: number;
   weightLbs: number | null;
   bodyFatPercent: number | null;
 }
@@ -65,10 +69,21 @@ export interface Targets {
   weightTrendLbsPerWeek: number | null;
   /** Average daily expenditure over the window: what the targets are built on. */
   expenditure: number;
-  /** The day before's own expenditure, spread by its steps; null without a fit or steps. */
+  /** The day before's own expenditure, spread by its steps and workouts; null without a fit or steps. */
   previousDayExpenditure: number | null;
-  /** Expenditure besides steps, as a multiple of BMR (fitted); null on the fallback. */
+  /** Expenditure besides steps and workouts, as a multiple of BMR (fitted); null on the fallback. */
   activityMultiplier: number | null;
+  /**
+   * The fit's parts, for "How this is worked out" (added 2026-10-17; absent from targets saved
+   * before then): average logged intake, energy stored per day by the weight trend, and the
+   * window's average step and workout energy. null on the fallback.
+   */
+  averageIntake?: number | null;
+  storedPerDay?: number | null;
+  averageStepKcal?: number | null;
+  averageWorkoutKcal?: number | null;
+  /** The day before's steps were the typical day filled in. */
+  previousDayStepsEstimated?: boolean;
   windowDays: number;
   /** Days in the window with usable intake. */
   validDays: number;
@@ -137,6 +152,14 @@ export function mean(values: number[]): number {
   return values.reduce((a, b) => a + b, 0) / values.length;
 }
 
+/** The middle value (mean of the two middle ones for an even count); null for no values. */
+export function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
 // ---------- the estimate ----------
 
 /**
@@ -173,7 +196,7 @@ export function computeTargets(date: string, days: EnergyDay[], settings: Target
 
   const previous = byDate.get(lastDay);
   const previousDayExpenditure = fit && previous?.steps != null
-    ? fit.activityMultiplier * bmr + stepEnergy(previous.steps, currentWeight)
+    ? fit.activityMultiplier * bmr + stepEnergy(previous.steps, currentWeight) + (previous.workoutKcal ?? 0)
     : null;
 
   const calories = expenditure + (settings.goalLbsPerWeek * KCAL_PER_LB) / 7;
@@ -197,6 +220,11 @@ export function computeTargets(date: string, days: EnergyDay[], settings: Target
     expenditure,
     previousDayExpenditure,
     activityMultiplier: fit?.activityMultiplier ?? null,
+    averageIntake: fit?.averageIntake ?? null,
+    storedPerDay: fit?.storedPerDay ?? null,
+    averageStepKcal: fit?.averageStepKcal ?? null,
+    averageWorkoutKcal: fit?.averageWorkoutKcal ?? null,
+    previousDayStepsEstimated: previous?.stepsEstimated === true,
     windowDays: settings.windowDays,
     validDays: windowDates.filter((d) => isLogged(byDate.get(d))).length,
     calories,
@@ -217,6 +245,10 @@ interface Fit {
   expenditure: number;
   weightTrendPerDay: number;
   activityMultiplier: number;
+  averageIntake: number;
+  storedPerDay: number;
+  averageStepKcal: number;
+  averageWorkoutKcal: number;
 }
 
 /**
@@ -247,22 +279,53 @@ function fitExpenditure(
     if (split === null) return null;
     storedPerDay = split.fatPerDay * KCAL_PER_LB_FAT + split.leanPerDay * KCAL_PER_LB_LEAN;
   }
-  const expenditure = mean(intakes) - storedPerDay;
+  const averageIntake = mean(intakes);
+  const expenditure = averageIntake - storedPerDay;
 
-  // Each day's BMR and step energy from that day's averages.
+  // Each day's BMR, step energy and workout energy, from that day's averages.
   const bmrs: number[] = [];
   const stepKcal: number[] = [];
+  const workoutKcal: number[] = [];
   for (const d of windowDates) {
     const w = weight.get(d)!.value;
     const bf = bodyFat.get(d)!.value;
     if (w === null || bf === null) continue;
     bmrs.push(katchMcArdle(w * (1 - bf / 100)));
-    const steps = byDate.get(d)?.steps;
-    if (steps != null) stepKcal.push(stepEnergy(steps, w));
+    const day = byDate.get(d);
+    if (day?.steps != null) stepKcal.push(stepEnergy(day.steps, w));
+    workoutKcal.push(day?.workoutKcal ?? 0);
   }
   const averageStepKcal = stepKcal.length ? mean(stepKcal) : 0;
-  return { expenditure, weightTrendPerDay, activityMultiplier: (expenditure - averageStepKcal) / mean(bmrs) };
+  const averageWorkoutKcal = workoutKcal.length ? mean(workoutKcal) : 0;
+  return {
+    expenditure, weightTrendPerDay, averageIntake, storedPerDay, averageStepKcal, averageWorkoutKcal,
+    activityMultiplier: (expenditure - averageStepKcal - averageWorkoutKcal) / mean(bmrs),
+  };
 }
+
+/** Days without steps in the median of these many days before them (the typical day). */
+const TYPICAL_DAY_SPAN = 14;
+const TYPICAL_DAY_MIN_VALUES = 3;
+
+/**
+ * Fills each day without steps with the typical day: the median of the measured steps in the
+ * 14 days before it (user, 2026-10-17), marked as estimated. Days with fewer than 3 measured
+ * days before them stay empty. Returns new rows; `days` may be in any order.
+ */
+export function fillMissingSteps(days: EnergyDay[]): EnergyDay[] {
+  const measured = new Map(days.filter((d) => d.steps !== null && !d.stepsEstimated).map((d) => [d.date, d.steps!]));
+  return days.map((day) => {
+    if (day.steps !== null) return day;
+    const before: number[] = [];
+    for (let back = 1; back <= TYPICAL_DAY_SPAN; back++) {
+      const steps = measured.get(addDays(day.date, -back));
+      if (steps !== undefined) before.push(steps);
+    }
+    if (before.length < TYPICAL_DAY_MIN_VALUES) return day;
+    return { ...day, steps: Math.round(median(before)!), stepsEstimated: true };
+  });
+}
+
 
 /** Slopes of fat mass and lean mass (lb/day), from days with fresh weight and body fat averages. */
 function splitTrend(
@@ -321,7 +384,9 @@ export interface IntakeCheck {
  * it at or below for a loss goal, at or above for a gain goal, and within ± the tolerance for
  * maintenance.
  */
-export function checkIntake(intake: Intake, targets: Targets, maintenanceTolerancePercent: number): IntakeCheck {
+export function checkIntake(
+  intake: Intake, targets: Pick<Targets, "calories" | "proteinG" | "fatG" | "goalLbsPerWeek">, maintenanceTolerancePercent: number,
+): IntakeCheck {
   const goal = targets.goalLbsPerWeek;
   let calories: boolean;
   if (goal < 0) calories = intake.calories <= targets.calories;

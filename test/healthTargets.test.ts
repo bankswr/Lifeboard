@@ -6,6 +6,7 @@ import {
 } from "../src/core/energy.ts";
 import { replaceHealthPoints, saveNutritionDays, type HealthDay } from "../src/core/health.ts";
 import { alertNewFlags, reviewDays, setVerdict, type Verdict } from "../src/core/healthReview.ts";
+import { healthPage } from "../src/core/healthPage.ts";
 import { analyzeHealth, DEFAULT_HEALTH_SETTINGS, saveHealthSettings, targetHistory } from "../src/core/healthTargets.ts";
 import { openNodeDb } from "../src/desktop/db/nodeSqlite.ts";
 
@@ -169,6 +170,25 @@ describe("analyzeHealth (database)", () => {
     await saveHealthSettings(db, { ...DEFAULT_HEALTH_SETTINGS, goalLbsPerWeek: 1 });
     await analyzeHealth(db, TODAY);
     expect((await targetHistory(db))[0].targets.goalLbsPerWeek).toBe(1);
+  });
+
+  it("gives the Health page each day with the targets that applied, saved or worked out afterwards", async () => {
+    const db = await seededDb();
+    // A weigh-in far off the average: flagged, awaiting review.
+    const odd = addDays(TODAY, -3);
+    await replaceHealthPoints(db, "weight", `${odd}T00:00:00Z`, `${addDays(odd, 1)}T00:00:00Z`, [
+      { id: `weight-${odd}`, type: "weight", day: odd, startTime: `${odd}T12:00:00Z`, endTime: `${odd}T12:00:00Z`, value: 210 / 0.00220462262185, source: "scale" },
+    ]);
+    const page = await healthPage(db, TODAY);
+    expect(page.days).toHaveLength(90);
+    expect(page.days.at(-1)!.date).toBe(TODAY);
+    expect(page.days.at(-1)!.targets!.workedOut).toBe(false); // saved by today's analysis
+    const yesterday = page.days.at(-2)!;
+    expect(yesterday.targets!.workedOut).toBe(true);
+    expect(yesterday.intake!.calories).toBe(2000);
+    expect(yesterday.met).not.toBeNull();
+    expect(yesterday.expenditureSimple).toBeCloseTo(2350, -1);
+    expect(page.days.find((d) => d.date === odd)!.weightState).toBe("pending");
   });
 
   it("rejects out-of-range settings and accepting an unlogged day", async () => {

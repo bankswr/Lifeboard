@@ -65,6 +65,18 @@ route(/^\/health-settings$/, async () => {
           </div>
           <p class="muted small">Flagged items appear in the alerts and are left out of the calculations until accepted on the Health page.</p>
         </fieldset>
+        <fieldset>
+          <legend>Workouts from heart rate</legend>
+          <div class="field-row">
+            ${number("workoutHeartRateAbove", "Heart rate above resting by bpm", "1")}
+            ${number("workoutMinMinutes", "For at least minutes", "10")}
+          </div>
+          <div class="field-row">
+            ${number("workoutMaxStepsPerHour", "Under steps per hour", "100")}
+            ${number("workoutMets", "Effort, METs", "0.5")}
+          </div>
+          <p class="muted small">Adds effort steps miss, such as lifting. Faster stepping is a walk, which steps already count. Energy = (METs − 1) × weight × time, minus the steps taken meanwhile; 3.5 METs is typical resistance training.</p>
+        </fieldset>
         <button type="submit">Save</button>
       </form>
       <section class="card">
@@ -102,6 +114,10 @@ async function save(event: SubmitEvent) {
       maxSteps: value("maxSteps"),
       weightJumpLbs: value("weightJumpLbs"),
       bodyFatJumpPoints: value("bodyFatJumpPoints"),
+      workoutHeartRateAbove: value("workoutHeartRateAbove"),
+      workoutMinMinutes: value("workoutMinMinutes"),
+      workoutMaxStepsPerHour: value("workoutMaxStepsPerHour"),
+      workoutMets: value("workoutMets"),
     });
     message = "Saved.";
   } catch (error) {

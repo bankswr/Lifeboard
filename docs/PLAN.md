@@ -187,7 +187,8 @@ current intent, not a commitment to details.
      activity proxy: they spread the window's expenditure over its days. A given day's steps
      are informational and don't change that day's target.
    - **Heart rate:** pulled from Google Health (samples and daily resting heart rate).
-     **Decided 2026-10-17 (user; investigation in agent-notes/2026-10-17-heart-rate-vs-steps.md):**
+     **Decided 2026-10-17 (user; investigation in agent-notes/2026-10-17-heart-rate-vs-steps.md;
+     built the same day, see agent-notes/2026-10-17-health-page.md):**
      steps stay the main activity measure. Heart rate only adds workouts steps miss (the
      user lifts about 4 mornings a week, ~1,100 steps an hour at ~40 bpm above rest):
      - **Detection:** a run of 10-minute heart-rate samples at or above resting + 30 bpm,
@@ -229,7 +230,9 @@ current intent, not a commitment to details.
      totals under the targets saved for that day. Met ones are green: protein and fat at or
      above target; calories at or below for a loss goal, at or above for a gain goal, within
      ± a tolerance for maintenance (setting, default 5%). Carbs aren't judged.
-   - **Later, with the Health page work (not started; user, 2026-10-16):**
+   - **Health page work (user, 2026-10-16; built 2026-10-17 with the heart-rate decisions
+     above, see agent-notes/2026-10-17-health-page.md; weight and body fat are two graphs,
+     since a chart has one axis):**
      - **Data table, tabbed:** totals (eaten, highlighted by targets hit, with the same rules
        as Monitor) and deltas (eaten − target). About the past week, with an option to look
        further back through the history. Above it, a summary of days on target (e.g.
