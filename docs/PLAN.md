@@ -143,6 +143,16 @@ current intent, not a commitment to details.
 5. **Tasks & reminders**, with Google Tasks sync, plus the generic to-do lists
    (to-do lists ✅ built 2026-10-15, accepted by the user 2026-10-17). Tasks built 2026-10-16
    together with phase 6 as the Schedule page; reminders deferred (user), the only part left.
+   **Reminders, planned 2026-10-17 (user; not started):**
+   - **What:** tasks that have a (Lifeboard-only) time, not done. Not calendar events
+     (Google Calendar already notifies), no morning summary, nothing for date-only tasks.
+   - **Where:** the phone only, as notifications scheduled in advance with Android's local
+     notifications, so they arrive with the app closed. Lifeboard reschedules them each time
+     the phone opens, updates or syncs; a task added or changed on the desktop gets its
+     reminder once the phone next syncs.
+   - **When:** at the task's time, no lead time.
+   - **Buttons:** Done (marks the task done; it reaches Google through the desktop at the
+     next sync) and Snooze (10 minutes). Android opens the app briefly to run a button.
 6. ✅ **Calendar**, with Google Calendar sync. Built 2026-10-16 as the Schedule page (see
    agent-notes/2026-10-16-schedule.md); live-verified 2026-10-16 against the real account
    (events and tasks on Monitor).
@@ -278,7 +288,7 @@ current intent, not a commitment to details.
 - **Schedule (user, 2026-10-16):** per day tasks, then all-day, then timed events; overdue
   tasks on today, highlighted; done tasks crossed out; tasks may have a Lifeboard-only time;
   main calendar only, others added in Settings → Calendars; all task lists; repeating-event
-  edits for this / this and following / all. Reminders later.
+  edits for this / this and following / all. Reminders: see phase 5.
 - **Lists (user, 2026-10-16):** two kinds. To-do lists: ticked items are crossed out and
   cleared when the app next loads. Prototype lists: standard items whose checkboxes select
   items to copy into other lists. Items can be copied singly, by selection or all at once.
