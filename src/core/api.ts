@@ -57,8 +57,17 @@ async function getSyncSettings(db: Db): Promise<SyncSettings> {
 }
 
 async function saveSyncSettings(db: Db, desktopAddress: string, syncKey: string): Promise<void> {
-  await setMeta(db, "desktop_address", desktopAddress.trim().replace(/\/+$/, ""));
+  await setMeta(db, "desktop_address", normalizeDesktopAddress(desktopAddress));
   await setMeta(db, "sync_key", syncKey.trim());
+}
+
+/**
+ * "192.168.86.249:5180" → "http://192.168.86.249:5180": without a scheme the phone can't make
+ * a request at all, which looked like an unreachable desktop. Trailing slashes are dropped.
+ */
+export function normalizeDesktopAddress(address: string): string {
+  const trimmed = address.trim().replace(/\/+$/, "");
+  return trimmed && !/^https?:\/\//i.test(trimmed) ? `http://${trimmed}` : trimmed;
 }
 
 /** Runs an update now and shows notifications for any new alerts. */
