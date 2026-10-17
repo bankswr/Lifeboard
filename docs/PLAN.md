@@ -130,6 +130,9 @@ current intent, not a commitment to details.
      Litter-Robot takes, for the Pets screen. Only the latest `catWeight` is read so far.
      First check whether Whisker keeps a weight per visit or per pet (pylitterbot's pet
      profiles appear to hold a weight history); if so, a weight trend per cat.
+     **Investigated 2026-10-17** (agent-notes/2026-10-17-cat-weights.md): per-cat weigh-ins
+     are available, but Whisker keeps only about 7 days of them; the robot's own log keeps
+     every weigh-in for a year or more, without saying which cat. Design to be agreed.
 5. **Tasks & reminders**, with Google Tasks sync, plus the generic to-do lists
    (to-do lists ✅ built 2026-10-15, accepted by the user 2026-10-17). Tasks built 2026-10-16
    together with phase 6 as the Schedule page; reminders deferred (user), the only part left.
