@@ -14,6 +14,7 @@ import * as fountain from "./fountain.ts";
 import * as maintenance from "./maintenance.ts";
 import * as food from "./smartlife/food.ts";
 import { catSummaries, getCatSettings, saveCatSettings } from "./whisker/cats.ts";
+import { litterEstimates } from "./whisker/estimates.ts";
 import { getLitterSettings, saveLitterSettings } from "./whisker/levels.ts";
 import { dailyHealth, recentNutrition } from "./health.ts";
 import { clearVerdict, setVerdict } from "./healthReview.ts";
@@ -79,6 +80,7 @@ async function getStatus(db: Db) {
     alerts: await rules.recentAlerts(db),
     devices: await listDeviceStatuses(db),
     litterSettings: await getLitterSettings(db),
+    litterEstimates: await litterEstimates(db),
     foodEstimates: await food.estimateAllFood(db),
     fountain: await fountain.estimateFountain(db),
   };

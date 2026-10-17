@@ -257,6 +257,18 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
   );
   CREATE INDEX cat_weigh_in_cat ON cat_weigh_in (cat_id, at);
   `,
+  // 18: Litter-Robot drawer and litter levels at each update, for the time estimates
+  // (core/whisker/estimates.ts). Synced, so the phone can estimate from the desktop's readings.
+  `
+  CREATE TABLE litter_level (
+    ${syncColumns},
+    serial TEXT NOT NULL,
+    at TEXT NOT NULL,
+    drawer REAL NOT NULL,
+    litter REAL NOT NULL
+  );
+  CREATE INDEX litter_level_serial ON litter_level (serial, at);
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

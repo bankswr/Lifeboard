@@ -280,7 +280,8 @@ current intent, not a commitment to details.
    **Litter-Robot estimates (new):** the drawer level is recorded at each update; from its
    rise since the drawer was last emptied, Lifeboard estimates when it reaches the alarm
    level (Settings → Litter-Robot). Likewise when the litter falls to its alarm level.
-   Shown on the Pets page as well.
+   Shown on the Pets page as well. (Built 2026-10-17 ahead of the widgets; see
+   agent-notes/2026-10-17-litter-estimates.md.)
    Widgets are display only apart from list ticks, like the rest of Lifeboard's device
    handling (see "No device control").
 9. **Finances** (stretch). Not in the 2026-10-17 build batch (user: pin down the base

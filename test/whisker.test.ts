@@ -8,6 +8,7 @@ import { WhiskerSignInError, type RawPet, type RawRobot, type WhiskerApi } from 
 import { catSummaries, checkCatAlerts, saveCatSettings, saveCats, DEFAULT_CAT_SETTINGS } from "../src/core/whisker/cats.ts";
 import { makeWhiskerIntegration } from "../src/core/whisker/integration.ts";
 import { checkLitterAlarms, DEFAULT_LITTER_SETTINGS, drawerState, litterState, saveLitterSettings } from "../src/core/whisker/levels.ts";
+import { estimateLitter, litterEstimates, recordLitterLevels } from "../src/core/whisker/estimates.ts";
 import { litterRobotStatus } from "../src/core/whisker/status.ts";
 import { openNodeDb } from "../src/desktop/db/nodeSqlite.ts";
 
@@ -198,5 +199,47 @@ describe("cats", () => {
     await whisker.signIn!(db, "me@example.com", "pw");
     await runUpdate(db, [whisker]);
     expect(await db.all("SELECT cat_id, weight_lbs FROM cat_weigh_in")).toEqual([{ cat_id: "pet-1", weight_lbs: 7.8 }]);
+  });
+});
+
+describe("Litter-Robot estimates", () => {
+  const start = Date.parse("2026-10-10T00:00:00Z");
+  /** A reading `hours` after the start. */
+  const reading = (hours: number, drawer: number, litter: number) => ({ at: new Date(start + hours * 3_600_000).toISOString(), drawer, litter });
+
+  it("projects the drawer's rise since it was emptied to the alarm level", () => {
+    // Full drawer, emptied at hour 10, then +10 points a day.
+    const readings = [reading(0, 80, 60), reading(5, 85, 60), reading(10, 5, 60), reading(34, 15, 60), reading(58, 25, 60)];
+    const { drawer } = estimateLitter("LR", readings, DEFAULT_LITTER_SETTINGS);
+    expect(drawer.ratePerDay).toBeCloseTo(10);
+    // From 25% at hour 58, 65 more points at 10 a day = 6.5 days.
+    expect(drawer.at).toBe(new Date(start + (58 + 6.5 * 24) * 3_600_000).toISOString());
+  });
+
+  it("projects the litter's fall since it was refilled, and says when a level is already there", () => {
+    const readings = [reading(0, 10, 30), reading(1, 10, 90), reading(25, 10, 80), reading(49, 10, 70)];
+    const { litter } = estimateLitter("LR", readings, DEFAULT_LITTER_SETTINGS);
+    expect(litter.ratePerDay).toBeCloseTo(10);
+    expect(litter.at).toBe(new Date(start + (49 + 5 * 24) * 3_600_000).toISOString()); // 70 → 20 at 10 a day
+    expect(estimateLitter("LR", [reading(0, 95, 50)], DEFAULT_LITTER_SETTINGS).drawer).toMatchObject({ reached: true, at: null });
+  });
+
+  it("waits for enough history and a real rate before estimating", () => {
+    const flat = [reading(0, 20, 50), reading(24, 20, 50)];
+    expect(estimateLitter("LR", flat, DEFAULT_LITTER_SETTINGS).drawer.at).toBeNull();
+    const short = [reading(0, 20, 50), reading(2, 30, 50)];
+    expect(estimateLitter("LR", short, DEFAULT_LITTER_SETTINGS).drawer.at).toBeNull();
+  });
+
+  it("records readings at most every half hour per robot", async () => {
+    const db = await newDb();
+    const robot = litterRobotStatus(READY);
+    const t = new Date("2026-10-10T00:00:00Z");
+    await recordLitterLevels(db, [robot], t);
+    await recordLitterLevels(db, [robot], new Date(t.getTime() + 10 * 60_000));
+    await recordLitterLevels(db, [{ ...robot, drawerLevel: 60 }], new Date(t.getTime() + 7 * 3_600_000));
+    expect(await db.all("SELECT drawer FROM litter_level ORDER BY at")).toEqual([{ drawer: 40 }, { drawer: 60 }]);
+    const estimates = await litterEstimates(db);
+    expect(estimates[robot.serial].drawer.ratePerDay).toBeCloseTo(20 / 7 * 24);
   });
 });
