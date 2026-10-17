@@ -164,13 +164,15 @@ current intent, not a commitment to details.
    body fat and steps. Refinements are planned in a later session.
    (Built 2026-10-15 ahead of order while blocked elsewhere; live-verified 2026-10-15.
    Google sign-in is desktop-only so far.) Checked off by the user 2026-10-17.
-   **Phone Google sign-in as a backup (user, 2026-10-17; not started):** the phone signs
+   **Phone Google sign-in as a backup (user, 2026-10-17; built 2026-10-17, waiting for the
+   user's Android OAuth client; agent-notes/2026-10-17-phone-google-sign-in.md):** the phone signs
    in to Google with Android's own sign-in (Google Play services keeps the grant, so no
    refresh token is stored and there's no 7-day expiry). It uses Google only when it hasn't
    synced with the desktop for 12 hours or more (away from home); otherwise the desktop
    stays the only device talking to Google, so the two don't push the same Calendar and
    Tasks changes. Needs the user to create an Android OAuth client in Google Cloud (package
-   name and signing certificate fingerprint); exact steps to be given at build time.
+   name and signing certificate fingerprint); exact steps in the agent note. While away, the
+   phone sends only Schedule changes it made itself and hasn't yet handed to the desktop.
    **Queued for the refinements session (user, 2026-10-15; not started):** flag days whose
    data looks wrong, e.g. outrageous step counts or strangely low calories (likely a
    partly logged day). The user must be able to accept or reject a flagged day as valid,

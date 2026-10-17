@@ -3,6 +3,8 @@
 // other device signs in separately.
 import { html } from "lit-html";
 import QRCode from "qrcode";
+import { authorizeOnPhone } from "../../../core/google/token.ts";
+import { HEALTH_SCOPES, SCHEDULE_SCOPES } from "../../../core/google/oauth.ts";
 import { call, platform } from "../../backend.ts";
 import type { ConnectionInfo } from "../../../core/updates.ts";
 import { act, refresh, route } from "../app.ts";
@@ -74,8 +76,27 @@ function googleSignIn(integrationId: string, name: string) {
     name,
     platform === "desktop"
       ? html`<a class="button" href="/oauth/google/start">Sign in with Google</a>`
-      : html`<p class="muted">Sign in on the desktop. Its data reaches this phone when they sync.</p>`,
+      : html`
+          <p class="muted small">
+            The desktop's Google data reaches this phone when they sync. As a backup, this phone
+            can sign in too: it then reads and updates Google itself, but only when it hasn't
+            synced with the desktop for 12 hours or more.
+          </p>
+          <button @click=${signInOnPhone}>Sign in with Google</button>`,
   );
+}
+
+/** Asks Android for Google access (the consent screens), then records the sign-in. */
+async function signInOnPhone() {
+  try {
+    // Two grants: the Health API refuses tokens that also carry Calendar or Tasks scopes.
+    await authorizeOnPhone([HEALTH_SCOPES, SCHEDULE_SCOPES]);
+    await call("savePhoneGoogleSignIn");
+    message = "Signed in to Google on this phone (used while away from the desktop).";
+  } catch (error) {
+    message = (error as Error).message;
+  }
+  await refresh();
 }
 
 function qrSignInCard(integrationId: string, name: string) {

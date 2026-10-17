@@ -1,16 +1,21 @@
 // Keeping the Schedule in step with Google, on the device signed in to Google (the
-// desktop): first send the queued changes (schedule/edit.ts) in order, then re-read
-// calendars, events and tasks and replace the local rows with Google's versions.
+// desktop; the phone too while it's away from the desktop, google/token.ts): first send the
+// queued changes (schedule/edit.ts) in order, then re-read calendars, events and tasks and
+// replace the local rows with Google's versions.
+//
+// No change is sent twice: the desktop sends every queued change; the phone, while away,
+// sends only changes it made itself and hasn't yet handed to a desktop by LAN sync. Changes
+// it has handed over are the desktop's to send.
 //
 // Google wins conflicts (docs/PLAN.md): before changing or deleting something, its current
 // etag is compared with the one the edit was based on. If Google's copy changed in between,
 // the edit is dropped and an alert says so; the re-read then shows Google's version.
 // A failed request stops the run; what's left in the queue is retried next time.
-import { getCredential } from "../credentials.ts";
 import { addDays, localDate } from "../dates.ts";
+import { getDeviceId } from "../db/meta.ts";
 import { get, type Db, type Row } from "../db/types.ts";
-import type { GoogleCredential } from "../google/integration.ts";
-import { accessToken, SCHEDULE_SCOPES } from "../google/oauth.ts";
+import { SCHEDULE_SCOPES } from "../google/oauth.ts";
+import { getGoogleCredential, googleAccessToken, googleActiveHere, isPhoneCredential } from "../google/token.ts";
 import { deliverAlerts } from "../notify.ts";
 import { recordAlert, type NewAlert } from "../rules.ts";
 import { deleteRecord, saveRecord } from "../sync/records.ts";
@@ -31,11 +36,12 @@ let running: Promise<unknown> = Promise.resolve();
  */
 export function syncSchedule(db: Db, google?: ScheduleGoogle): Promise<NewAlert[]> {
   const run = running.then(async () => {
-    const api = google ?? (await signedInGoogle(db));
-    if (!api) return [];
-    const alerts = await pushChanges(db, api);
+    const signedIn = google ? { api: google, mine: everyChange } : await signedInGoogle(db);
+    if (!signedIn) return [];
+    const { api, mine } = signedIn;
+    const alerts = await pushChanges(db, api, mine);
     // Re-read only with an empty queue, so Google's rows never hide an edit still waiting.
-    if (!(await hasQueuedChanges(db))) await refreshFromGoogle(db, api);
+    if (!(await hasQueuedChanges(db, mine))) await refreshFromGoogle(db, api);
     await deliverAlerts(alerts);
     return alerts;
   });
@@ -52,14 +58,41 @@ export async function syncScheduleQuietly(db: Db): Promise<void> {
   }
 }
 
-async function signedInGoogle(db: Db): Promise<ScheduleGoogle | null> {
-  const credential = await getCredential<GoogleCredential>(db, "google");
-  if (!credential) return null;
-  return googleScheduleApi(await accessToken(credential, credential.refreshToken, SCHEDULE_SCOPES));
+/** Which queued changes (schedule_change rows) this device sends. */
+export type ChangeFilter = (change: Row) => boolean;
+const everyChange: ChangeFilter = () => true;
+
+/**
+ * Starts sending edits to Google without waiting, on the desktop. On the phone it does
+ * nothing: work there must run one operation at a time (src/app/backend.ts), so the phone
+ * app sends edits itself through its queue (refreshSchedule) after each Schedule change.
+ */
+export async function sendInBackground(db: Db): Promise<void> {
+  const credential = await getGoogleCredential(db);
+  if (!credential || isPhoneCredential(credential)) return;
+  await syncScheduleQuietly(db);
 }
 
-export async function hasQueuedChanges(db: Db): Promise<boolean> {
-  return Boolean(await get(db, "SELECT 1 FROM schedule_change WHERE deleted = 0 LIMIT 1"));
+async function signedInGoogle(db: Db): Promise<{ api: ScheduleGoogle; mine: ChangeFilter } | null> {
+  const credential = await getGoogleCredential(db);
+  if (!credential || !(await googleActiveHere(db, credential))) return null;
+  const api = googleScheduleApi(await googleAccessToken(credential, SCHEDULE_SCOPES));
+  return { api, mine: isPhoneCredential(credential) ? await unsentOwnChanges(db) : everyChange };
+}
+
+/**
+ * The phone's share of the queue: changes made on this device after its last hand-over to a
+ * desktop (LAN sync sends rows by change number, so `seq` above `sent_seq` = not yet sent).
+ */
+export async function unsentOwnChanges(db: Db): Promise<ChangeFilter> {
+  const deviceId = await getDeviceId(db);
+  const sentUpTo = Number((await get(db, "SELECT MAX(sent_seq) AS seq FROM sync_peer"))?.seq ?? 0);
+  return (change) => change.updated_by === deviceId && change.seq > sentUpTo;
+}
+
+export async function hasQueuedChanges(db: Db, mine: ChangeFilter = everyChange): Promise<boolean> {
+  const queued = await db.all("SELECT id, updated_by, seq FROM schedule_change WHERE deleted = 0");
+  return queued.some(mine);
 }
 
 // ---------- sending changes ----------
@@ -67,13 +100,13 @@ export async function hasQueuedChanges(db: Db): Promise<boolean> {
 /** A queued edit was dropped because Google's copy had changed. */
 class ConflictError extends Error {}
 
-export async function pushChanges(db: Db, google: ScheduleGoogle): Promise<NewAlert[]> {
+export async function pushChanges(db: Db, google: ScheduleGoogle, mine: ChangeFilter = everyChange): Promise<NewAlert[]> {
   const alerts: NewAlert[] = [];
   // Etags Google gave our own changes during this run, so a second queued edit to the same
   // item (made before the first was sent) isn't mistaken for a conflict.
   const ours = new Set<string>();
-  const queued = await db.all("SELECT id, op FROM schedule_change WHERE deleted = 0 ORDER BY created_at, id");
-  for (const change of queued) {
+  const queued = await db.all("SELECT id, op, updated_by, seq FROM schedule_change WHERE deleted = 0 ORDER BY created_at, id");
+  for (const change of queued.filter(mine)) {
     const op = JSON.parse(change.op) as ScheduleOp;
     try {
       await applyChange(db, google, op, ours);
