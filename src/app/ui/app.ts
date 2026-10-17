@@ -128,6 +128,24 @@ export async function act(change: () => Promise<unknown>) {
   await refresh();
 }
 
+/**
+ * A banner at the top while the app does slow work of its own (on the phone, the sync and
+ * update when it opens). Screens wait for that work to finish before they can load, so
+ * the banner says why a tap seems to do nothing. Pass null to hide it.
+ */
+export function showBusy(message: string | null) {
+  let banner = document.getElementById("busy");
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "busy";
+    banner.className = "busy";
+    banner.setAttribute("role", "status");
+    document.body.append(banner);
+  }
+  banner.textContent = message ?? "";
+  banner.hidden = message === null;
+}
+
 export function start() {
   wireMenus();
   window.addEventListener("hashchange", () => {

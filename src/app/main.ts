@@ -13,7 +13,7 @@ import { showPhoneNotifications } from "./notify.ts";
 import { rescheduleReminders, setUpReminders } from "./reminders.ts";
 import { syncQuietly } from "./sync.ts";
 import { applyWidgetTicks, refreshWidgets, refreshWidgetsSoon, setUpWidgets } from "./widgets.ts";
-import { refresh, start } from "./ui/app.ts";
+import { refresh, showBusy, start } from "./ui/app.ts";
 import "./ui/views/calendars.ts";
 import "./ui/views/connections.ts";
 import "./ui/views/feeders.ts";
@@ -59,9 +59,17 @@ async function main() {
       if (SCHEDULE_EDITS.has(name)) void call("refreshSchedule");
       if (!READS_ONLY.test(name)) refreshWidgetsSoon();
     });
-    await syncQuietly();
-    const { lastUpdateAt } = await call("getStatus");
-    if (isUpdateDue(lastUpdateAt)) await call("updateNow");
+    showBusy("Syncing with the desktop…");
+    try {
+      await syncQuietly();
+      const { lastUpdateAt } = await call("getStatus");
+      if (isUpdateDue(lastUpdateAt)) {
+        showBusy("Updating devices and health…");
+        await call("updateNow");
+      }
+    } finally {
+      showBusy(null);
+    }
     await rescheduleReminders(); // opening the app always refreshes them
     await refreshWidgets();
     await refresh();

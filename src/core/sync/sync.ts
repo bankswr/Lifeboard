@@ -9,7 +9,7 @@
 // them; they are then not newer, so they are ignored and the echo stops there.
 import { getDeviceId, getMeta, setMeta } from "../db/meta.ts";
 import { get, utcNow, type Db, type Row } from "../db/types.ts";
-import { currentSeq, isNewer, nextSeq, SYNCED_TABLES, upsert } from "./records.ts";
+import { currentSeq, isNewer, SYNCED_TABLES } from "./records.ts";
 
 /** Rows per table name. Rows carry every column except seq, which is local to each device. */
 export type Changes = Record<string, Row[]>;
@@ -45,9 +45,21 @@ export async function collectChanges(db: Db, sinceSeq: number): Promise<{ change
   });
 }
 
-/** Keeps each incoming row that is newer than this device's copy. Returns how many were kept. */
+/**
+ * SQL parameters per statement. SQLite's limit is 999 on older builds (some Android
+ * versions), so batches stay under it.
+ */
+const MAX_PARAMS = 900;
+
+/**
+ * Keeps each incoming row that is newer than this device's copy. Returns how many were kept.
+ * On the phone every statement is a round trip to native SQLite, so the work is batched:
+ * one lookup and a few multi-row writes per table, and one change-number update overall
+ * (a first sync of ~1,000 rows went from ~4,000 round trips to a few dozen).
+ */
 export async function applyChanges(db: Db, changes: Changes): Promise<number> {
   return db.transaction(async () => {
+    let seq = Number(await getMeta(db, "next_seq"));
     let applied = 0;
     for (const [table, rows] of Object.entries(changes)) {
       // Table and column names from the other device go into SQL, so only known ones pass.
@@ -56,14 +68,53 @@ export async function applyChanges(db: Db, changes: Changes): Promise<number> {
       for (const row of rows) {
         const unknown = Object.keys(row).filter((column) => !columns.has(column) || column === "seq");
         if (unknown.length) throw new Error(`Sync: unknown columns in ${table}: ${unknown.join(", ")}`);
-        const existing = await get(db, `SELECT updated_at, updated_by FROM ${table} WHERE id = ?`, [row.id]);
-        if (!isNewer(row, existing)) continue;
-        await upsert(db, table, { ...row, seq: await nextSeq(db) });
-        applied++;
       }
+      const existing = await existingVersions(db, table, rows.map((row) => row.id));
+      const newer = rows.filter((row) => isNewer(row, existing.get(row.id)));
+      await upsertMany(db, table, newer.map((row) => ({ ...row, seq: seq++ })));
+      applied += newer.length;
     }
+    await setMeta(db, "next_seq", String(seq));
     return applied;
   });
+}
+
+/** This device's updated_at and updated_by for each of `ids` it has, by id. */
+async function existingVersions(db: Db, table: string, ids: string[]): Promise<Map<string, Row>> {
+  const versions = new Map<string, Row>();
+  for (const batch of chunks(ids, MAX_PARAMS)) {
+    const rows = await db.all(
+      `SELECT id, updated_at, updated_by FROM ${table} WHERE id IN (${batch.map(() => "?").join(", ")})`,
+      batch,
+    );
+    for (const row of rows) versions.set(row.id, row);
+  }
+  return versions;
+}
+
+/** upsert (records.ts) of many rows, several per statement. Rows with the same columns share a statement. */
+async function upsertMany(db: Db, table: string, rows: Row[]): Promise<void> {
+  const byColumns = new Map<string, Row[]>();
+  for (const row of rows) {
+    const key = Object.keys(row).join(",");
+    byColumns.set(key, [...(byColumns.get(key) ?? []), row]);
+  }
+  for (const [key, group] of byColumns) {
+    const columns = key.split(",");
+    const placeholders = `(${columns.map(() => "?").join(", ")})`;
+    for (const batch of chunks(group, Math.max(1, Math.floor(MAX_PARAMS / columns.length)))) {
+      await db.run(
+        `INSERT OR REPLACE INTO ${table} (${columns.join(", ")}) VALUES ${batch.map(() => placeholders).join(", ")}`,
+        batch.flatMap((row) => columns.map((column) => row[column])),
+      );
+    }
+  }
+}
+
+function chunks<T>(items: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < items.length; i += size) result.push(items.slice(i, i + size));
+  return result;
 }
 
 async function tableColumns(db: Db, table: string): Promise<Set<string>> {

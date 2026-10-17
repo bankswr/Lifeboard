@@ -84,6 +84,20 @@ describe("sync", () => {
     expect(await names(newDesktop)).toEqual(["phone row"]);
   });
 
+  it("applies a large first sync in batches, each row with its own change number", async () => {
+    const [phone, desktop] = [await newDevice(), await newDevice()];
+    for (let i = 0; i < 1000; i++) await saveRecord(desktop, TABLE, { name: `row ${String(i).padStart(4, "0")}` });
+    await syncPhone(phone, desktop);
+
+    const rows = await phone.all(`SELECT seq FROM ${TABLE}`);
+    expect(rows).toHaveLength(1000);
+    expect(new Set(rows.map((row) => row.seq)).size).toBe(1000);
+    // A later local edit still gets a change number after all of them, so it is sent.
+    const id = await saveRecord(phone, TABLE, { name: "edited on phone" });
+    await syncPhone(phone, desktop);
+    expect((await desktop.all(`SELECT name FROM ${TABLE} WHERE id = ?`, [id]))[0].name).toBe("edited on phone");
+  });
+
   it("rejects unknown tables and columns from the other device", async () => {
     const db = await newDevice();
     await expect(applyChanges(db, { meta: [{ id: "x" }] })).rejects.toThrow(/unknown table/);

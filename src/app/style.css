@@ -372,3 +372,20 @@ dialog.sheet h2 { margin: 0 0 4px; }
 .explained > summary { color: var(--blue); cursor: pointer; font-size: 0.9rem; }
 .explained p { margin: 6px 0; }
 .struck { text-decoration: line-through; }
+
+/* Startup work banner (ui/app.ts showBusy) */
+.busy {
+  position: fixed;
+  top: calc(8px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.875rem;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.4);
+}
+.busy[hidden] { display: none; }
