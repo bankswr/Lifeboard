@@ -58,6 +58,7 @@ function catCard(cat: CatSummary) {
         <span class=${cat.visitLimit !== null && cat.todayVisits > cat.visitLimit ? "status error" : ""}>${cat.todayVisits} visit${cat.todayVisits === 1 ? "" : "s"} today</span>
         <span class="muted small">
           ${cat.visitLimit !== null ? `· alert above ${cat.visitLimit}${cat.visitLimitIsAuto ? " (automatic)" : ""}` : "· alert limit: learning"}
+          · <a href="#/litter">Change</a>
         </span>
       </p>
       ${chartSlot(`${cat.id}-visits`)}
