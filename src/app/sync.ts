@@ -3,13 +3,14 @@
 // allows plain http:// to a LAN address.
 import { syncWithDesktop, type SyncSummary } from "../core/sync/sync.ts";
 import { call, onPhoneDb } from "./backend.ts";
+import { rescheduleReminders } from "./reminders.ts";
 
 /** Syncs with the desktop now. Throws with a readable message if it can't. */
 export async function syncNow(): Promise<SyncSummary> {
   const { desktopAddress, syncKey } = await call("getSyncSettings");
   if (!desktopAddress || !syncKey) throw new Error("Set the desktop address and sync key first.");
 
-  return onPhoneDb((db) => syncWithDesktop(db, async (request) => {
+  const summary = await onPhoneDb((db) => syncWithDesktop(db, async (request) => {
     let response: Response;
     try {
       response = await fetch(`${desktopAddress}/sync`, {
@@ -24,6 +25,9 @@ export async function syncNow(): Promise<SyncSummary> {
     if (!response.ok) throw new Error(`The desktop answered ${response.status}: ${await response.text()}`);
     return response.json();
   }));
+  // Tasks may have arrived, moved or been ticked on the desktop.
+  void rescheduleReminders();
+  return summary;
 }
 
 /** Syncs if the desktop is set up, and reports nothing on failure (the desktop may just be off). */

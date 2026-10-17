@@ -143,7 +143,8 @@ current intent, not a commitment to details.
 5. **Tasks & reminders**, with Google Tasks sync, plus the generic to-do lists
    (to-do lists ✅ built 2026-10-15, accepted by the user 2026-10-17). Tasks built 2026-10-16
    together with phase 6 as the Schedule page; reminders deferred (user), the only part left.
-   **Reminders, planned 2026-10-17 (user; not started):**
+   **Reminders, planned 2026-10-17 (user); built 2026-10-17 and verified on the emulator
+   (agent-notes/2026-10-17-task-reminders.md):**
    - **What:** tasks that have a (Lifeboard-only) time, not done. Not calendar events
      (Google Calendar already notifies), no morning summary, nothing for date-only tasks.
    - **Where:** the phone only, as notifications scheduled in advance with Android's local
@@ -153,6 +154,9 @@ current intent, not a commitment to details.
    - **When:** at the task's time, no lead time.
    - **Buttons:** Done (marks the task done; it reaches Google through the desktop at the
      next sync) and Snooze (10 minutes). Android opens the app briefly to run a button.
+   - **Timing (built):** exact to the minute only with Android's "Alarms & reminders"
+     access, which Settings offers ("Allow exact timing"); without it Android may deliver
+     a few minutes late.
 6. ✅ **Calendar**, with Google Calendar sync. Built 2026-10-16 as the Schedule page (see
    agent-notes/2026-10-16-schedule.md); live-verified 2026-10-16 against the real account
    (events and tasks on Monitor).
@@ -160,13 +164,15 @@ current intent, not a commitment to details.
    body fat and steps. Refinements are planned in a later session.
    (Built 2026-10-15 ahead of order while blocked elsewhere; live-verified 2026-10-15.
    Google sign-in is desktop-only so far.) Checked off by the user 2026-10-17.
-   **Phone Google sign-in as a backup (user, 2026-10-17; not started):** the phone signs
+   **Phone Google sign-in as a backup (user, 2026-10-17; built 2026-10-17, waiting for the
+   user's Android OAuth client; agent-notes/2026-10-17-phone-google-sign-in.md):** the phone signs
    in to Google with Android's own sign-in (Google Play services keeps the grant, so no
    refresh token is stored and there's no 7-day expiry). It uses Google only when it hasn't
    synced with the desktop for 12 hours or more (away from home); otherwise the desktop
    stays the only device talking to Google, so the two don't push the same Calendar and
    Tasks changes. Needs the user to create an Android OAuth client in Google Cloud (package
-   name and signing certificate fingerprint); exact steps to be given at build time.
+   name and signing certificate fingerprint); exact steps in the agent note. While away, the
+   phone sends only Schedule changes it made itself and hasn't yet handed to the desktop.
    **Queued for the refinements session (user, 2026-10-15; not started):** flag days whose
    data looks wrong, e.g. outrageous step counts or strangely low calories (likely a
    partly logged day). The user must be able to accept or reject a flagged day as valid,

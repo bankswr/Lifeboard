@@ -4,8 +4,9 @@
 // Health is pulled at most once per calendar day per device (user, 2026-10-17): the analysis
 // uses only days before today, so later pulls the same day would change nothing it shows.
 // The Schedule syncs on every update.
-// Signing in needs a browser redirect, which only the desktop can do for now
-// (src/desktop/googleSignIn.ts); the phone gets this data through LAN sync.
+// The desktop signs in with a browser redirect (src/desktop/googleSignIn.ts). The phone can
+// sign in with Android's own Google authorization as a backup, used only while it's away
+// from the desktop (token.ts); otherwise it gets this data through LAN sync.
 import { getCredential, saveCredential } from "../credentials.ts";
 import { addDays, localDate } from "../dates.ts";
 import type { Db } from "../db/types.ts";
@@ -13,15 +14,10 @@ import { latestHealthDay, replaceHealthPoints, type HealthPoint, type PointType 
 import type { Integration } from "../integration.ts";
 import { syncSchedule } from "../schedule/push.ts";
 import { listDataPoints, type DataPoint } from "./healthApi.ts";
-import { accessToken, HEALTH_SCOPES, type GoogleClient } from "./oauth.ts";
+import { HEALTH_SCOPES } from "./oauth.ts";
+import { googleAccessToken, googleActiveHere, type GoogleCredential } from "./token.ts";
 
-export interface GoogleCredential extends GoogleClient {
-  refreshToken: string;
-  /** Earliest day the history pull has covered; absent until it has run. */
-  historyFrom?: string;
-  /** Local date of the last successful health pull. */
-  healthPulledOn?: string;
-}
+export type { GoogleCredential } from "./token.ts";
 
 const TYPES: PointType[] = ["steps", "weight", "body-fat", "heart-rate", "daily-resting-heart-rate"];
 /**
@@ -43,6 +39,8 @@ export const google: Integration = {
 
   async update(db) {
     const credential = (await getCredential<GoogleCredential>(db, "google"))!;
+    // The phone leaves Google to the desktop unless they haven't synced for 12+ hours.
+    if (!(await googleActiveHere(db, credential))) return [];
     if (needsHealthPull(credential, localDate())) await pullHealth(db, credential);
     await syncSchedule(db);
     return [];
@@ -62,7 +60,7 @@ export function needsHealthPull(credential: GoogleCredential, today: string): bo
 }
 
 async function pullHealth(db: Db, credential: GoogleCredential) {
-  const token = await accessToken(credential, credential.refreshToken, HEALTH_SCOPES);
+  const token = await googleAccessToken(credential, HEALTH_SCOPES);
   // Up to today (not included), as FitThing did: today isn't complete yet.
   const end = localDate();
   const historyStart = addDays(end, -HISTORY_DAYS);

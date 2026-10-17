@@ -8,7 +8,8 @@ import { deliverAlerts } from "./notify.ts";
 import { READING_TYPES } from "./readings.ts";
 import * as rules from "./rules.ts";
 import * as todos from "./todos.ts";
-import { deleteCredential } from "./credentials.ts";
+import { deleteCredential, saveCredential } from "./credentials.ts";
+import type { PhoneGoogleCredential } from "./google/token.ts";
 import { listDeviceStatuses } from "./devices.ts";
 import * as fountain from "./fountain.ts";
 import * as maintenance from "./maintenance.ts";
@@ -23,9 +24,10 @@ import { analyzeHealth, getHealthSettings, saveHealthSettings, targetHistory } f
 import { allowCronometerRepull } from "./cronometer/integration.ts";
 import { allowGoogleHealthRepull } from "./google/integration.ts";
 import { INTEGRATIONS } from "./integrations.ts";
+import { snoozeReminder, upcomingReminders } from "./reminders.ts";
 import { lastUpdateAt, listConnections, runUpdate } from "./updates.ts";
 import * as scheduleEdit from "./schedule/edit.ts";
-import { syncSchedule, syncScheduleQuietly } from "./schedule/push.ts";
+import { sendInBackground, syncSchedule } from "./schedule/push.ts";
 import * as schedule from "./schedule/store.ts";
 import { saveRecord } from "./sync/records.ts";
 
@@ -118,6 +120,11 @@ function qrIntegration(integrationId: string) {
 }
 
 /** Forgets this device's sign-in to an integration. Data already fetched is kept. */
+/** Records the phone's backup Google sign-in, after the app got Android's authorization. */
+async function savePhoneGoogleSignIn(db: Db) {
+  await saveCredential<PhoneGoogleCredential>(db, "google", { android: true });
+}
+
 async function signOut(db: Db, integrationId: string) {
   await deleteCredential(db, integrationId);
   await db.run("DELETE FROM connection WHERE id = ?", [integrationId]);
@@ -126,8 +133,9 @@ async function signOut(db: Db, integrationId: string) {
 // ---------- Schedule ----------
 
 /**
- * Re-reads Google (after sending any queued edits), for when the Schedule opens. Returns a
- * problem to show, or null. On the phone it does nothing: the desktop talks to Google.
+ * Re-reads Google (after sending any queued edits), for when the Schedule opens and, on the
+ * phone, after each Schedule edit. Returns a problem to show, or null. On the phone it does
+ * nothing unless the phone is away from the desktop and signed in (google/token.ts).
  */
 async function refreshSchedule(db: Db): Promise<string | null> {
   try {
@@ -145,7 +153,7 @@ async function refreshSchedule(db: Db): Promise<string | null> {
 function thenSend<Args extends unknown[], R>(edit: (db: Db, ...args: Args) => Promise<R>) {
   return async (db: Db, ...args: Args): Promise<R> => {
     const result = await edit(db, ...args);
-    void syncScheduleQuietly(db);
+    void sendInBackground(db);
     return result;
   };
 }
@@ -156,7 +164,7 @@ async function setCalendarIncluded(db: Db, calendarId: string, included: boolean
   if (!row) throw new Error("That calendar is no longer in your Google account.");
   if (row.is_primary) throw new Error("Your main calendar is always shown.");
   await saveRecord(db, "calendar", { ...row, included: included ? 1 : 0 });
-  void syncScheduleQuietly(db);
+  void sendInBackground(db);
 }
 
 export const api = {
@@ -213,6 +221,7 @@ export const api = {
   startQrSignIn,
   finishQrSignIn,
   signOut,
+  savePhoneGoogleSignIn,
   recentNutrition,
   dailyHealth,
   analyzeHealth: (db: Db) => analyzeHealth(db),
@@ -234,6 +243,8 @@ export const api = {
   saveTask: thenSend(scheduleEdit.saveTask),
   setTaskDone: thenSend(scheduleEdit.setTaskDone),
   deleteTask: thenSend(scheduleEdit.deleteTask),
+  getReminders: (db: Db) => upcomingReminders(db),
+  snoozeReminder: (db: Db, taskId: string) => snoozeReminder(db, taskId),
 };
 
 export type Api = typeof api;

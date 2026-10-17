@@ -39,10 +39,19 @@ export function onPhoneDb<T>(operation: (db: Db) => Promise<T>): Promise<T> {
   return result;
 }
 
+let afterPhoneCall: (name: ApiName) => void = () => {};
+
+/** Runs after each successful API call on the phone (e.g. to reschedule reminders). */
+export function setAfterPhoneCall(handler: (name: ApiName) => void) {
+  afterPhoneCall = handler;
+}
+
 export async function call<Name extends ApiName>(name: Name, ...args: ApiArgs<Name>): Promise<ApiResult<Name>> {
   if (phoneDb) {
     const fn = api[name] as (db: Db, ...args: unknown[]) => Promise<ApiResult<Name>>;
-    return onPhoneDb((db) => fn(db, ...args));
+    const result = await onPhoneDb((db) => fn(db, ...args));
+    afterPhoneCall(name);
+    return result;
   }
   const response = await fetch(`./api/${name}`, {
     method: "POST",
