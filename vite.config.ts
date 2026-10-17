@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import { DESKTOP_PORT } from "./src/desktop/config.ts";
 
@@ -7,6 +8,8 @@ export default defineConfig({
   base: "./",
   // amazon-cognito-identity-js (Whisker sign-in) refers to Node's `global`; browsers call it globalThis.
   define: { global: "globalThis" },
+  // Agent worktrees (.claude/worktrees/) hold whole copies of the repo; their tests aren't ours.
+  test: { exclude: ["**/node_modules/**", ".claude/**"] },
   server: {
     host: "127.0.0.1",
     port: 5173,

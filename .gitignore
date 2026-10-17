@@ -34,3 +34,6 @@ data/
 
 # Local launch script (personal, not shared)
 /start-lifeboard.sh
+
+# Claude Code agent worktrees
+.claude/worktrees/
