@@ -226,8 +226,15 @@ current intent, not a commitment to details.
        two); macros, raw and as deltas from target; resting heart rate.
      - **Graph controls:** one time range for all graphs (2 weeks, 4 weeks, 90 days) and a
        cursor that moves across them together.
-     - **Library:** uPlot (small, fast time series), for now.
-     - Fuller explanations.
+     - **Library:** uPlot (small, fast time series), for now. Already in use on the Pets
+       page (`src/app/ui/chart.ts`, 2026-10-17); reuse it.
+     - **Fuller explanations (agreed 2026-10-17):** a fold-out "How this is worked out" under
+       the targets and expenditure cards, walking through the calculation with the actual
+       numbers (e.g. "Expenditure 2,640 kcal = average intake 2,310 + 330 implied by losing
+       0.66 lb/week over 28 days").
+     - **Details settled 2026-10-17:** one small graph per macro with its target line (not
+       three macros on one axis); deltas as bars above and below zero; graphs open on the
+       2-week range.
      - Not planned: a separate fat mass / lean mass graph (body fat % with weight covers it).
 8. **Android home-screen widgets** (user, 2026-10-17; reviewed and agreed the same day;
    not started). One widget per function, each placed and sized on its own:
