@@ -1,7 +1,7 @@
 // The database schema, versioned with SQLite's PRAGMA user_version (approach from FitApp).
 // Both devices run the same migrations. Never edit a shipped migration; append a new one.
 import { insertDefaultRules } from "../rules.ts";
-import { syncColumns } from "../sync/records.ts";
+import { saveRecord, syncColumns } from "../sync/records.ts";
 import type { Db } from "./types.ts";
 
 /** SQL, or a function for migrations that also move data. */
@@ -298,6 +298,25 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
   );
   CREATE INDEX health_day_summary_date ON health_day_summary (date);
   `,
+  // 20: device status is synced (user, 2026-10-17), so the phone shows the desktop's hourly
+  // readings without signing in to Whisker or Smart Life itself. checked_at is when the
+  // status was read; the newest reading wins, whichever device made it.
+  async (db) => {
+    const rows = await db.all("SELECT * FROM device_status");
+    await db.exec(`
+      DROP TABLE device_status;
+      CREATE TABLE device_status (
+        ${syncColumns},
+        kind TEXT NOT NULL,
+        name TEXT NOT NULL,
+        data TEXT NOT NULL,
+        checked_at TEXT NOT NULL
+      );
+    `);
+    for (const row of rows) {
+      await saveRecord(db, "device_status", { id: row.id, kind: row.kind, name: row.name, data: row.data, checked_at: row.updated_at });
+    }
+  },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

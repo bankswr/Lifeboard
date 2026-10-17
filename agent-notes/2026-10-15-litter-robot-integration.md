@@ -15,7 +15,7 @@ with a fake Whisker API. Feeders (Petory) are not started; see
 - `core/whisker/integration.ts`: refresh token first; if refresh fails, silent re-sign-in
   with the saved password; only a rejected password → `SignedOutError` → alert. API is
   injectable (`makeWhiskerIntegration(api)`) for tests.
-- `device_status` table (per device, not synced) holds each robot's latest status for the
+- `device_status` table (per device, not synced until migration 20, 2026-10-17; now synced, `checked_at` = when read) holds each robot's latest status for the
   Home "Pets" card; `litter_robot` readings feed the rules.
 - **Default rules** (migration 7): drawer full, offline, litter below 20%. Rule names and
   thresholds are guesses at sensible defaults; the user can edit them.

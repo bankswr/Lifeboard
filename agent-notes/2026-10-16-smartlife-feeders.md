@@ -67,5 +67,5 @@ runs in `runUpdate` (no integration). Settings → Water fountain.
 - Default rules (migration 8): "Feeder offline", "Feeder dispensed nothing"
   (`lastFeedPortions = 0`; whether the F01W really reports 0 on a failed feed is untested).
 - **Phone:** sign-in is offered there too (untested; the QR must be scanned from another
-  screen). `device_status` is not synced, so the phone shows no feeders unless it signs in
+  screen). `device_status` was not synced then (synced since migration 20, 2026-10-17), so the phone showed no feeders unless it signed in
   itself — contrary to what the user was told earlier ("phone gets it through sync").

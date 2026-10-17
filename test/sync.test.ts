@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { migrate } from "../src/core/db/schema.ts";
+import { listDeviceStatuses, saveDeviceStatus } from "../src/core/devices.ts";
 import type { Db } from "../src/core/db/types.ts";
 import { deleteRecord, saveRecord, SYNCED_TABLES, syncColumns } from "../src/core/sync/records.ts";
 import { answerSync, applyChanges, syncWithDesktop } from "../src/core/sync/sync.ts";
@@ -96,6 +97,19 @@ describe("sync", () => {
     const id = await saveRecord(phone, TABLE, { name: "edited on phone" });
     await syncPhone(phone, desktop);
     expect((await desktop.all(`SELECT name FROM ${TABLE} WHERE id = ?`, [id]))[0].name).toBe("edited on phone");
+  });
+
+  it("brings the desktop's device readings to the phone, newest reading kept", async () => {
+    const [phone, desktop] = [await newDevice(), await newDevice()];
+    await saveDeviceStatus(desktop, "litter-robot-1", "litter_robot", "Litter-Robot", { drawerLevel: 40 });
+    await syncPhone(phone, desktop);
+    expect((await listDeviceStatuses(phone)).map((d) => d.data.drawerLevel)).toEqual([40]);
+
+    await saveDeviceStatus(desktop, "litter-robot-1", "litter_robot", "Litter-Robot", { drawerLevel: 55 });
+    await syncPhone(phone, desktop);
+    const [status] = await listDeviceStatuses(phone);
+    expect(status.data.drawerLevel).toBe(55);
+    expect(status.updatedAt).toBe((await listDeviceStatuses(desktop))[0].updatedAt);
   });
 
   it("rejects unknown tables and columns from the other device", async () => {

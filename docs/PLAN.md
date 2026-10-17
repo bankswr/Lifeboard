@@ -122,6 +122,12 @@ current intent, not a commitment to details.
 2. ✅ **Data model and LAN sync.** Build both, tested with a throwaway record type.
    - **Later (user, 2026-10-17; not started):** pair the phone by scanning the desktop's sync
      key with the phone's camera (a QR code), instead of typing it.
+   - **Device status is synced (user, 2026-10-17):** the phone shows the desktop's hourly
+     Litter-Robot and feeder readings without signing in to Whisker or Smart Life itself.
+   - **Later (user, 2026-10-17; on hold):** phone sign-ins to Whisker, Smart Life and
+     Cronometer failed (Whisker/Smart Life: host lookup failed on the phone, likely Private DNS
+     or an ad-blocker; Cronometer: no session cookie after the login form). Not needed while
+     the desktop syncs; revisit if the phone should read devices away from home.
 3. ✅ **Connections and rules engine** (built 2026-10-15, accepted by the user 2026-10-17). Sign-in status for every integration, the
    events/conditions/actions model, and default "connection lost" alerts.
 4. **Pets module.** Status dashboard, events, and default rules.
