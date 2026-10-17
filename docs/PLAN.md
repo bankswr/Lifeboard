@@ -194,7 +194,9 @@ current intent, not a commitment to details.
      - **Detection:** a run of 10-minute heart-rate samples at or above resting + 30 bpm,
        lasting at least 30 minutes (one lower sample allowed inside), under 3,000 steps an
        hour and no treadmill steps (walks are already counted by steps). On past data this
-       finds about 3.6 sessions a week, two-thirds between 5 and 10 AM. Thresholds are
+       finds about 3.6 sessions a week, two-thirds between 5 and 10 AM (with the phone's
+       steps; as built, the pace check uses the primary step source like the daily total,
+       which finds about 4.5 a week: accepted by the user 2026-10-17). Thresholds are
        settings. Missed sessions are accepted (user: a slow workout that doesn't raise the
        heart rate shouldn't count; it works as an incentive).
      - **Energy:** a fixed cost from the Compendium of Physical Activities, not fitted:
