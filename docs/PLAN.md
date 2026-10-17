@@ -223,6 +223,10 @@ current intent, not a commitment to details.
        against a FitApp backup file exported by the user (compared locally, no connection).
      - Resting heart rate: a graph on the Health page, informational only (it doesn't
        follow activity).
+     - **Raw data stays local (user, 2026-10-17; built the same day):** raw steps and
+       heart-rate samples are never synced. The device that pulls them keeps 90 days and
+       syncs one summary per day (steps, average heart rate, detected workouts). Changed
+       workout settings re-check only days that still have raw data (accepted).
    - **History (user, 2026-10-16):** Google and Cronometer fetch 90 days of history once per
      device, then only recent days. Body water isn't available: the Google Health API has no
      such type.

@@ -3,7 +3,6 @@
 import type { NutritionDay } from "./cronometer/parse.ts";
 import { addDays, localDate } from "./dates.ts";
 import { get, type Db } from "./db/types.ts";
-import { stepsByDay } from "./steps.ts";
 import { deleteRecord, saveRecord } from "./sync/records.ts";
 
 export async function saveNutritionDays(db: Db, days: NutritionDay[]): Promise<void> {
@@ -53,11 +52,25 @@ export interface HealthPoint {
 }
 
 /**
+ * Steps and heart-rate samples are raw data: kept only on the device that pulled them
+ * (raw_health_point, not synced) and summarized per day (core/healthSummary.ts). The rest are
+ * few and synced as they are: weigh-ins and body fat are reviewed one by one.
+ */
+export const RAW_TYPES: PointType[] = ["steps", "heart-rate"];
+
+/** The table a type is stored in. */
+function tableOf(type: PointType): "raw_health_point" | "health_point" {
+  return RAW_TYPES.includes(type) ? "raw_health_point" : "health_point";
+}
+
+/**
  * Stores the points fetched for one type and time range, and deletes stored points in that
  * range that Google no longer returned (removed or replaced at the source).
  * `rangeStart`/`rangeEnd` are the UTC ISO bounds the fetch used (end not included).
+ * Raw types need summarizing afterwards (summarizeDays).
  */
 export async function replaceHealthPoints(db: Db, type: PointType, rangeStart: string, rangeEnd: string, points: HealthPoint[]) {
+  if (tableOf(type) === "raw_health_point") return replaceRawPoints(db, type, rangeStart, rangeEnd, points);
   await db.transaction(async () => {
     const stored = await db.all(
       "SELECT id, day, start_time, end_time, value, source FROM health_point WHERE type = ? AND start_time >= ? AND start_time < ? AND deleted = 0",
@@ -75,9 +88,24 @@ export async function replaceHealthPoints(db: Db, type: PointType, rangeStart: s
   });
 }
 
+/** Raw points: plain rows, replaced wholesale for the range (nothing to sync, so no tombstones). */
+async function replaceRawPoints(db: Db, type: PointType, rangeStart: string, rangeEnd: string, points: HealthPoint[]) {
+  await db.transaction(async () => {
+    await db.run("DELETE FROM raw_health_point WHERE type = ? AND start_time >= ? AND start_time < ?", [type, rangeStart, rangeEnd]);
+    for (const point of points) {
+      await db.run(
+        "INSERT OR REPLACE INTO raw_health_point (id, type, day, start_time, end_time, value, source) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [point.id, type, point.day, point.startTime, point.endTime, point.value, point.source],
+      );
+    }
+  });
+}
+
 /** The newest day stored for a type, or null. */
 export async function latestHealthDay(db: Db, type: PointType): Promise<string | null> {
-  return (await get(db, "SELECT MAX(day) AS day FROM health_point WHERE type = ? AND deleted = 0", [type]))?.day ?? null;
+  const table = tableOf(type);
+  const live = table === "health_point" ? " AND deleted = 0" : "";
+  return (await get(db, `SELECT MAX(day) AS day FROM ${table} WHERE type = ?${live}`, [type]))?.day ?? null;
 }
 
 // ---------- daily summary ----------
@@ -109,26 +137,27 @@ export async function healthDays(db: Db, start: string, end: string): Promise<He
   const nutrition = new Map(
     (await db.all("SELECT * FROM nutrition_day WHERE date BETWEEN ? AND ? AND deleted = 0", [start, end])).map((row) => [row.date, row]),
   );
-  // Averaged in SQL: heart rate alone is ~144 samples a day.
   const averages = new Map(
     (await db.all(
       `SELECT type, day, AVG(value) AS value FROM health_point
-       WHERE type IN ('weight', 'body-fat', 'heart-rate', 'daily-resting-heart-rate') AND day BETWEEN ? AND ? AND deleted = 0
+       WHERE type IN ('weight', 'body-fat', 'daily-resting-heart-rate') AND day BETWEEN ? AND ? AND deleted = 0
        GROUP BY type, day`,
       [start, end],
     )).map((row) => [`${row.type} ${row.day}`, row.value as number]),
   );
   const average = (type: PointType, day: string) => averages.get(`${type} ${day}`) ?? null;
-  const stepPoints = await db.all("SELECT * FROM health_point WHERE type = 'steps' AND day BETWEEN ? AND ? AND deleted = 0", [start, end]);
-  const steps = stepsByDay(
-    stepPoints.map((p) => ({ day: p.day, start: Date.parse(p.start_time), end: Date.parse(p.end_time), count: p.value, source: p.source })),
+  // Steps and heart rate come from the synced daily summaries (core/healthSummary.ts).
+  const summaries = new Map(
+    (await db.all("SELECT date, steps, average_heart_rate FROM health_day_summary WHERE date BETWEEN ? AND ? AND deleted = 0", [start, end]))
+      .map((row) => [row.date as string, row]),
   );
 
   const rows: HealthDay[] = [];
   for (let date = end; date >= start; date = addDays(date, -1)) {
     const food = nutrition.get(date);
     const grams = average("weight", date);
-    const heartRate = average("heart-rate", date);
+    const summary = summaries.get(date);
+    const heartRate: number | null = summary?.average_heart_rate ?? null;
     const resting = average("daily-resting-heart-rate", date);
     rows.push({
       date,
@@ -138,7 +167,7 @@ export async function healthDays(db: Db, start: string, end: string): Promise<He
       fatG: food?.fat_g ?? null,
       weightLbs: grams === null ? null : grams * LBS_PER_GRAM,
       bodyFatPercent: average("body-fat", date),
-      steps: steps.has(date) ? Math.round(steps.get(date)!) : null,
+      steps: summary?.steps == null ? null : Math.round(summary.steps),
       averageHeartRate: heartRate === null ? null : Math.round(heartRate),
       restingHeartRate: resting === null ? null : Math.round(resting),
     });

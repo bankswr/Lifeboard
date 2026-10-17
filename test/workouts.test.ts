@@ -4,6 +4,12 @@ import { computeTargets, datesBetween, fillMissingSteps, stepEnergy, type Energy
 import { DEFAULT_HEALTH_SETTINGS } from "../src/core/healthTargets.ts";
 import { DEFAULT_WORKOUT_SETTINGS, detectWorkouts, workoutEnergy, type HeartRateSample } from "../src/core/workouts.ts";
 import type { StepPoint } from "../src/core/steps.ts";
+import { api } from "../src/core/api.ts";
+import { migrate } from "../src/core/db/schema.ts";
+import { replaceHealthPoints, type HealthPoint } from "../src/core/health.ts";
+import { summarizeDays } from "../src/core/healthSummary.ts";
+import { loadWorkouts } from "../src/core/healthTargets.ts";
+import { openNodeDb } from "../src/desktop/db/nodeSqlite.ts";
 
 const DAY = "2026-10-14";
 const T0 = Date.parse("2026-10-14T11:00:00Z");
@@ -67,5 +73,24 @@ describe("workouts in the expenditure fit", () => {
     expect(withWorkouts.averageWorkoutKcal).toBeCloseTo(100);
     expect(withWorkouts.activityMultiplier!).toBeLessThan(without.activityMultiplier!);
     expect(withWorkouts.previousDayExpenditure! - without.previousDayExpenditure!).toBeCloseTo(100, 0);
+  });
+});
+
+describe("workouts in the daily summaries", () => {
+  it("detects workouts when a day is summarized and re-checks them after the settings change", async () => {
+    const db = openNodeDb(":memory:");
+    await migrate(db);
+    const range = [`${DAY}T00:00:00Z`, `${addDays(DAY, 1)}T00:00:00Z`] as const;
+    const point = (id: string, type: HealthPoint["type"], startTime: string, value: number): HealthPoint =>
+      ({ id, type, day: DAY, startTime, endTime: startTime, value, source: RING });
+    await replaceHealthPoints(db, "daily-resting-heart-rate", ...range, [point("rest", "daily-resting-heart-rate", `${DAY}T00:00:00Z`, 70)]);
+    // An hour at 105 bpm (35 above rest): a workout at the default 30.
+    await replaceHealthPoints(db, "heart-rate", ...range,
+      samples(105, 105, 105, 105, 105, 105).map((s, i) => point(`hr${i}`, "heart-rate", new Date(s.time).toISOString(), s.bpm)));
+    await summarizeDays(db, DAY, DAY);
+    expect(await loadWorkouts(db, DAY, DAY)).toMatchObject([{ date: DAY, minutes: 60 }]);
+
+    await api.saveHealthSettings(db, { ...DEFAULT_HEALTH_SETTINGS, workoutHeartRateAbove: 40 });
+    expect(await loadWorkouts(db, DAY, DAY)).toEqual([]);
   });
 });

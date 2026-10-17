@@ -269,6 +269,35 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
   );
   CREATE INDEX litter_level_serial ON litter_level (serial, at);
   `,
+  // 19: raw steps and heart rate stay on the device that pulled them (user, 2026-10-17): ~40,000
+  // rows that made a first phone sync take many minutes. They move to raw_health_point (not
+  // synced; pruned after RAW_KEEP_DAYS, core/healthSummary.ts), and each day's results (steps,
+  // average heart rate, detected workouts) sync instead, one row per day. Both devices run
+  // this, so removing the rows from health_point needs no tombstones.
+  `
+  CREATE TABLE raw_health_point (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    day TEXT NOT NULL,
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    value REAL NOT NULL,
+    source TEXT NOT NULL
+  );
+  CREATE INDEX raw_health_point_type_day ON raw_health_point (type, day);
+  INSERT INTO raw_health_point (id, type, day, start_time, end_time, value, source)
+    SELECT id, type, day, start_time, end_time, value, source FROM health_point
+    WHERE type IN ('steps', 'heart-rate') AND deleted = 0;
+  DELETE FROM health_point WHERE type IN ('steps', 'heart-rate');
+  CREATE TABLE health_day_summary (
+    ${syncColumns},
+    date TEXT NOT NULL,
+    steps REAL,
+    average_heart_rate REAL,
+    workouts TEXT NOT NULL
+  );
+  CREATE INDEX health_day_summary_date ON health_day_summary (date);
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

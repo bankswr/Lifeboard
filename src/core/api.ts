@@ -20,7 +20,8 @@ import { getLitterSettings, saveLitterSettings } from "./whisker/levels.ts";
 import { dailyHealth, recentNutrition } from "./health.ts";
 import { clearVerdict, setVerdict } from "./healthReview.ts";
 import { healthPage } from "./healthPage.ts";
-import { analyzeHealth, getHealthSettings, saveHealthSettings, targetHistory } from "./healthTargets.ts";
+import { resummarizeAll } from "./healthSummary.ts";
+import { analyzeHealth, getHealthSettings, saveHealthSettings, targetHistory, type HealthSettings } from "./healthTargets.ts";
 import { allowCronometerRepull } from "./cronometer/integration.ts";
 import { allowGoogleHealthRepull } from "./google/integration.ts";
 import { INTEGRATIONS } from "./integrations.ts";
@@ -76,6 +77,15 @@ async function updateNow(db: Db) {
   const result = await runUpdate(db);
   await deliverAlerts(result.alerts);
   return result;
+}
+
+/**
+ * Saves the Health settings, then re-detects workouts on every day that still has raw data,
+ * since the workout thresholds may have changed (core/healthSummary.ts).
+ */
+async function saveHealthSettingsAndResummarize(db: Db, settings: HealthSettings) {
+  await saveHealthSettings(db, settings);
+  await resummarizeAll(db);
 }
 
 /** Pulls health data again even if it was already pulled today, as part of a full update. */
@@ -237,7 +247,7 @@ export const api = {
   analyzeHealth: (db: Db) => analyzeHealth(db),
   getHealthPage: (db: Db) => healthPage(db),
   getHealthSettings,
-  saveHealthSettings,
+  saveHealthSettings: saveHealthSettingsAndResummarize,
   setHealthVerdict: setVerdict,
   clearHealthVerdict: clearVerdict,
   getTargetHistory: (db: Db) => targetHistory(db),

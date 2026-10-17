@@ -6,6 +6,8 @@ import { addDays, localDate } from "../src/core/dates.ts";
 import { migrate } from "../src/core/db/schema.ts";
 import { google, toHealthPoint } from "../src/core/google/integration.ts";
 import { dailyHealth, replaceHealthPoints, saveNutritionDays, type HealthPoint } from "../src/core/health.ts";
+import { RAW_KEEP_DAYS, summarizeDays, summarizeNewDays } from "../src/core/healthSummary.ts";
+import { collectChanges } from "../src/core/sync/sync.ts";
 import { stepsByDay, type StepPoint } from "../src/core/steps.ts";
 import { runUpdate } from "../src/core/updates.ts";
 import { openNodeDb } from "../src/desktop/db/nodeSqlite.ts";
@@ -95,9 +97,40 @@ describe("health storage and the daily summary", () => {
     await replaceHealthPoints(db, "heart-rate", `${yesterday}T00:00:00Z`, `${localDate()}T00:00:00Z`, [
       point("h1", "heart-rate", 60), point("h2", "heart-rate", 81),
     ]);
+    await summarizeDays(db, yesterday, yesterday);
     const [day] = await dailyHealth(db, 2);
     expect(day).toMatchObject({ date: yesterday, calories: 2000, steps: 6000, bodyFatPercent: null, averageHeartRate: 71, restingHeartRate: null });
     expect(day.weightLbs).toBeCloseTo(80500 * 0.00220462262185);
+  });
+
+  it("keeps raw steps and heart rate on this device and syncs only the day's summary", async () => {
+    const db = await newDb();
+    const range = [`${yesterday}T00:00:00Z`, `${localDate()}T00:00:00Z`] as const;
+    await replaceHealthPoints(db, "steps", ...range, [point("s1", "steps", 6000)]);
+    await replaceHealthPoints(db, "heart-rate", ...range, [point("h1", "heart-rate", 70)]);
+    await replaceHealthPoints(db, "weight", ...range, [point("w1", "weight", 80000)]);
+    await summarizeNewDays(db); // the update's catch-up: a raw day without a summary
+    const { changes } = await collectChanges(db, 0);
+    expect(Object.keys(changes).sort()).toEqual(["health_day_summary", "health_point", "rule"]);
+    expect(changes.health_point.map((row) => row.type)).toEqual(["weight"]);
+    expect(changes.health_day_summary).toMatchObject([{ date: yesterday, steps: 6000, average_heart_rate: 70, workouts: "[]" }]);
+
+    // Re-summarizing unchanged data doesn't create a new change to sync.
+    const before = (await collectChanges(db, 0)).seq;
+    await summarizeDays(db, yesterday, yesterday);
+    expect((await collectChanges(db, 0)).seq).toBe(before);
+  });
+
+  it("drops raw data older than the retention but keeps those days' summaries", async () => {
+    const db = await newDb();
+    const old = addDays(localDate(), -(RAW_KEEP_DAYS + 1));
+    await replaceHealthPoints(db, "steps", `${old}T00:00:00Z`, `${addDays(old, 1)}T00:00:00Z`, [
+      { ...point("s-old", "steps", 4000), day: old, startTime: `${old}T12:00:00Z`, endTime: `${old}T12:30:00Z` },
+    ]);
+    await summarizeDays(db, old, old);
+    await summarizeNewDays(db);
+    expect(await db.all("SELECT id FROM raw_health_point")).toEqual([]);
+    expect(await db.all("SELECT steps FROM health_day_summary")).toEqual([{ steps: 4000 }]);
   });
 
   it("removes stored points that Google no longer returns for the same range", async () => {

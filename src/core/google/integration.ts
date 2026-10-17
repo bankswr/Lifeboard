@@ -12,6 +12,7 @@ import { addDays, localDate } from "../dates.ts";
 import type { Db } from "../db/types.ts";
 import { latestHealthDay, replaceHealthPoints, type HealthPoint, type PointType } from "../health.ts";
 import type { Integration } from "../integration.ts";
+import { summarizeDays } from "../healthSummary.ts";
 import { syncSchedule } from "../schedule/push.ts";
 import { listDataPoints, type DataPoint } from "./healthApi.ts";
 import { HEALTH_SCOPES } from "./oauth.ts";
@@ -65,13 +66,17 @@ async function pullHealth(db: Db, credential: GoogleCredential) {
   const end = localDate();
   const historyStart = addDays(end, -HISTORY_DAYS);
   const needsHistory = !credential.historyFrom || credential.historyFrom > historyStart;
+  let earliest = end;
   for (const type of TYPES) {
     const latest = await latestHealthDay(db, type);
     const start = latest && !needsHistory ? addDays(latest, -OVERLAP_DAYS) : historyStart;
     const points = await listDataPoints(token, type, start, end);
     const stored = points.map((point) => toHealthPoint(type, point)).filter((p): p is HealthPoint => p !== null);
     await replaceHealthPoints(db, type, `${start}T00:00:00Z`, `${end}T00:00:00Z`, stored);
+    if (start < earliest) earliest = start;
   }
+  // Steps and heart rate stay here as raw data; the days just fetched get their synced summaries.
+  await summarizeDays(db, earliest, end);
   await saveCredential(db, "google", {
     ...credential, healthPulledOn: end, historyFrom: needsHistory ? historyStart : credential.historyFrom,
   });

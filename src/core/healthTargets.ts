@@ -12,7 +12,7 @@ import { healthDays, type HealthDay } from "./health.ts";
 import { alertNewFlags, loadVerdicts, reviewDays, type Flag, type FlagSettings } from "./healthReview.ts";
 import type { NewAlert } from "./rules.ts";
 import { saveRecord } from "./sync/records.ts";
-import { DEFAULT_WORKOUT_SETTINGS, detectWorkouts, workoutEnergy, type Workout, type WorkoutSettings } from "./workouts.ts";
+import { DEFAULT_WORKOUT_SETTINGS, workoutEnergy, type Workout, type WorkoutSettings } from "./workouts.ts";
 
 export type HealthSettings = TargetSettings & FlagSettings & WorkoutSettings;
 
@@ -130,7 +130,7 @@ export async function prepareDays(db: Db, start: string, end: string, settings: 
   const days = await healthDays(db, start, end);
   const firstLogged = (await get(db, "SELECT MIN(date) AS date FROM nutrition_day WHERE deleted = 0 AND calories > 0"))?.date ?? null;
   const { flags, cleaned } = reviewDays(days, await loadVerdicts(db), settings, settings.fallbackActivityFactor, firstLogged);
-  const workouts = await loadWorkouts(db, start, end, settings);
+  const workouts = await loadWorkouts(db, start, end);
   const weightOn = latestWeight(cleaned);
   const workoutKcal = new Map<string, number>();
   for (const workout of workouts) {
@@ -153,19 +153,10 @@ function latestWeight(cleaned: EnergyDay[]): (date: string) => number | null {
   };
 }
 
-/** Workouts found in the stored heart rate between two dates (core/workouts.ts). */
-export async function loadWorkouts(db: Db, start: string, end: string, settings: WorkoutSettings): Promise<Workout[]> {
-  const samples = (await db.all(
-    "SELECT day, start_time, value FROM health_point WHERE type = 'heart-rate' AND day BETWEEN ? AND ? AND deleted = 0",
-    [start, end],
-  )).map((row) => ({ day: row.day, time: Date.parse(row.start_time), bpm: row.value }));
-  const resting = new Map<string, number>((await db.all(
-    "SELECT day, AVG(value) AS value FROM health_point WHERE type = 'daily-resting-heart-rate' AND day BETWEEN ? AND ? AND deleted = 0 GROUP BY day",
-    [start, end],
-  )).map((row) => [row.day, row.value]));
-  const steps = (await db.all("SELECT * FROM health_point WHERE type = 'steps' AND day BETWEEN ? AND ? AND deleted = 0", [start, end]))
-    .map((p) => ({ day: p.day, start: Date.parse(p.start_time), end: Date.parse(p.end_time), count: p.value, source: p.source }));
-  return detectWorkouts(samples, resting, steps, settings);
+/** Workouts between two dates, as detected when each day was summarized (core/healthSummary.ts). */
+export async function loadWorkouts(db: Db, start: string, end: string): Promise<Workout[]> {
+  const rows = await db.all("SELECT workouts FROM health_day_summary WHERE date BETWEEN ? AND ? AND deleted = 0 ORDER BY date", [start, end]);
+  return rows.flatMap((row) => JSON.parse(row.workouts) as Workout[]);
 }
 
 /**
