@@ -39,8 +39,9 @@ ran the queries above.
   7 days vs the 7 days ending `weightCompareDays` (default 14) earlier, each needing ≥3
   weigh-ins, alert at ≥ `weightChangePercent` (default 5) either way, edge-triggered. Visits =
   today's count above the cat's limit, once per cat per day. Automatic limit (blank setting):
-  max(2 × median, median + 3) visits/day over up to 14 full days, ≥3 days needed; the first
-  stored day is skipped as partial. With the real data: Big O 5, Norm 5, Scout 24.
+  median visits/day + 2 over up to 14 full days, ≥3 days needed; the first stored day is
+  skipped as partial. First built as max(2 × median, median + 3), which gave Scout 24: far
+  too high (user), so changed the same day to + 2.
 - Pets page: a card per cat with uPlot charts (`app/ui/chart.ts`, first use of uPlot; the
   Health page graphs can reuse it): day's median weight and visits per day, from the first
   stored day (at least a week, at most 30 days). Colors: dark-surface reference categorical

@@ -62,7 +62,7 @@ route(/^\/litter$/, async () => {
                   placeholder=${cat.visitLimitIsAuto && cat.visitLimit !== null ? `Automatic (${cat.visitLimit})` : "Automatic"}
                   .value=${cat.visitLimitIsAuto ? "" : String(cat.visitLimit)}>
               </label>`)}
-            <p class="muted small">Leave blank for automatic: twice the cat's usual visits per day over its last 2 weeks (at least 3 more than usual).</p>
+            <p class="muted small">Leave blank for automatic: the cat's usual visits per day over its last 2 weeks, plus 2.</p>
           </fieldset>
           <button type="submit">Save</button>
         </form>` : ""}

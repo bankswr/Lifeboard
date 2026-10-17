@@ -180,10 +180,10 @@ describe("cats", () => {
     const history: [number, number, number][] = [6, 5, 4, 3, 2, 1].flatMap((d) => [[d, 8, 9], [d, 8, 15]] as [number, number, number][]);
     await saveCats(db, [pet(history)]);
     const [cat] = await catSummaries(db, now);
-    expect(cat).toMatchObject({ visitLimit: 5, visitLimitIsAuto: true }); // max(2 × 2, 2 + 3)
+    expect(cat).toMatchObject({ visitLimit: 4, visitLimitIsAuto: true }); // 2 a day + 2
 
     await saveCats(db, [pet([8, 9, 10, 11, 12, 13].map((hour) => [0, 8, hour]))]);
-    expect((await checkCatAlerts(db, now)).map((a) => a.message)).toEqual(["Scout has used the litter box 6 times today (limit 5)."]);
+    expect((await checkCatAlerts(db, now)).map((a) => a.message)).toEqual(["Scout has used the litter box 6 times today (limit 4)."]);
     expect(await checkCatAlerts(db, now)).toEqual([]);
 
     await saveCatSettings(db, { ...DEFAULT_CAT_SETTINGS, visitLimits: { "pet-1": 10 } });

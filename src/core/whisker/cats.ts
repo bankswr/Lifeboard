@@ -23,6 +23,8 @@ const MIN_WEIGH_INS = 3;
 /** Days of history the automatic visit limit looks at, and how many it needs. */
 const VISIT_HISTORY_DAYS = 14;
 const MIN_VISIT_DAYS = 3;
+/** Visits above a typical day before the automatic limit is passed. */
+const AUTO_VISIT_MARGIN = 2;
 /** Days shown on the Pets page. */
 export const SHOWN_DAYS = 30;
 
@@ -163,8 +165,9 @@ function catDays(weighIns: WeighIn[], today: string, firstAt: string | null): Ca
 }
 
 /**
- * Twice the cat's median visits per day over its recent full days (at least 3 above the
- * median, so a cat that visits twice a day isn't flagged at 5); null with under 3 days stored.
+ * The cat's median visits per day over its recent full days, plus 2 (user, 2026-10-17: a
+ * fixed margin stays tight for a cat that visits often, unlike a multiple); null with under
+ * 3 days stored.
  * Days before the first stored weigh-in don't count: they're missing, not visit-free.
  */
 export function automaticVisitLimit(weighIns: WeighIn[], today: string): number | null {
@@ -175,8 +178,7 @@ export function automaticVisitLimit(weighIns: WeighIn[], today: string): number 
   if (from > yesterday) return null;
   const counts = [...visitsByDay(weighIns, from, yesterday).values()].map((entries) => entries.length);
   if (counts.length < MIN_VISIT_DAYS) return null;
-  const typical = median(counts)!;
-  return Math.ceil(Math.max(typical * 2, typical + 3));
+  return Math.ceil(median(counts)! + AUTO_VISIT_MARGIN);
 }
 
 // ---------- alerts ----------
