@@ -12,6 +12,7 @@ import { nativeCookieSession } from "./nativeCookies.ts";
 import { showPhoneNotifications } from "./notify.ts";
 import { rescheduleReminders, setUpReminders } from "./reminders.ts";
 import { syncQuietly } from "./sync.ts";
+import { applyWidgetTicks, refreshWidgets, refreshWidgetsSoon, setUpWidgets } from "./widgets.ts";
 import { refresh, start } from "./ui/app.ts";
 import "./ui/views/calendars.ts";
 import "./ui/views/connections.ts";
@@ -36,6 +37,8 @@ const CHANGES_TASKS = new Set<ApiName>(["updateNow", "repullHealth", "saveTask",
  * desktop (core/google/token.ts); it does so through the phone's queue, after the edit.
  */
 const SCHEDULE_EDITS = new Set<ApiName>(["saveEvent", "deleteEvent", "saveTask", "setTaskDone", "deleteTask", "setCalendarIncluded"]);
+/** Calls that only read; any other call may change what a home-screen widget shows. */
+const READS_ONLY = /^(get|list|analyze|recent|daily)/;
 
 async function main() {
   await initBackend();
@@ -47,14 +50,20 @@ async function main() {
     setCookieSessionFactory(nativeCookieSession);
     setNativeGoogleAuthorizer(nativeGoogleAuthorizer);
     await setUpReminders();
+    await setUpWidgets();
+    // After clearCheckedItems: widget ticks are applied now, shown crossed out in the app,
+    // and cleared at the next load like ticks made in the app.
+    await applyWidgetTicks();
     setAfterPhoneCall((name) => {
       if (CHANGES_TASKS.has(name)) void rescheduleReminders();
       if (SCHEDULE_EDITS.has(name)) void call("refreshSchedule");
+      if (!READS_ONLY.test(name)) refreshWidgetsSoon();
     });
     await syncQuietly();
     const { lastUpdateAt } = await call("getStatus");
     if (isUpdateDue(lastUpdateAt)) await call("updateNow");
     await rescheduleReminders(); // opening the app always refreshes them
+    await refreshWidgets();
     await refresh();
   }
 }

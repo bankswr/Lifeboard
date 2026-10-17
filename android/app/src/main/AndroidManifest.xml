@@ -25,6 +25,80 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Home-screen widget taps: lifeboard://open/<page> (src/app/widgets.ts). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="lifeboard" android:host="open" />
+            </intent-filter>
+
+        </activity>
+
+        <!-- Home-screen widgets: they only draw the app's snapshot (src/core/widgets.ts). -->
+        <receiver
+            android:name=".widgets.HealthWidget"
+            android:label="@string/widget_health_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_health_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.CalendarWidget"
+            android:label="@string/widget_calendar_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_calendar_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.AlertsWidget"
+            android:label="@string/widget_alerts_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_alerts_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.PetsWidget"
+            android:label="@string/widget_pets_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_pets_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.ListsWidget"
+            android:label="@string/widget_lists_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_lists_info" />
+        </receiver>
+        <activity
+            android:name=".widgets.ListsWidgetConfigure"
+            android:label="Choose a list"
+            android:theme="@android:style/Theme.DeviceDefault.Dialog"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
         </activity>
 
         <provider
