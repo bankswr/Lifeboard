@@ -267,8 +267,9 @@ current intent, not a commitment to details.
        three macros on one axis); deltas as bars above and below zero; graphs open on the
        2-week range.
      - Not planned: a separate fat mass / lean mass graph (body fat % with weight covers it).
-8. **Android home-screen widgets** (user, 2026-10-17; reviewed and agreed the same day;
-   not started). One widget per function, each placed and sized on its own:
+8. ✅ **Android home-screen widgets** (user, 2026-10-17; reviewed and agreed the same day;
+   built and verified on the emulator the same day, see agent-notes/2026-10-17-widgets.md;
+   awaiting user review on the phone). One widget per function, each placed and sized on its own:
    - **Health:** today's targets.
    - **Calendar:** two sections. *Today*: overdue and today's tasks, and today's events.
      *Upcoming*: events of the next 7 days, no tasks (tasks repeat a lot and work as

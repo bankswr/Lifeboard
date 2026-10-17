@@ -24,6 +24,7 @@ import { analyzeHealth, getHealthSettings, saveHealthSettings, targetHistory } f
 import { allowCronometerRepull } from "./cronometer/integration.ts";
 import { allowGoogleHealthRepull } from "./google/integration.ts";
 import { INTEGRATIONS } from "./integrations.ts";
+import { widgetSnapshot } from "./widgets.ts";
 import { snoozeReminder, upcomingReminders } from "./reminders.ts";
 import { lastUpdateAt, listConnections, runUpdate } from "./updates.ts";
 import * as scheduleEdit from "./schedule/edit.ts";
@@ -244,6 +245,7 @@ export const api = {
   setTaskDone: thenSend(scheduleEdit.setTaskDone),
   deleteTask: thenSend(scheduleEdit.deleteTask),
   getReminders: (db: Db) => upcomingReminders(db),
+  getWidgetSnapshot: (db: Db) => widgetSnapshot(db),
   snoozeReminder: (db: Db, taskId: string) => snoozeReminder(db, taskId),
 };
 

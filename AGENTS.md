@@ -33,3 +33,16 @@ Node-only APIs; `src/app/` is the UI; `src/desktop/` is the Node server. Node ru
 desktop `.ts` files directly (type stripping), so imports name the `.ts` file and
 TypeScript-only syntax such as enums and parameter properties is not allowed
 (`erasableSyntaxOnly` enforces this). Check work with `npm test` and `npm run build`.
+
+## Native Android code
+- Lives in `android/app/src/main/java/org/lifeboard/app/` (Java, like Capacitor's own):
+  small Capacitor plugins (e.g. `GoogleAuthorizationPlugin`) and the home-screen widgets
+  in `widgets/`, with their layouts and definitions under `android/app/src/main/res/`.
+- Native code holds no app logic. The widgets only draw the snapshot built in
+  `src/core/widgets.ts` (unit-tested), handed over by `src/app/widgets.ts`; list ticks on a
+  widget are queued natively and applied by the app through the normal core code. Native
+  code never writes the app's database.
+- Check native changes by building the debug APK (`npm run android`, then
+  `JAVA_HOME=~/android-studio/jbr ANDROID_HOME=~/Android/Sdk android/gradlew -p android assembleDebug`)
+  and trying it on the `fitapp_test` emulator; see `agent-notes/2026-10-17-widgets.md`
+  for driving the widgets with adb.

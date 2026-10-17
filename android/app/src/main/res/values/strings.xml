@@ -4,4 +4,15 @@
     <string name="title_activity_main">Lifeboard</string>
     <string name="package_name">org.lifeboard.app</string>
     <string name="custom_url_scheme">org.lifeboard.app</string>
+    <!-- Home-screen widgets (widgets/) -->
+    <string name="widget_health_description">Today\'s health targets</string>
+    <string name="widget_health_label">Lifeboard Health</string>
+    <string name="widget_calendar_description">Today\'s tasks and events, then the coming week\'s events</string>
+    <string name="widget_calendar_label">Lifeboard Calendar</string>
+    <string name="widget_alerts_description">Current alerts</string>
+    <string name="widget_alerts_label">Lifeboard Alerts</string>
+    <string name="widget_pets_description">When the litter box, feeders and fountain need attention</string>
+    <string name="widget_pets_label">Lifeboard Pets</string>
+    <string name="widget_lists_description">A to-do list you can tick</string>
+    <string name="widget_lists_label">Lifeboard Lists</string>
 </resources>

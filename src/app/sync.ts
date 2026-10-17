@@ -4,6 +4,7 @@
 import { syncWithDesktop, type SyncSummary } from "../core/sync/sync.ts";
 import { call, onPhoneDb } from "./backend.ts";
 import { rescheduleReminders } from "./reminders.ts";
+import { refreshWidgetsSoon } from "./widgets.ts";
 
 /** Syncs with the desktop now. Throws with a readable message if it can't. */
 export async function syncNow(): Promise<SyncSummary> {
@@ -27,6 +28,7 @@ export async function syncNow(): Promise<SyncSummary> {
   }));
   // Tasks may have arrived, moved or been ticked on the desktop.
   void rescheduleReminders();
+  refreshWidgetsSoon();
   return summary;
 }
 
