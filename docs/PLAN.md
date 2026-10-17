@@ -204,6 +204,8 @@ current intent, not a commitment to details.
      - **Days without steps:** filled with the typical day (median of the previous 14 days),
        marked as estimated.
      - FitApp stays fully offline (user): its workout log is not connected to Lifeboard.
+     - **Later (user, 2026-10-17; not in the build batch):** a one-off check of the detection
+       against a FitApp backup file exported by the user (compared locally, no connection).
      - Resting heart rate: a graph on the Health page, informational only (it doesn't
        follow activity).
    - **History (user, 2026-10-16):** Google and Cronometer fetch 90 days of history once per
