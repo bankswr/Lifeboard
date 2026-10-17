@@ -120,7 +120,7 @@ current intent, not a commitment to details.
    the APIs are unofficial and may change, and the Petory API is still unknown.
    (Superseded, user 2026-10-17: phase 4 built and live-verified both integrations.)
 2. ✅ **Data model and LAN sync.** Build both, tested with a throwaway record type.
-3. ✅ **Connections and rules engine** (built 2026-10-15, awaiting user review). Sign-in status for every integration, the
+3. ✅ **Connections and rules engine** (built 2026-10-15, accepted by the user 2026-10-17). Sign-in status for every integration, the
    events/conditions/actions model, and default "connection lost" alerts.
 4. **Pets module.** Status dashboard, events, and default rules.
    (Litter-Robot 4 built 2026-10-15; live-verified 2026-10-16 (status and levels on Monitor);
@@ -131,8 +131,8 @@ current intent, not a commitment to details.
      First check whether Whisker keeps a weight per visit or per pet (pylitterbot's pet
      profiles appear to hold a weight history); if so, a weight trend per cat.
 5. **Tasks & reminders**, with Google Tasks sync, plus the generic to-do lists
-   (to-do lists ✅ built 2026-10-15, awaiting user review). Tasks built 2026-10-16 together
-   with phase 6 as the Schedule page; reminders deferred (user).
+   (to-do lists ✅ built 2026-10-15, accepted by the user 2026-10-17). Tasks built 2026-10-16
+   together with phase 6 as the Schedule page; reminders deferred (user), the only part left.
 6. ✅ **Calendar**, with Google Calendar sync. Built 2026-10-16 as the Schedule page (see
    agent-notes/2026-10-16-schedule.md); live-verified 2026-10-16 against the real account
    (events and tasks on Monitor).
