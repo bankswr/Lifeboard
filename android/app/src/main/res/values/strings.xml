@@ -7,12 +7,16 @@
     <!-- Home-screen widgets (widgets/) -->
     <string name="widget_health_description">Today\'s health targets</string>
     <string name="widget_health_label">Lifeboard Health</string>
-    <string name="widget_calendar_description">Today\'s tasks and events, then the coming week\'s events</string>
+    <string name="widget_calendar_description">Today\'s tasks (tap to tick) and events, then the coming week\'s events</string>
     <string name="widget_calendar_label">Lifeboard Calendar</string>
     <string name="widget_alerts_description">Current alerts</string>
     <string name="widget_alerts_label">Lifeboard Alerts</string>
     <string name="widget_pets_description">When the litter box, feeders and fountain need attention</string>
     <string name="widget_pets_label">Lifeboard Pets</string>
-    <string name="widget_lists_description">A to-do list you can tick</string>
+    <string name="widget_lists_description">A to-do list you can tick and add to</string>
+    <string name="widget_add_title">Add to %1$s</string>
+    <string name="widget_add_hint">New item</string>
+    <string name="widget_add_confirm">Add</string>
+    <string name="widget_add_button">Add an item</string>
     <string name="widget_lists_label">Lifeboard Lists</string>
 </resources>

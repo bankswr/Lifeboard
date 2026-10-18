@@ -35,7 +35,10 @@ export interface WidgetRow {
   /** Right-aligned text (a number, a time). */
   value?: string;
   style: RowStyle;
-  /** Lists widget: the to-do item this row ticks, and whether it's ticked. */
+  /**
+   * Tickable rows: the to-do item (Lists widget) or task (Calendar widget) a tap ticks, and
+   * whether it's ticked. Each widget queues its ticks under its own key (src/app/widgets.ts).
+   */
   itemId?: string;
   done?: boolean;
   /** App page a tap opens ("health", "lists", ...); the widget's own link when absent. */
@@ -107,6 +110,8 @@ export function healthWidget(targets: Targets | null): WidgetContent {
 /**
  * Today: open tasks (overdue first, as on the Schedule), then all-day and timed events.
  * Upcoming: events of the next days, no tasks (tasks work as reminders at their time).
+ * Today's tasks can be ticked on the widget; once the app has applied a tick, the task
+ * drops out of the snapshot (only open tasks are listed).
  */
 export function calendarWidget(days: ScheduleDay[], today: string, locale?: string): WidgetContent {
   const rows: WidgetRow[] = [];
@@ -119,6 +124,8 @@ export function calendarWidget(days: ScheduleDay[], today: string, locale?: stri
         sub: task.overdue && task.due ? `Overdue · was due ${dayLabel(task.due, locale)}` : undefined,
         value: task.time ? taskTimeLabel(task.time, locale) : undefined,
         style: task.overdue ? "alarm" : "normal",
+        itemId: task.id,
+        done: false,
       });
     }
     for (const event of todayDay.allDay) rows.push({ title: event.title, value: "All day", style: "normal" });

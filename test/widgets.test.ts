@@ -52,6 +52,8 @@ describe("widget snapshot", () => {
       ["Brunch", "Sun 11:00 AM", "normal"],
     ]);
     expect(widget.rows[1].sub).toBe("Overdue · was due Mon, Oct 12");
+    // Task rows can be ticked on the widget; event and header rows can't.
+    expect(widget.rows.filter((r) => r.itemId).map((r) => [r.itemId, r.done])).toEqual([["Replace feliway", false], ["Medicine", false]]);
   });
 
   it("pets: due times as fixed points, 'now' once reached, learning without an estimate", () => {
