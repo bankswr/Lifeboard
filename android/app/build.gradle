@@ -1,5 +1,10 @@
 apply plugin: 'com.android.application'
 
+// The version comes from package.json, the one place it is set. versionCode must rise with
+// every release Android installs over the last: 0.2.0 → 200, 1.4.12 → 10412.
+def appVersion = new groovy.json.JsonSlurper().parse(file('../../package.json')).version
+def (major, minor, patch) = appVersion.tokenize('.').collect { it.replaceAll(/\D.*/, '') as int }
+
 android {
     namespace = "org.lifeboard.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +12,8 @@ android {
         applicationId "org.lifeboard.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode major * 10000 + minor * 100 + patch
+        versionName appVersion
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

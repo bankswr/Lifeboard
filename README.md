@@ -44,6 +44,21 @@ JAVA_HOME=~/android-studio/jbr ANDROID_HOME=~/Android/Sdk ./gradlew assembleDebu
 Or `npm run apk`, which does all of the above and copies the APK to `release/lifeboard.apk`
 (gitignored; named so it isn't mixed up with FitApp's).
 
+### Versions
+
+The version is set only in `package.json`. The Android build takes `versionName` from it and
+works out `versionCode` (0.2.0 → 200), and **Settings → This device** shows the version and
+the git commit it was built from (`+changes` if built with uncommitted edits), so the phone
+and desktop can be compared at a glance. To release, with a clean working tree:
+
+```bash
+npm version patch   # or minor / major: bumps package.json, commits and tags vX.Y.Z
+git push --follow-tags
+npm run apk         # then install release/lifeboard.apk on the phone
+```
+
+Android won't install an APK with a lower `versionCode` over a newer one, so always bump up.
+
 ## Connections
 
 Sign in under **Settings → Connections** on each device (sign-ins are never synced):

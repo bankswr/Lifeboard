@@ -29,7 +29,9 @@ route(/^\/settings$/, async () => {
       <a class="card list-card" href="#/feeders"><span>Feeders</span><span class="muted">›</span></a>
       <a class="card list-card" href="#/fountain"><span>Water fountain</span><span class="muted">›</span></a>
       ${platform === "desktop" ? await desktopPairing() : html`${await phoneSync()}${await remindersCard()}`}
-      ${card("settings-device", "This device", html`<p class="muted">Device ID ${info.deviceId}</p>`)}
+      ${card("settings-device", "This device", html`
+        <p>Lifeboard ${__APP_VERSION__} <span class="muted">(build ${__APP_COMMIT__})</span></p>
+        <p class="muted">Device ID ${info.deviceId}</p>`)}
     `,
   };
 });
