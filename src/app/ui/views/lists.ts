@@ -4,11 +4,14 @@
 // - Prototype: standard items to copy into other lists; its checkboxes select items for
 //   "Copy selected to…" and are never saved.
 // A to-do list's "Copy mode" makes it work like a prototype list until switched off.
-// Each card's ⚙ menu has Rename and Delete; the floating + makes a new list. Renames, edits
-// and delete confirmations use the browser's own prompt/confirm dialogs.
+// Each card's ⚙ menu has Rename, Sort items A–Z and Delete; the floating + makes a new list.
+// Renames, edits and delete confirmations use the browser's own prompt/confirm dialogs.
+// Lists (within their kind) and items are reordered by dragging their ⠿ handle (user,
+// 2026-10-18), with SortableJS; the A–Z button sorts the lists once.
 import { html } from "lit-html";
 import { live } from "lit-html/directives/live.js";
-import type { ListKind, TodoItem, TodoListDetail } from "../../../core/todos.ts";
+import Sortable from "sortablejs";
+import { byText, type ListKind, type TodoItem, type TodoListDetail } from "../../../core/todos.ts";
 import { call } from "../../backend.ts";
 import { act, route } from "../app.ts";
 import { card } from "../card.ts";
@@ -34,11 +37,16 @@ route(/^\/lists$/, async () => {
   return {
     section: "lists",
     content: html`
-      <h1>Lists</h1>
+      <div class="page-header">
+        <h1>Lists</h1>
+        ${lists.length > 1
+          ? html`<button class="secondary small" title="Sort the lists by name" @click=${() => act(() => call("sortTodoListsByName"))}>A–Z</button>`
+          : ""}
+      </div>
       ${shownMessage ? html`<p class="muted">${shownMessage}</p>` : ""}
       ${lists.length === 0 ? html`<p class="muted">No lists yet. Tap + to make one.</p>` : ""}
-      ${listGroup("lists-todo", "To-do lists", lists.filter((list) => list.kind === "todo"), lists)}
-      ${listGroup("lists-prototype", "Prototype lists", lists.filter((list) => list.kind === "prototype"), lists)}
+      ${listGroup("lists-todo", "To-do lists", "todo", lists)}
+      ${listGroup("lists-prototype", "Prototype lists", "prototype", lists)}
       <button class="fab" aria-label="New list" title="New list" @click=${openNewListDialog}>+</button>
       ${newListDialog()}
     `,
@@ -49,14 +57,21 @@ route(/^\/lists$/, async () => {
           if (!menu.contains(event.target as Node)) menu.open = false;
         }
       }, { signal });
+      makeSortable(signal, lists);
     },
   };
 });
 
 /** One collapsible section of lists of a kind; left out when there are none of that kind. */
-function listGroup(id: string, title: string, group: TodoListDetail[], lists: TodoListDetail[]) {
+function listGroup(id: string, title: string, kind: ListKind, lists: TodoListDetail[]) {
+  const group = lists.filter((list) => list.kind === kind);
   if (group.length === 0) return "";
-  return card(id, html`${title} <span class="muted small">${group.length}</span>`, group.map((list) => listCard(list, lists)), { group: true });
+  return card(
+    id,
+    html`${title} <span class="muted small">${group.length}</span>`,
+    html`<div class="list-cards" data-kind=${kind}>${group.map((list) => listCard(list, lists))}</div>`,
+    { group: true },
+  );
 }
 
 function listCard(list: TodoListDetail, lists: TodoListDetail[]) {
@@ -78,7 +93,7 @@ function listCard(list: TodoListDetail, lists: TodoListDetail[]) {
       </form>
       ${list.items.length === 0 ? html`<p class="muted">${prototype ? "No items yet." : "Nothing left to do."}</p>` : ""}
       ${copyMode.has(list.id) ? html`<p class="muted small">Copy mode: tick items to select them for copying.</p>` : ""}
-      <ul class="items">${list.items.map((item) => (selecting ? selectRow(item, chosen) : todoRow(item)))}</ul>
+      <ul class="items" data-list-id=${list.id}>${list.items.map((item) => (selecting ? selectRow(item, chosen) : todoRow(item)))}</ul>
       ${others.length > 0 && list.items.length > 0
         ? html`
             <div class="list-actions">
@@ -97,14 +112,15 @@ function listCard(list: TodoListDetail, lists: TodoListDetail[]) {
           `
         : ""}
     `,
-    { actions: gearMenu(list) },
+    { actions: html`${dragHandle("Drag to move the list", list.id)}${gearMenu(list)}` },
   );
 }
 
 /** To-do item: the checkbox ticks it off (crossed out until the app next loads). */
 function todoRow(item: TodoItem) {
   return html`
-    <li class="item ${item.done ? "done" : ""}">
+    <li class="item ${item.done ? "done" : ""}" data-id=${item.id}>
+      ${dragHandle("Drag to move the item")}
       <!-- live(): compare with the checkbox's actual state, which the user's click changed;
            otherwise a reused row can keep a stale check mark. -->
       <input type="checkbox" aria-label="Done" .checked=${live(item.done)}
@@ -121,7 +137,8 @@ function todoRow(item: TodoItem) {
  */
 function selectRow(item: TodoItem, chosen: Set<string>) {
   return html`
-    <li class="item ${chosen.has(item.id) ? "selected" : ""} ${item.done ? "done" : ""}">
+    <li class="item ${chosen.has(item.id) ? "selected" : ""} ${item.done ? "done" : ""}" data-id=${item.id}>
+      ${dragHandle("Drag to move the item")}
       <input type="checkbox" aria-label="Select" .checked=${live(chosen.has(item.id))}
         @change=${(event: Event) => {
           if ((event.target as HTMLInputElement).checked) chosen.add(item.id);
@@ -150,6 +167,7 @@ function gearMenu(list: TodoListDetail) {
       <summary aria-label="List options" title="List options">⚙</summary>
       <div class="gear-menu-list">
         <button type="button" @click=${(event: Event) => { close(event); void renameList(list.id, list.name); }}>Rename</button>
+        <button type="button" @click=${(event: Event) => { close(event); void act(() => call("sortTodoItemsByName", list.id)); }}>Sort items A–Z</button>
         <button type="button" class="danger-text" @click=${(event: Event) => { close(event); void deleteList(list.id, list.name); }}>Delete</button>
       </div>
     </details>
@@ -170,9 +188,16 @@ function copySelect(label: string, targets: TodoListDetail[], copy: (targetId: s
         if (targetId) void copy(targetId);
       }}>
       <option value="" selected>${label}</option>
-      ${targets.map((target) => html`<option value=${target.id}>${target.name}</option>`)}
+      ${targetGroup("To-do lists", targets.filter((target) => target.kind === "todo"))}
+      ${targetGroup("Prototype lists", targets.filter((target) => target.kind === "prototype"))}
     </select>
   `;
+}
+
+/** Copy targets of one kind, A–Z under a heading, so it's clear which kind each list is. */
+function targetGroup(label: string, targets: TodoListDetail[]) {
+  if (targets.length === 0) return "";
+  return html`<optgroup label=${label}>${byText(targets, (target) => target.name).map((target) => html`<option value=${target.id}>${target.name}</option>`)}</optgroup>`;
 }
 
 async function copied(
@@ -186,6 +211,50 @@ async function copied(
     afterwards?.();
     const name = lists.find((list) => list.id === targetId)?.name ?? "the list";
     message = `Copied ${count} item${count === 1 ? "" : "s"} to ${name}${skipped ? ` (${skipped} already there)` : ""}.`;
+  });
+}
+
+// ---------- drag sorting ----------
+
+/** The ⠿ grip that drags a list card or an item; the rest of the row stays tappable. */
+function dragHandle(label: string, id?: string) {
+  return html`<span class="drag-handle" role="img" aria-label=${label} title=${label} data-id=${id ?? ""}>⠿</span>`;
+}
+
+/**
+ * Turns the list cards (within each kind) and each list's items into drag-sortable groups
+ * until the screen re-renders (`signal`). SortableJS moves the dragged element itself, but
+ * lit-html owns these elements, so the move is undone at once and the new order is saved
+ * and rendered the normal way.
+ */
+function makeSortable(signal: AbortSignal, lists: TodoListDetail[]) {
+  const sortables: Sortable[] = [];
+  for (const container of document.querySelectorAll<HTMLElement>(".list-cards")) {
+    const kind = container.dataset.kind;
+    const idsOfKind = (other: ListKind) => lists.filter((list) => list.kind === other).map((list) => list.id);
+    sortables.push(sortable(container, ":scope > section > .card-head .drag-handle", (moved) =>
+      // Positions are shared by both kinds: save the whole order, with this group's new one.
+      call("reorderTodoLists", [...(kind === "todo" ? moved : idsOfKind("todo")), ...(kind === "prototype" ? moved : idsOfKind("prototype"))])));
+  }
+  for (const container of document.querySelectorAll<HTMLElement>("ul.items[data-list-id]")) {
+    sortables.push(sortable(container, ":scope > li", (moved) => call("reorderTodoItems", container.dataset.listId!, moved)));
+  }
+  signal.addEventListener("abort", () => sortables.forEach((s) => s.destroy()));
+}
+
+/** `idSelector` finds the elements carrying the rows' `data-id`, in order. */
+function sortable(container: HTMLElement, idSelector: string, save: (ids: string[]) => Promise<unknown>): Sortable {
+  let placeBefore: Node | null = null;
+  return Sortable.create(container, {
+    handle: ".drag-handle",
+    animation: 150,
+    onStart: (event) => (placeBefore = event.item.nextSibling),
+    onEnd: (event) => {
+      if (event.oldIndex === event.newIndex) return;
+      const ids = [...container.querySelectorAll<HTMLElement>(idSelector)].map((element) => element.dataset.id!);
+      container.insertBefore(event.item, placeBefore); // back where lit-html expects it
+      void act(() => save(ids));
+    },
   });
 }
 

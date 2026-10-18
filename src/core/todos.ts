@@ -166,7 +166,51 @@ export async function clearDoneTodoItems(db: Db, listId: string): Promise<void> 
   });
 }
 
-async function updateItem(db: Db, itemId: string, changes: { text?: string; done?: number }): Promise<void> {
+/**
+ * Puts the lists in the given order (the Lists screen's drag sorting). Lists left out of
+ * `listIds` keep their positions; only lists whose position changes are saved (and synced).
+ */
+export async function reorderTodoLists(db: Db, listIds: string[]): Promise<void> {
+  await db.transaction(async () => {
+    for (const [index, listId] of listIds.entries()) {
+      const list = await get(db, "SELECT name, kind, position FROM todo_list WHERE id = ? AND deleted = 0", [listId]);
+      if (list && list.position !== index + 1) {
+        await saveRecord(db, "todo_list", { id: listId, name: list.name, kind: list.kind, position: index + 1 });
+      }
+    }
+  });
+}
+
+/** Puts a list's items in the given order (drag sorting); only moved items are saved. */
+export async function reorderTodoItems(db: Db, listId: string, itemIds: string[]): Promise<void> {
+  await db.transaction(async () => {
+    for (const [index, itemId] of itemIds.entries()) {
+      const item = await get(db, "SELECT position FROM todo_item WHERE id = ? AND list_id = ? AND deleted = 0", [itemId, listId]);
+      if (item && item.position !== index + 1) await updateItem(db, itemId, { position: index + 1 });
+    }
+  });
+}
+
+/** Sorts every list by name, once: the order is saved, and dragging can change it again. */
+export async function sortTodoListsByName(db: Db): Promise<void> {
+  const lists = await listTodoLists(db);
+  await reorderTodoLists(db, byText(lists, (list) => list.name).map((list) => list.id));
+}
+
+/** Sorts a list's items by text, once, like sortTodoListsByName. */
+export async function sortTodoItemsByName(db: Db, listId: string): Promise<void> {
+  const list = await getTodoList(db, listId);
+  if (!list) throw new Error("That list no longer exists.");
+  await reorderTodoItems(db, listId, byText(list.items, (item) => item.text).map((item) => item.id));
+}
+
+/** A copy sorted A–Z, ignoring case and accents, with numbers in numeric order ("2" before "10"). */
+export function byText<T>(rows: T[], text: (row: T) => string): T[] {
+  const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
+  return [...rows].sort((a, b) => collator.compare(text(a), text(b)));
+}
+
+async function updateItem(db: Db, itemId: string, changes: { text?: string; done?: number; position?: number }): Promise<void> {
   const item = await get(db, "SELECT list_id, text, done, position FROM todo_item WHERE id = ? AND deleted = 0", [itemId]);
   if (!item) throw new Error("That item no longer exists.");
   await saveRecord(db, "todo_item", { id: itemId, list_id: item.list_id, text: item.text, done: item.done, position: item.position, ...changes });

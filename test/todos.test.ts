@@ -111,3 +111,42 @@ describe("list kinds", () => {
     expect((await todos.getTodoList(db, prototype))!.kind).toBe("prototype");
   });
 });
+
+describe("sorting", () => {
+  it("reorders lists and items by drag, and sorts them A–Z once", async () => {
+    const db = await newDb();
+    const shop = await todos.createTodoList(db, "shop");
+    const chores = await todos.createTodoList(db, "Chores");
+    const errands = await todos.createTodoList(db, "Errands");
+    const names = async () => (await todos.listTodoLists(db)).map((l) => l.name);
+
+    await todos.reorderTodoLists(db, [errands, shop, chores]);
+    expect(await names()).toEqual(["Errands", "shop", "Chores"]);
+    await todos.sortTodoListsByName(db);
+    expect(await names()).toEqual(["Chores", "Errands", "shop"]);
+    // A list made after sorting goes at the end, and can be dragged from there.
+    await todos.createTodoList(db, "Bills");
+    expect(await names()).toEqual(["Chores", "Errands", "shop", "Bills"]);
+
+    const item10 = await todos.addTodoItem(db, shop, "10 eggs");
+    const milk = await todos.addTodoItem(db, shop, "milk");
+    const item2 = await todos.addTodoItem(db, shop, "2 apples");
+    const texts = async () => (await todos.getTodoList(db, shop))!.items.map((i) => i.text);
+    await todos.reorderTodoItems(db, shop, [milk, item2, item10]);
+    expect(await texts()).toEqual(["milk", "2 apples", "10 eggs"]);
+    await todos.sortTodoItemsByName(db, shop);
+    expect(await texts()).toEqual(["2 apples", "10 eggs", "milk"]);
+  });
+
+  it("saves only the rows that moved, so a reorder syncs little", async () => {
+    const db = await newDb();
+    const a = await todos.createTodoList(db, "A");
+    const b = await todos.createTodoList(db, "B");
+    const c = await todos.createTodoList(db, "C");
+    const before = await db.all("SELECT id, seq FROM todo_list");
+    await todos.reorderTodoLists(db, [a, c, b]);
+    const after = await db.all("SELECT id, seq FROM todo_list");
+    const changed = after.filter((row) => before.find((old) => old.id === row.id)!.seq !== row.seq).map((row) => row.id);
+    expect(changed.sort()).toEqual([b, c].sort());
+  });
+});

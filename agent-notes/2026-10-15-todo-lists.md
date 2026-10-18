@@ -50,3 +50,21 @@ draft.
 - To-do lists have a **Copy mode** button instead of per-item and "copy all" pickers: in copy
   mode the list works like a prototype (checkboxes select; Copy all / Copy N selected) until
   "Exit copy mode". Screen-only state.
+
+## Update 2026-10-18 (user): sorting and the copy picker
+- **Drag sorting** of list cards (within their kind's group) and of items within a list, by
+  a ⠿ grip (`drag-handle`) so taps on text/checkboxes still work. SortableJS 1.15.7 (MIT;
+  reuse rule: touch support and auto-scroll would be a lot of custom code). SortableJS moves
+  the element itself; lit-html owns it, so `onEnd` reads the new order, puts the element back
+  where it was (`nextSibling` saved at `onStart`) and saves through `reorderTodoLists` /
+  `reorderTodoItems`, then re-renders. Instances are destroyed on the screen's abort signal.
+- **A–Z** (user chose a one-time sort, not a kept-sorted toggle): button beside the Lists
+  heading (`sortTodoListsByName`), plus "Sort items A–Z" in each ⚙ menu
+  (`sortTodoItemsByName`). `byText` uses `Intl.Collator` (case/accent-insensitive, numeric).
+- Positions are one sequence across both kinds; a reorder saves only rows whose position
+  changed, so a drag syncs a few rows.
+- **Copy picker** ("Copy all to…", "Copy N selected to…"): targets grouped under To-do lists /
+  Prototype lists (`<optgroup>`), A–Z within each.
+- Verified: 2 new tests; desktop (Playwright, scratch server on another port): drag of an
+  item and of a list card saved, A–Z for lists and items, picker groups. Touch drag on the
+  phone not yet tried.

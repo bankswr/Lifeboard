@@ -314,6 +314,9 @@ button.small { padding: 6px 10px; font-size: 0.85rem; }
 .danger-text { color: var(--danger) !important; }
 .good-text { color: var(--accent) !important; }
 .item.selected .item-text { color: var(--accent); }
+/* Drag sorting (lists.ts, SortableJS): only the grip starts a drag, so it must not scroll. */
+.drag-handle { color: var(--muted); cursor: grab; touch-action: none; user-select: none; padding: 4px 2px; font-size: 1.1rem; line-height: 1; }
+.sortable-ghost { opacity: 0.4; }
 
 /* ⚙ menu on a list card */
 .gear-menu { position: relative; }
