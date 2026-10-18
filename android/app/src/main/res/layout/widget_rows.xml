@@ -34,6 +34,19 @@
             android:maxLines="1"
             android:textColor="#94a3b8"
             android:textSize="11sp" />
+
+        <!-- Lists widget only (ListsWidget.decorateHeader shows it): opens the add pop-up. -->
+        <TextView
+            android:id="@+id/widget_add"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/widget_add_button"
+            android:paddingStart="12dp"
+            android:paddingEnd="4dp"
+            android:text="+"
+            android:textColor="#22c55e"
+            android:textSize="24sp"
+            android:visibility="gone" />
     </LinearLayout>
 
     <FrameLayout

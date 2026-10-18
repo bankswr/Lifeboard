@@ -295,7 +295,10 @@ current intent, not a commitment to details.
    - **Pets:** when each device needs attention, as a date and time (not a countdown,
      which would go stale between updates): feeder food, fountain refill, Litter-Robot
      drawer full and litter low (see below).
-   - **Lists:** a chosen to-do list; items can be ticked on the widget.
+   - **Lists:** a chosen to-do list; items can be ticked on the widget, and a "+" in its
+     header opens a small pop-up over the home screen to add an item (user, 2026-10-18).
+   - Today's tasks on the **Calendar** widget can be ticked (and unticked) too (user,
+     2026-10-18); event rows still open the app.
 
    **How it's built:** the app stays a Capacitor app. The widgets are native Android
    (Kotlin layouts and drawing) inside `android/`, and only display a snapshot the
@@ -306,12 +309,16 @@ current intent, not a commitment to details.
    **Ticking a list item on the widget:** the widget crosses it out at once and queues the
    tick on the phone; the app applies queued ticks through the normal TypeScript code the
    next time it runs, and they sync from there. Kotlin never writes to the database.
+   Items added on the Lists widget and tasks ticked on the Calendar widget work the same
+   way: queued and shown at once, applied by the app (`addTodoItem`, `setTaskDone`, so a
+   task tick goes to Google and reschedules reminders as an in-app tick does). Built and
+   verified on the emulator 2026-10-18.
    **Litter-Robot estimates (new):** the drawer level is recorded at each update; from its
    rise since the drawer was last emptied, Lifeboard estimates when it reaches the alarm
    level (Settings → Litter-Robot). Likewise when the litter falls to its alarm level.
    Shown on the Pets page as well. (Built 2026-10-17 ahead of the widgets; see
    agent-notes/2026-10-17-litter-estimates.md.)
-   Widgets are display only apart from list ticks, like the rest of Lifeboard's device
+   Widgets are display only apart from list ticks, list adds and task ticks, like the rest of Lifeboard's device
    handling (see "No device control").
 9. **Finances** (stretch). Not in the 2026-10-17 build batch (user: pin down the base
    functionality first, if at all).

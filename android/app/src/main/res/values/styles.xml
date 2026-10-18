@@ -16,6 +16,11 @@
     </style>
 
 
+    <!-- Lists widget add pop-up (widgets/ListAddActivity.java): dark like the app, green accent. -->
+    <style name="WidgetDialog" parent="@android:style/Theme.Material.Dialog">
+        <item name="android:colorAccent">#22c55e</item>
+    </style>
+
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
     </style>

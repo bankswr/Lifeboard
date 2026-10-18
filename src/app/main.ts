@@ -13,7 +13,7 @@ import { nativeCookieSession } from "./nativeCookies.ts";
 import { showPhoneNotifications } from "./notify.ts";
 import { rescheduleReminders, setUpReminders } from "./reminders.ts";
 import { startPeriodicSync, syncQuietly } from "./sync.ts";
-import { applyWidgetTicks, refreshWidgets, refreshWidgetsSoon, setUpWidgets } from "./widgets.ts";
+import { applyWidgetQueues, refreshWidgets, refreshWidgetsSoon, setUpWidgets } from "./widgets.ts";
 import { refresh, showBusy, start } from "./ui/app.ts";
 import "./ui/views/calendars.ts";
 import "./ui/views/connections.ts";
@@ -52,14 +52,16 @@ async function main() {
     setNativeGoogleAuthorizer(nativeGoogleAuthorizer);
     await setUpReminders();
     await setUpWidgets();
-    // After clearCheckedItems: widget ticks are applied now, shown crossed out in the app,
-    // and cleared at the next load like ticks made in the app.
-    await applyWidgetTicks();
+    // Before the widget queues are applied, so a task ticked on the Calendar widget goes to
+    // Google and reschedules reminders exactly like a tick in the app.
     setAfterPhoneCall((name) => {
       if (CHANGES_TASKS.has(name)) void rescheduleReminders();
       if (SCHEDULE_EDITS.has(name)) void call("refreshSchedule");
       if (!READS_ONLY.test(name)) refreshWidgetsSoon();
     });
+    // After clearCheckedItems: list ticks made on the widget are applied now, shown crossed
+    // out in the app, and cleared at the next load like ticks made in the app.
+    await applyWidgetQueues();
     showBusy("Syncing with the desktop…");
     try {
       await syncQuietly();

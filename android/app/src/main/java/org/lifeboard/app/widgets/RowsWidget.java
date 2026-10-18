@@ -3,6 +3,7 @@ package org.lifeboard.app.widgets;
 import android.app.PendingIntent;
 import android.appwidget.AppWidgetManager;
 import android.appwidget.AppWidgetProvider;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
@@ -16,13 +17,15 @@ import android.view.View;
 import android.widget.RemoteViews;
 import androidx.core.widget.RemoteViewsCompat;
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.lifeboard.app.R;
 
 /**
  * A home-screen widget that draws one part of the app's snapshot (src/core/widgets.ts) as a
  * header and a scrolling list of rows. It decides nothing: every row's text and style come
- * from the snapshot. Tapping the header or a row opens the matching page in the app.
+ * from the snapshot. Tapping the header or a row opens the matching page in the app; the
+ * Lists and Calendar widgets tick rows instead (their own classes).
  */
 public abstract class RowsWidget extends AppWidgetProvider {
 
@@ -57,6 +60,7 @@ public abstract class RowsWidget extends AppWidgetProvider {
         views.setTextViewText(R.id.widget_taken, snapshot == null ? "" : snapshot.optString("takenLabel"));
         views.setOnClickPendingIntent(R.id.widget_header, openApp(context, link, widgetId));
         views.setPendingIntentTemplate(R.id.widget_rows, rowTemplate(context, widgetId));
+        if (content != null) decorateHeader(context, views, widgetId, content);
 
         JSONArray rows = content == null ? null : content.optJSONArray("rows");
         int count = rows == null ? 0 : rows.length();
@@ -72,6 +76,9 @@ public abstract class RowsWidget extends AppWidgetProvider {
         views.setViewVisibility(R.id.widget_empty, count == 0 ? View.VISIBLE : View.GONE);
         manager.updateAppWidget(widgetId, views);
     }
+
+    /** Extra header controls; the Lists widget shows its add button here. None by default. */
+    void decorateHeader(Context context, RemoteViews views, int widgetId, JSONObject content) {}
 
     /** One row: title (struck through when done), an optional second line and a right-hand value. */
     RemoteViews rowView(Context context, JSONObject row, String widgetLink) {
@@ -135,6 +142,33 @@ public abstract class RowsWidget extends AppWidgetProvider {
     PendingIntent rowTemplate(Context context, int widgetId) {
         Intent intent = new Intent(Intent.ACTION_VIEW).setPackage(context.getPackageName());
         return PendingIntent.getActivity(context, widgetId, intent, PendingIntent.FLAG_UPDATE_CURRENT | mutable());
+    }
+
+    /**
+     * Shows ticks queued on the widget (id → done) on the rows they belong to, so a tap shows
+     * at once, before the app has applied it. Changes `content` in place and returns it.
+     */
+    static JSONObject withQueuedTicks(JSONObject content, JSONObject ticks) {
+        JSONArray rows = content.optJSONArray("rows");
+        if (rows == null || ticks.length() == 0) return content;
+        try {
+            for (int i = 0; i < rows.length(); i++) {
+                JSONObject row = rows.getJSONObject(i);
+                String id = row.optString("itemId");
+                if (ticks.has(id)) row.put("done", ticks.getBoolean(id));
+            }
+        } catch (JSONException e) {
+            // A malformed row is drawn as the snapshot had it.
+        }
+        return content;
+    }
+
+    /** Redraws every placed widget of this kind, e.g. after a tick was queued. */
+    static void redrawAll(Context context, RowsWidget widget) {
+        AppWidgetManager manager = AppWidgetManager.getInstance(context);
+        for (int widgetId : manager.getAppWidgetIds(new ComponentName(context, widget.getClass()))) {
+            widget.draw(context, manager, widgetId);
+        }
     }
 
     static PendingIntent openApp(Context context, String link, int widgetId) {

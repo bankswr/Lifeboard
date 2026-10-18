@@ -1,17 +1,19 @@
 package org.lifeboard.app.widgets;
 
 import android.app.PendingIntent;
-import android.appwidget.AppWidgetManager;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.view.View;
+import android.widget.RemoteViews;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.lifeboard.app.R;
 
 /**
  * One to-do list, chosen when the widget is placed (ListsWidgetConfigure). Tapping an item
- * crosses it out (or back) at once and queues the change; the app applies queued ticks
+ * crosses it out (or back) at once and queues the change; the header's "+" opens a pop-up
+ * (ListAddActivity) whose item is queued and shown at once. The app applies both queues
  * through its normal code the next time it runs (src/app/widgets.ts), so this class never
  * writes to the app's database.
  */
@@ -26,9 +28,17 @@ public class ListsWidget extends RowsWidget {
         return "lists";
     }
 
-    /** The chosen list (the first list if none was chosen or it was deleted), with queued ticks shown. */
+    /** The chosen list (the first list if none was chosen or it was deleted), with queued changes shown. */
     @Override
     JSONObject content(Context context, int widgetId) {
+        JSONObject list = shownList(context, widgetId);
+        if (list == null) return null;
+        withQueuedTicks(list, WidgetStore.ticks(context, WidgetStore.LIST_TICKS));
+        return withQueuedAdds(context, list);
+    }
+
+    /** The list this widget shows, as in the snapshot, or null before the app has run once. */
+    static JSONObject shownList(Context context, int widgetId) {
         JSONObject snapshot = WidgetStore.snapshot(context);
         JSONArray lists = snapshot == null ? null : snapshot.optJSONArray("lists");
         if (lists == null || lists.length() == 0) return null;
@@ -38,23 +48,47 @@ public class ListsWidget extends RowsWidget {
             JSONObject candidate = lists.optJSONObject(i);
             if (candidate != null && candidate.optString("id").equals(chosen)) list = candidate;
         }
-        return withQueuedTicks(context, list);
+        return list;
     }
 
-    private static JSONObject withQueuedTicks(Context context, JSONObject list) {
-        JSONObject ticks = WidgetStore.ticks(context);
+    /**
+     * Items added on the widget and not yet saved by the app, after the open items. They have
+     * no id yet, so they can't be ticked until the app has added them.
+     */
+    private static JSONObject withQueuedAdds(Context context, JSONObject list) {
+        JSONArray adds = WidgetStore.adds(context);
         JSONArray rows = list.optJSONArray("rows");
-        if (rows == null || ticks.length() == 0) return list;
+        if (rows == null || adds.length() == 0) return list;
         try {
+            JSONArray open = new JSONArray();
+            JSONArray done = new JSONArray();
             for (int i = 0; i < rows.length(); i++) {
                 JSONObject row = rows.getJSONObject(i);
-                String itemId = row.optString("itemId");
-                if (ticks.has(itemId)) row.put("done", ticks.getBoolean(itemId));
+                (row.optBoolean("done", false) ? done : open).put(row);
             }
+            for (int i = 0; i < adds.length(); i++) {
+                JSONObject add = adds.getJSONObject(i);
+                if (!add.optString("listId").equals(list.optString("id"))) continue;
+                open.put(new JSONObject()
+                    .put("title", add.optString("text"))
+                    .put("sub", "Added when Lifeboard next opens")
+                    .put("style", "normal"));
+            }
+            for (int i = 0; i < done.length(); i++) open.put(done.get(i));
+            list.put("rows", open);
         } catch (JSONException e) {
-            // A malformed row is drawn as the snapshot had it.
+            // Drawn as the snapshot had it; the queued items still get added by the app.
         }
         return list;
+    }
+
+    /** The "+" in the header opens the add pop-up for this widget's list. */
+    @Override
+    void decorateHeader(Context context, RemoteViews views, int widgetId, JSONObject content) {
+        Intent intent = new Intent(context, ListAddActivity.class).putExtra(ListAddActivity.EXTRA_WIDGET_ID, widgetId);
+        PendingIntent add = PendingIntent.getActivity(context, 20_000 + widgetId, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        views.setViewVisibility(R.id.widget_add, View.VISIBLE);
+        views.setOnClickPendingIntent(R.id.widget_add, add);
     }
 
     @Override
@@ -75,8 +109,8 @@ public class ListsWidget extends RowsWidget {
     @Override
     public void onReceive(Context context, Intent intent) {
         if (ACTION_TICK.equals(intent.getAction()) && intent.hasExtra(EXTRA_ITEM)) {
-            WidgetStore.queueTick(context, intent.getStringExtra(EXTRA_ITEM), intent.getBooleanExtra(EXTRA_DONE, true));
-            redrawAll(context);
+            WidgetStore.queueTick(context, WidgetStore.LIST_TICKS, intent.getStringExtra(EXTRA_ITEM), intent.getBooleanExtra(EXTRA_DONE, true));
+            redrawAll(context, this);
             return;
         }
         super.onReceive(context, intent);
@@ -85,13 +119,5 @@ public class ListsWidget extends RowsWidget {
     @Override
     public void onDeleted(Context context, int[] widgetIds) {
         for (int widgetId : widgetIds) WidgetStore.forgetWidget(context, widgetId);
-    }
-
-    static void redrawAll(Context context) {
-        AppWidgetManager manager = AppWidgetManager.getInstance(context);
-        ListsWidget widget = new ListsWidget();
-        for (int widgetId : manager.getAppWidgetIds(new ComponentName(context, ListsWidget.class))) {
-            widget.draw(context, manager, widgetId);
-        }
     }
 }
