@@ -66,5 +66,5 @@ draft.
 - **Copy picker** ("Copy all to…", "Copy N selected to…"): targets grouped under To-do lists /
   Prototype lists (`<optgroup>`), A–Z within each.
 - Verified: 2 new tests; desktop (Playwright, scratch server on another port): drag of an
-  item and of a list card saved, A–Z for lists and items, picker groups. Touch drag on the
-  phone not yet tried.
+  item and of a list card saved, A–Z for lists and items, picker groups. Emulator
+  (`fitapp_test`, adb `input motionevent` drags): item and list-card touch drags work and save.
