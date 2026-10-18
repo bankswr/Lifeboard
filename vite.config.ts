@@ -12,7 +12,8 @@ const commit = gitCommit();
 function gitCommit(): string {
   try {
     const hash = execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
-    const changed = execSync("git status --porcelain", { encoding: "utf8" }).trim() !== "";
+    // Untracked files (e.g. a download left in the folder) aren't part of the build.
+    const changed = execSync("git status --porcelain --untracked-files=no", { encoding: "utf8" }).trim() !== "";
     return changed ? `${hash}+changes` : hash;
   } catch {
     return "unknown"; // not built from a git checkout
