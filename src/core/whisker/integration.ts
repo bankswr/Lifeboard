@@ -1,6 +1,7 @@
 // Litter-Robot (Whisker) integration: each update reads every LR4 on the account, keeps its
 // latest status for the Hub and Pets screens, and produces a "litter_robot" reading for alert rules.
-// It also stores the cats' weigh-ins and checks their weight and visit alerts (cats.ts).
+// It also stores the cats' weigh-ins and checks their weight and visit alerts (cats.ts), and
+// reads each robot's activity log for clean cycles that didn't follow a visit (stalls.ts).
 // Sign-in: the Cognito refresh token is reused; when it stops working, Lifeboard signs in
 // again with the saved password, and only if that fails does the user get a "signed out" alert.
 import { getCredential, saveCredential } from "../credentials.ts";
@@ -12,6 +13,7 @@ import { cognitoWhiskerApi, WhiskerSignInError, type WhiskerApi } from "./api.ts
 import { checkCatAlerts, saveCats } from "./cats.ts";
 import { recordLitterLevels } from "./estimates.ts";
 import { checkLitterAlarms } from "./levels.ts";
+import { ACTIVITY_LOOKBACK_HOURS, checkCycleStall } from "./stalls.ts";
 import { litterRobotStatus } from "./status.ts";
 
 interface WhiskerCredential {
@@ -44,6 +46,10 @@ export function makeWhiskerIntegration(api: WhiskerApi = cognitoWhiskerApi): Int
       await recordLitterLevels(db, robots);
       await saveCats(db, await api.pets(idToken));
       await deliverAlerts(await checkCatAlerts(db));
+      const since = new Date(Date.now() - ACTIVITY_LOOKBACK_HOURS * 3_600_000);
+      for (const robot of robots) {
+        await deliverAlerts(await checkCycleStall(db, robot, await api.activity(idToken, robot.serial, since)));
+      }
       return robots.map((robot) => ({
         type: "litter_robot",
         subject: robot.name,

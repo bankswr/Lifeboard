@@ -148,6 +148,11 @@ current intent, not a commitment to details.
      time and visits per day. Alerts, with thresholds in Settings: a weight change of 5%
      or more (default) between recent weigh-ins and those two weeks earlier; and more
      visits in a day than a per-cat limit (cats differ: Scout visits far more often).
+   - **Clean-cycle stall alert (user, 2026-10-18; built):** alert when a cat's visit gets no
+     clean cycle within 60 minutes (Settings → Litter-Robot, blank = off), read from the
+     robot's activity log at each update. Visit-based rather than "time since the last
+     cycle", so a box nobody is using doesn't alert. Dismissing it while still stalled
+     brings it back at the next update. Data behind it: agent-notes/2026-10-18-litter-cycle-stalls.md.
      Built 2026-10-17; live-verified the same day (113 weigh-ins stored for three cats).
 5. **Tasks & reminders**, with Google Tasks sync, plus the generic to-do lists
    (to-do lists ✅ built 2026-10-15, accepted by the user 2026-10-17). Tasks built 2026-10-16

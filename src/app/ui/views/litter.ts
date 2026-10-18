@@ -1,5 +1,6 @@
 // Litter-Robot settings (#/litter, under Settings): the drawer and litter levels at which
-// their bars turn yellow (warning) and red (alarm), and the optional clean-up task at alarm.
+// their bars turn yellow (warning) and red (alarm), the optional clean-up task at alarm, and
+// the clean-cycle stall alert (core/whisker/stalls.ts).
 // Below, the cats' alerts: weight change and each cat's visits-per-day limit (core/whisker/cats.ts).
 import { html } from "lit-html";
 import type { CatSummary } from "../../../core/whisker/cats.ts";
@@ -42,6 +43,14 @@ route(/^\/litter$/, async () => {
           At alarm, add “Clean the litter box” to today's tasks and alert me
         </label>
         <p class="muted small">Happens once each time a level reaches its alarm, not on every update.</p>
+        <fieldset>
+          <legend>Clean cycles</legend>
+          <label>Alert if a visit gets no clean cycle within minutes
+            <input type="number" name="stallAlertMinutes" min="15" step="1" placeholder="Off"
+              .value=${settings.stallAlertMinutes === null ? "" : String(settings.stallAlertMinutes)}>
+          </label>
+          <p class="muted small">Usually a cycle follows within half an hour. Dismissing the alert while the robot still hasn't cycled brings it back at the next update. Blank turns it off.</p>
+        </fieldset>
         <button type="submit">Save</button>
       </form>
       ${cats.length > 0 ? html`
@@ -102,6 +111,7 @@ async function save(event: SubmitEvent) {
       litterWarning: level("litterWarning"),
       litterAlarm: level("litterAlarm"),
       cleanTaskAtAlarm: fields.has("cleanTaskAtAlarm"),
+      stallAlertMinutes: String(fields.get("stallAlertMinutes") ?? "").trim() === "" ? null : level("stallAlertMinutes"),
     });
     message = "Saved.";
   } catch (error) {

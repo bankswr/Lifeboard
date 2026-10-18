@@ -4,12 +4,14 @@ import { migrate } from "../src/core/db/schema.ts";
 import { listDeviceStatuses } from "../src/core/devices.ts";
 import { listRules, saveRule } from "../src/core/rules.ts";
 import { runUpdate } from "../src/core/updates.ts";
-import { WhiskerSignInError, type RawPet, type RawRobot, type WhiskerApi } from "../src/core/whisker/api.ts";
+import { WhiskerSignInError, type ActivityEntry, type RawPet, type RawRobot, type WhiskerApi } from "../src/core/whisker/api.ts";
 import { catSummaries, checkCatAlerts, saveCatSettings, saveCats, DEFAULT_CAT_SETTINGS } from "../src/core/whisker/cats.ts";
 import { makeWhiskerIntegration } from "../src/core/whisker/integration.ts";
 import { checkLitterAlarms, DEFAULT_LITTER_SETTINGS, drawerState, litterState, saveLitterSettings } from "../src/core/whisker/levels.ts";
 import { estimateLitter, litterEstimates, recordLitterLevels } from "../src/core/whisker/estimates.ts";
+import { checkCycleStall, findCycleStall } from "../src/core/whisker/stalls.ts";
 import { litterRobotStatus } from "../src/core/whisker/status.ts";
+import { dismissAlert, recentAlerts } from "../src/core/rules.ts";
 import { openNodeDb } from "../src/desktop/db/nodeSqlite.ts";
 
 const READY: RawRobot = {
@@ -32,7 +34,7 @@ describe("litterRobotStatus (pylitterbot's rules)", () => {
 });
 
 /** A pretend Whisker account. */
-function fakeWhisker(options: { password: string; refreshWorks: boolean; robot: () => RawRobot; pets?: RawPet[] }) {
+function fakeWhisker(options: { password: string; refreshWorks: boolean; robot: () => RawRobot; pets?: RawPet[]; activity?: ActivityEntry[] }) {
   const calls: string[] = [];
   const api: WhiskerApi = {
     async signIn(_email, password) {
@@ -50,6 +52,9 @@ function fakeWhisker(options: { password: string; refreshWorks: boolean; robot: 
     },
     async pets() {
       return options.pets ?? [];
+    },
+    async activity() {
+      return options.activity ?? [];
     },
   };
   return { api, calls };
@@ -241,5 +246,65 @@ describe("Litter-Robot estimates", () => {
     expect(await db.all("SELECT drawer FROM litter_level ORDER BY at")).toEqual([{ drawer: 40 }, { drawer: 60 }]);
     const estimates = await litterEstimates(db);
     expect(estimates[robot.serial].drawer.ratePerDay).toBeCloseTo(20 / 7 * 24);
+  });
+});
+
+describe("clean-cycle stalls", () => {
+  const now = new Date("2026-10-18T12:00:00Z");
+  /** An activity entry `minutes` before now, in Whisker's timestamp format. */
+  const entry = (value: string, minutes: number): ActivityEntry => ({
+    timestamp: new Date(now.getTime() - minutes * 60_000).toISOString().replace("T", " ").replace("Z", "000000"),
+    value,
+  });
+  const visit = (minutes: number) => entry("catWeight", minutes);
+  const cycle = (minutes: number) => entry("robotCycleStatusDump", minutes);
+
+  it("finds visits the robot hasn't cleaned up after, once the first is old enough", () => {
+    expect(findCycleStall([visit(300), cycle(295), visit(90), visit(30)], now, 60)).toEqual({
+      since: new Date(now.getTime() - 90 * 60_000).toISOString(),
+      visits: 2,
+    });
+    expect(findCycleStall([visit(300), cycle(295), visit(30)], now, 60)).toBeNull(); // not long enough yet
+    expect(findCycleStall([visit(90), cycle(85)], now, 60)).toBeNull(); // cleaned
+    expect(findCycleStall([visit(2000)], now, 60)).toMatchObject({ visits: 1 }); // no cycle in the whole window
+    expect(findCycleStall([], now, 60)).toBeNull();
+  });
+
+  it("alerts once per stall, again if dismissed while still stalled, and again for a new stall", async () => {
+    const db = await newDb();
+    const robot = litterRobotStatus(READY);
+    const stalled = [cycle(500), visit(120), visit(60)];
+
+    const [first] = await checkCycleStall(db, robot, stalled, now);
+    expect(first.message).toBe("Litter-Robot hasn't run a clean cycle after 2 visits (first 2 hours ago).");
+    expect(await checkCycleStall(db, robot, stalled, now)).toEqual([]); // still on the Monitor
+
+    await dismissAlert(db, (await recentAlerts(db))[0].id);
+    expect(await checkCycleStall(db, robot, stalled, now)).toHaveLength(1); // dismissed, still stalled
+
+    expect(await checkCycleStall(db, robot, [...stalled, cycle(10)], now)).toEqual([]); // cleaned
+    const later = new Date(now.getTime() + 5 * 3_600_000);
+    const [again] = await checkCycleStall(db, { ...robot, drawerFull: true }, [...stalled, cycle(10), visit(-200)], later);
+    expect(again.message).toBe("Litter-Robot hasn't run a clean cycle after a cat's visit (first 100 minutes ago). The drawer is full.");
+  });
+
+  it("can be turned off, and needs a sensible wait", async () => {
+    const db = await newDb();
+    await saveLitterSettings(db, { ...DEFAULT_LITTER_SETTINGS, stallAlertMinutes: null });
+    expect(await checkCycleStall(db, litterRobotStatus(READY), [visit(600)], now)).toEqual([]);
+    await expect(saveLitterSettings(db, { ...DEFAULT_LITTER_SETTINGS, stallAlertMinutes: 5 })).rejects.toThrow(/at least 15/);
+  });
+
+  it("checks the activity log at each update", async () => {
+    const site = fakeWhisker({ password: "pw", refreshWorks: true, robot: () => READY, activity: [
+      { timestamp: "2020-01-01 00:00:00.000000000", value: "catWeight" },
+    ] });
+    const whisker = makeWhiskerIntegration(site.api);
+    const db = await newDb();
+    await whisker.signIn!(db, "me@example.com", "pw");
+    await runUpdate(db, [whisker]);
+    expect((await recentAlerts(db)).map((a) => a.message)).toEqual([
+      expect.stringMatching(/^Litter-Robot hasn't run a clean cycle after a cat's visit/),
+    ]);
   });
 });

@@ -32,6 +32,13 @@ export interface RawPet {
   weightHistory: { weight: number; timestamp: string }[] | null;
 }
 
+/** One entry of a robot's activity log, e.g. value "catWeight" or "robotCycleStatusDump". */
+export interface ActivityEntry {
+  /** UTC, "YYYY-MM-DD HH:MM:SS" plus fractions of a second. */
+  timestamp: string;
+  value: string;
+}
+
 export interface WhiskerTokens {
   idToken: string;
   refreshToken: string;
@@ -47,6 +54,8 @@ export interface WhiskerApi {
   refresh(email: string, refreshToken: string): Promise<string>;
   robots(idToken: string): Promise<RawRobot[]>;
   pets(idToken: string): Promise<RawPet[]>;
+  /** An LR4's activity log from `since` (UTC) to now. */
+  activity(idToken: string, serial: string, since: Date): Promise<ActivityEntry[]>;
 }
 
 // Cognito's library keeps tokens in browser storage by default; Lifeboard saves its own
@@ -101,15 +110,25 @@ export const cognitoWhiskerApi: WhiskerApi = {
       "query ($userId: String!) { getPetsByUser(userId: $userId) { petId name weightHistory { weight timestamp } } }");
     return data.getPetsByUser ?? [];
   },
+
+  async activity(idToken, serial, since) {
+    // Without a start Whisker returns only about the last 6 days
+    // (agent-notes/2026-10-17-cat-weights.md); the limit is far above an hour's worth.
+    const data = await graphql(LR4_GRAPHQL_URL, idToken,
+      `query ($serial: String!, $start: String) {
+        getLitterRobot4Activity(serial: $serial, startTimestamp: $start, limit: 2000, consumer: "app") { timestamp value } }`,
+      { serial, start: since.toISOString().slice(0, 19).replace("T", " ") });
+    return data.getLitterRobot4Activity ?? [];
+  },
 };
 
 /** Runs a query for the signed-in user (its id is the ID token's `mid` claim). */
-async function graphql(url: string, idToken: string, query: string): Promise<Record<string, any>> {
+async function graphql(url: string, idToken: string, query: string, variables: Record<string, unknown> = {}): Promise<Record<string, any>> {
   const userId = JSON.parse(atob(idToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).mid;
   const response = await fetch(url, {
     method: "POST",
     headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ query, variables: { userId } }),
+    body: JSON.stringify({ query, variables: { userId, ...variables } }),
   });
   if (!response.ok) throw new Error(`Whisker answered ${response.status}.`);
   const body = await response.json();

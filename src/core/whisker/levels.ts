@@ -19,12 +19,15 @@ export interface LitterSettings {
   litterAlarm: number;
   /** At alarm: add a "Clean the litter box" task for today and raise an alert. */
   cleanTaskAtAlarm: boolean;
+  /** Alert when a cat's visit gets no clean cycle within this many minutes; null = off (stalls.ts). */
+  stallAlertMinutes: number | null;
 }
 
 export type LevelState = "ok" | "warning" | "alarm";
 
 export const DEFAULT_LITTER_SETTINGS: LitterSettings = {
   drawerWarning: 70, drawerAlarm: 90, litterWarning: 40, litterAlarm: 20, cleanTaskAtAlarm: false,
+  stallAlertMinutes: 60,
 };
 
 const SETTING_ID = "litter_levels";
@@ -39,6 +42,9 @@ export async function saveLitterSettings(db: Db, settings: LitterSettings): Prom
   if (levels.some((level) => !Number.isFinite(level) || level < 0 || level > 100)) throw new Error("Levels are percentages from 0 to 100.");
   if (settings.drawerWarning >= settings.drawerAlarm) throw new Error("The drawer warning must be below its alarm level.");
   if (settings.litterWarning <= settings.litterAlarm) throw new Error("The litter warning must be above its alarm level.");
+  if (settings.stallAlertMinutes !== null && !(Number.isInteger(settings.stallAlertMinutes) && settings.stallAlertMinutes >= 15)) {
+    throw new Error("The clean-cycle alert needs whole minutes, at least 15 (the robot can wait up to 15 minutes itself), or blank for off.");
+  }
   await saveRecord(db, "setting", { id: SETTING_ID, value: JSON.stringify(settings) });
 }
 

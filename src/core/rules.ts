@@ -164,11 +164,12 @@ function fromRow(row: Record<string, any>): Rule {
 
 /**
  * Records an alert that comes from something other than a rule (e.g. a Schedule edit Google
- * refused). It's listed with the others; the caller delivers it.
+ * refused). It's listed with the others; the caller delivers it. A `ruleId` lets the caller
+ * find its own alerts again (e.g. whether one is still undismissed).
  */
-export async function recordAlert(db: Db, subject: string, message: string): Promise<NewAlert> {
-  const alert = { ruleId: "builtin", subject, message };
-  await db.run("INSERT INTO alert (created_at, rule_id, subject, message) VALUES (?, ?, ?, ?)", [utcNow(), alert.ruleId, subject, message]);
+export async function recordAlert(db: Db, subject: string, message: string, ruleId = "builtin", at = new Date()): Promise<NewAlert> {
+  const alert = { ruleId, subject, message };
+  await db.run("INSERT INTO alert (created_at, rule_id, subject, message) VALUES (?, ?, ?, ?)", [utcNow(at), alert.ruleId, subject, message]);
   return alert;
 }
 
