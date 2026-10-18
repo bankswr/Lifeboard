@@ -1,5 +1,6 @@
 // App start: connect to the data (on-device database or desktop server) and show the app.
-// On the phone, also sync with the desktop if it's reachable and update if one is due.
+// On the phone, also sync with the desktop if it's reachable (then every half hour while
+// open) and update if one is due.
 import "./style.css";
 import { setCookieSessionFactory } from "../core/http.ts";
 import { setNativeGoogleAuthorizer } from "../core/google/token.ts";
@@ -11,7 +12,7 @@ import { nativeGoogleAuthorizer } from "./googleAuth.ts";
 import { nativeCookieSession } from "./nativeCookies.ts";
 import { showPhoneNotifications } from "./notify.ts";
 import { rescheduleReminders, setUpReminders } from "./reminders.ts";
-import { syncQuietly } from "./sync.ts";
+import { startPeriodicSync, syncQuietly } from "./sync.ts";
 import { applyWidgetTicks, refreshWidgets, refreshWidgetsSoon, setUpWidgets } from "./widgets.ts";
 import { refresh, showBusy, start } from "./ui/app.ts";
 import "./ui/views/calendars.ts";
@@ -73,6 +74,7 @@ async function main() {
     await rescheduleReminders(); // opening the app always refreshes them
     await refreshWidgets();
     await refresh();
+    await startPeriodicSync();
   }
 }
 

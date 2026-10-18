@@ -72,7 +72,8 @@ reasons:
 - **Sync rule:** data only, both directions, with the newer edit winning for each
   record. The device ID breaks ties.
 - **Finding the desktop:** the phone is given the desktop's LAN address in settings
-  and syncs whenever it can reach it, both on demand and periodically. Automatic
+  and syncs whenever it can reach it, both on demand and periodically (on app open, then
+  every 30 minutes while the app is open; not while it is closed — user, 2026-10-18). Automatic
   discovery (mDNS) is unreliable on Android and is left out of v1.
 - **Clock skew:** "newer wins" relies on the device clocks agreeing, which is fine
   for normal phone and PC clocks. This is recorded as a known limit.
