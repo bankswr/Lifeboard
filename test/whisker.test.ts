@@ -10,6 +10,7 @@ import { makeWhiskerIntegration } from "../src/core/whisker/integration.ts";
 import { checkLitterAlarms, DEFAULT_LITTER_SETTINGS, drawerState, litterState, saveLitterSettings } from "../src/core/whisker/levels.ts";
 import { estimateLitter, litterEstimates, recordLitterLevels } from "../src/core/whisker/estimates.ts";
 import { checkCycleStall, findCycleStall } from "../src/core/whisker/stalls.ts";
+import { checkHopperAlarms, estimateHopper, hopperEstimates, listHopperRefills, markHopperRefilled, recordHopperDispenses } from "../src/core/whisker/hopper.ts";
 import { litterRobotStatus } from "../src/core/whisker/status.ts";
 import { dismissAlert, recentAlerts } from "../src/core/rules.ts";
 import { openNodeDb } from "../src/desktop/db/nodeSqlite.ts";
@@ -306,5 +307,78 @@ describe("clean-cycle stalls", () => {
     expect((await recentAlerts(db)).map((a) => a.message)).toEqual([
       expect.stringMatching(/^Litter-Robot hasn't run a clean cycle after a cat's visit/),
     ]);
+  });
+});
+
+describe("LitterHopper estimate", () => {
+  const start = new Date("2026-10-01T00:00:00Z");
+  const hours = (n: number) => new Date(start.getTime() + n * 3_600_000);
+  /** A dispense entry at `hour` hours after the start, in Whisker's timestamp format. */
+  const dispense = (hour: number): ActivityEntry => ({
+    timestamp: hours(hour).toISOString().replace("T", " ").replace("Z", "000000"),
+    value: "litterHopperDispensed",
+  });
+  /** One dispense every 6 hours (4 a day) from `fromHour` up to `toHour`. */
+  const dispenses = (fromHour: number, toHour: number) =>
+    Array.from({ length: Math.floor((toHour - fromHour) / 6) + 1 }, (_, i) => dispense(fromHour + i * 6));
+
+  it("stores each dispense once, however often the log is read", async () => {
+    const db = await newDb();
+    await recordHopperDispenses(db, "S1", [...dispenses(0, 12), { timestamp: "2026-10-01 01:00:00.000000000", value: "catWeight" }]);
+    await recordHopperDispenses(db, "S1", dispenses(0, 18)); // overlapping read
+    expect((await db.all("SELECT COUNT(*) AS n FROM litter_hopper_event WHERE kind = 'dispense'"))[0].n).toBe(4);
+  });
+
+  it("learns the hopper size from refills and estimates days left from the recent rate", async () => {
+    const db = await newDb();
+    await recordHopperDispenses(db, "S1", dispenses(0, 24 * 30));
+    await markHopperRefilled(db, "S1", hours(1)); // starting point
+    expect(await estimateHopper(db, "S1", hours(2))).toMatchObject({ capacity: null, percentLeft: null, daysLeft: null });
+
+    await markHopperRefilled(db, "S1", hours(24 * 10 + 1)); // 10 days × 4 = 40 dispenses
+    await markHopperRefilled(db, "S1", hours(24 * 10 + 2)); // double press: 0 dispenses, ignored
+    expect((await listHopperRefills(db)).map((r) => r.dispenses)).toEqual([0, 40, null]);
+
+    const estimate = await estimateHopper(db, "S1", hours(24 * 15 + 2)); // 5 days later: 20 used
+    expect(estimate).toMatchObject({ capacity: 40, usedSinceRefill: 20, dispensesLeft: 20, percentLeft: 50, state: "ok" });
+    expect(estimate.daysLeft).toBeCloseTo(5, 1);
+    expect((await estimateHopper(db, "S1", hours(24 * 21 + 2))).state).toBe("alarm"); // 4 left ≈ 1 day
+    expect(Object.keys(await hopperEstimates(db))).toEqual(["S1"]);
+  });
+
+  it("is still learning the rate until dispenses have been seen for a day", async () => {
+    const db = await newDb();
+    await recordHopperDispenses(db, "S1", dispenses(0, 12));
+    await markHopperRefilled(db, "S1", hours(0.5));
+    await markHopperRefilled(db, "S1", hours(13)); // 2 dispenses: capacity 2
+    expect(await estimateHopper(db, "S1", hours(14))).toMatchObject({ capacity: 2, percentLeft: 100, daysLeft: null, state: "ok" });
+  });
+
+  it("adds a refill task once when the alarm is reached, if enabled", async () => {
+    const db = await newDb();
+    await saveLitterSettings(db, { ...DEFAULT_LITTER_SETTINGS, hopperTaskAtAlarm: true });
+    await recordHopperDispenses(db, "S1", dispenses(0, 24 * 30));
+    await markHopperRefilled(db, "S1", hours(1));
+    await markHopperRefilled(db, "S1", hours(24 * 5 + 1)); // capacity 20
+    const robot = litterRobotStatus({ ...READY, serial: "S1" });
+    expect(await checkHopperAlarms(db, [robot], hours(24 * 6 + 1))).toEqual([]); // 4 days left
+    const [alert] = await checkHopperAlarms(db, [robot], hours(24 * 9 + 7)); // 3 left at 4 a day
+    expect(alert.message).toMatch(/^Litter-Robot: about 0\.8 days of litter left in the hopper\. Couldn't add a task/);
+    expect(await checkHopperAlarms(db, [robot], hours(24 * 9 + 8))).toEqual([]); // still in alarm: no repeat
+  });
+
+  it("checks the hopper thresholds", async () => {
+    const db = await newDb();
+    await expect(saveLitterSettings(db, { ...DEFAULT_LITTER_SETTINGS, hopperWarningDays: 1, hopperAlarmDays: 1 })).rejects.toThrow(/more days/);
+  });
+
+  it("records dispenses at each update", async () => {
+    const site = fakeWhisker({ password: "pw", refreshWorks: true, robot: () => READY, activity: dispenses(0, 6) });
+    const whisker = makeWhiskerIntegration(site.api);
+    const db = await newDb();
+    await whisker.signIn!(db, "me@example.com", "pw");
+    await runUpdate(db, [whisker]);
+    expect((await hopperEstimates(db))[READY.serial]).toMatchObject({ lastRefill: null });
+    expect((await db.all("SELECT serial FROM litter_hopper_event")).map((r) => r.serial)).toEqual([READY.serial, READY.serial]);
   });
 });

@@ -1,7 +1,8 @@
 // Litter-Robot (Whisker) integration: each update reads every LR4 on the account, keeps its
 // latest status for the Hub and Pets screens, and produces a "litter_robot" reading for alert rules.
 // It also stores the cats' weigh-ins and checks their weight and visit alerts (cats.ts), and
-// reads each robot's activity log for clean cycles that didn't follow a visit (stalls.ts).
+// reads each robot's activity log for clean cycles that didn't follow a visit (stalls.ts) and
+// for LitterHopper dispenses (hopper.ts).
 // Sign-in: the Cognito refresh token is reused; when it stops working, Lifeboard signs in
 // again with the saved password, and only if that fails does the user get a "signed out" alert.
 import { getCredential, saveCredential } from "../credentials.ts";
@@ -12,6 +13,7 @@ import { deliverAlerts } from "../notify.ts";
 import { cognitoWhiskerApi, WhiskerSignInError, type WhiskerApi } from "./api.ts";
 import { checkCatAlerts, saveCats } from "./cats.ts";
 import { recordLitterLevels } from "./estimates.ts";
+import { checkHopperAlarms, recordHopperDispenses } from "./hopper.ts";
 import { checkLitterAlarms } from "./levels.ts";
 import { ACTIVITY_LOOKBACK_HOURS, checkCycleStall } from "./stalls.ts";
 import { litterRobotStatus } from "./status.ts";
@@ -48,8 +50,11 @@ export function makeWhiskerIntegration(api: WhiskerApi = cognitoWhiskerApi): Int
       await deliverAlerts(await checkCatAlerts(db));
       const since = new Date(Date.now() - ACTIVITY_LOOKBACK_HOURS * 3_600_000);
       for (const robot of robots) {
-        await deliverAlerts(await checkCycleStall(db, robot, await api.activity(idToken, robot.serial, since)));
+        const activity = await api.activity(idToken, robot.serial, since);
+        await recordHopperDispenses(db, robot.serial, activity);
+        await deliverAlerts(await checkCycleStall(db, robot, activity));
       }
+      await deliverAlerts(await checkHopperAlarms(db, robots));
       return robots.map((robot) => ({
         type: "litter_robot",
         subject: robot.name,

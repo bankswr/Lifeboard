@@ -1,16 +1,21 @@
 // Litter-Robot settings (#/litter, under Settings): the drawer and litter levels at which
 // their bars turn yellow (warning) and red (alarm), the optional clean-up task at alarm, and
-// the clean-cycle stall alert (core/whisker/stalls.ts).
+// the clean-cycle stall alert (core/whisker/stalls.ts), and the LitterHopper estimate's
+// thresholds and the refills it learns from (each can be removed; core/whisker/hopper.ts).
 // Below, the cats' alerts: weight change and each cat's visits-per-day limit (core/whisker/cats.ts).
 import { html } from "lit-html";
 import type { CatSummary } from "../../../core/whisker/cats.ts";
 import { call } from "../../backend.ts";
-import { refresh, route } from "../app.ts";
+import { act, refresh, route } from "../app.ts";
+import { card } from "../card.ts";
+import { formatTime } from "../format.ts";
 
 let message = "";
 
 route(/^\/litter$/, async () => {
-  const [settings, catSettings, cats] = await Promise.all([call("getLitterSettings"), call("getCatSettings"), call("getCats")]);
+  const [settings, catSettings, cats, refills] = await Promise.all([
+    call("getLitterSettings"), call("getCatSettings"), call("getCats"), call("listLitterHopperRefills"),
+  ]);
   const shownMessage = message;
   message = "";
   const percent = (name: string, label: string, value: number) =>
@@ -51,8 +56,33 @@ route(/^\/litter$/, async () => {
           </label>
           <p class="muted small">Usually a cycle follows within half an hour. Dismissing the alert while the robot still hasn't cycled brings it back at the next update. Blank turns it off.</p>
         </fieldset>
+        <fieldset>
+          <legend>Litter hopper (days left)</legend>
+          <div class="field-row">
+            <label>Yellow at <input type="number" name="hopperWarningDays" min="0" step="0.5" required .value=${String(settings.hopperWarningDays)}></label>
+            <label>Red (alarm) at <input type="number" name="hopperAlarmDays" min="0" step="0.5" required .value=${String(settings.hopperAlarmDays)}></label>
+          </div>
+          <label class="check">
+            <input type="checkbox" name="hopperTaskAtAlarm" ?checked=${settings.hopperTaskAtAlarm}>
+            At alarm, add “Refill the litter hopper” to today's tasks and alert me
+          </label>
+        </fieldset>
         <button type="submit">Save</button>
       </form>
+      ${card("litter-hopper", "Hopper refills", html`
+        <p class="muted small">Each refill counts the dispenses in the robot's activity log since the previous refill as one full hopper; the median is the hopper's size. The first refill only sets the starting point.</p>
+        ${refills.length === 0 ? html`<p class="muted">No refills recorded yet. Press Refill on the Litter-Robot's card on Pets.</p>` : ""}
+        ${refills.map(
+          (refill) => html`
+            <div class="alert-row">
+              <p>${formatTime(refill.at)}<br>
+                <span class="muted small">${refill.dispenses === null ? "Starting point" : `${refill.dispenses} dispenses`}</span></p>
+              <button class="icon" aria-label="Remove" title="Remove"
+                @click=${() => confirm("Remove this refill? Later refills keep their counts.") && act(() => call("deleteLitterHopperRefill", refill.id))}>×</button>
+            </div>
+          `,
+        )}
+      `)}
       ${cats.length > 0 ? html`
         <form class="card" @submit=${(event: SubmitEvent) => saveCats(event, cats)}>
           <fieldset>
@@ -112,6 +142,9 @@ async function save(event: SubmitEvent) {
       litterAlarm: level("litterAlarm"),
       cleanTaskAtAlarm: fields.has("cleanTaskAtAlarm"),
       stallAlertMinutes: String(fields.get("stallAlertMinutes") ?? "").trim() === "" ? null : level("stallAlertMinutes"),
+      hopperWarningDays: level("hopperWarningDays"),
+      hopperAlarmDays: level("hopperAlarmDays"),
+      hopperTaskAtAlarm: fields.has("hopperTaskAtAlarm"),
     });
     message = "Saved.";
   } catch (error) {

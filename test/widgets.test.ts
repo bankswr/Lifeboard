@@ -60,6 +60,7 @@ describe("widget snapshot", () => {
     const widget = petsWidget({
       devices: [{ id: "lr", kind: "litter_robot", name: "LR", updatedAt: "", data: { name: "Litter-Robot 4", serial: "S1", status: "Ready", drawerFull: false } }],
       litter: { S1: { serial: "S1", drawer: { at: new Date(2026, 9, 20, 15, 0).toISOString(), ratePerDay: 5, reached: false }, litter: { at: null, ratePerDay: null, reached: true } } },
+      hopper: { S1: { lastRefill: "2026-10-01T00:00:00Z", capacity: null, usedSinceRefill: 3, dispensesLeft: null, percentLeft: null, daysLeft: null, state: "ok" } },
       food: {},
       fountain: { lastRefill: null, fillDays: null, daysLeft: null, percentLeft: null, state: "ok" },
     }, now, "en-US");
@@ -67,6 +68,7 @@ describe("widget snapshot", () => {
       ["Litter-Robot 4", "Ready", "header"],
       ["Drawer full", "≈ Tue 3:00 PM", "normal"],
       ["Litter low", "now", "alarm"],
+      ["Hopper empty", "learning", "muted"],
       ["Water fountain", undefined, "header"],
       ["Water out", "learning", "muted"],
     ]);

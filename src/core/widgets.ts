@@ -17,6 +17,7 @@ import type { FeederStatus } from "./smartlife/feeder.ts";
 import { estimateAllFood, type FoodEstimate } from "./smartlife/food.ts";
 import { getAllTodoLists, type TodoListDetail } from "./todos.ts";
 import { litterEstimates, type LitterEstimate } from "./whisker/estimates.ts";
+import { hopperEstimates, type HopperEstimate } from "./whisker/hopper.ts";
 import type { LitterRobotStatus } from "./whisker/status.ts";
 
 const DAY_MS = 86_400_000;
@@ -162,6 +163,7 @@ export function alertsWidget(alerts: AlertEntry[], now: Date, locale?: string): 
 export interface PetInputs {
   devices: DeviceStatus[];
   litter: Record<string, LitterEstimate>;
+  hopper: Record<string, HopperEstimate>;
   food: Record<string, FoodEstimate>;
   fountain: FountainEstimate;
 }
@@ -176,6 +178,8 @@ export function petsWidget(inputs: PetInputs, now: Date, locale?: string): Widge
     rows.push({ title: robot.name, value: robot.status, style: "header" });
     rows.push(levelRow("Drawer full", robot.drawerFull || estimate?.drawer.reached, estimate?.drawer.at ?? null, at));
     rows.push(levelRow("Litter low", estimate?.litter.reached ?? false, estimate?.litter.at ?? null, at));
+    const hopper = inputs.hopper[robot.serial];
+    if (hopper?.lastRefill) rows.push(daysLeftRow("Hopper empty", hopper.daysLeft, hopper.state, now, at));
   }
   const feeders = inputs.devices.filter((d) => d.kind === "feeder");
   if (feeders.length > 0) rows.push({ title: "Feeders", style: "header" });
@@ -217,12 +221,13 @@ export function listWidgets(lists: TodoListDetail[]): (WidgetContent & { id: str
 
 export async function widgetSnapshot(db: Db, now = new Date()): Promise<WidgetSnapshot> {
   const today = localDate(now);
-  const [analysis, days, alerts, devices, litter, food, fountain, lists] = await Promise.all([
+  const [analysis, days, alerts, devices, litter, hopper, food, fountain, lists] = await Promise.all([
     analyzeHealth(db, today),
     getSchedule(db, today, addDays(today, UPCOMING_DAYS), today),
     recentAlerts(db, MAX_ALERTS),
     listDeviceStatuses(db),
     litterEstimates(db),
+    hopperEstimates(db, now),
     estimateAllFood(db, now),
     estimateFountain(db, now),
     getAllTodoLists(db),
@@ -233,7 +238,7 @@ export async function widgetSnapshot(db: Db, now = new Date()): Promise<WidgetSn
     health: healthWidget(analysis.targets),
     calendar: calendarWidget(days, today),
     alerts: alertsWidget(alerts, now),
-    pets: petsWidget({ devices, litter, food, fountain }, now),
+    pets: petsWidget({ devices, litter, hopper, food, fountain }, now),
     lists: listWidgets(lists),
   };
 }

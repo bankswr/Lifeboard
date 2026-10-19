@@ -16,6 +16,7 @@ import * as maintenance from "./maintenance.ts";
 import * as food from "./smartlife/food.ts";
 import { catSummaries, getCatSettings, saveCatSettings } from "./whisker/cats.ts";
 import { litterEstimates } from "./whisker/estimates.ts";
+import * as hopper from "./whisker/hopper.ts";
 import { getLitterSettings, saveLitterSettings } from "./whisker/levels.ts";
 import { dailyHealth, recentNutrition } from "./health.ts";
 import { clearVerdict, setVerdict } from "./healthReview.ts";
@@ -104,6 +105,7 @@ async function getStatus(db: Db) {
     devices: await listDeviceStatuses(db),
     litterSettings: await getLitterSettings(db),
     litterEstimates: await litterEstimates(db),
+    hopperEstimates: await hopper.hopperEstimates(db),
     foodEstimates: await food.estimateAllFood(db),
     fountain: await fountain.estimateFountain(db),
   };
@@ -218,6 +220,9 @@ export const api = {
   getCatSettings,
   saveCatSettings,
   saveLitterSettings,
+  markLitterHopperRefilled: (db: Db, serial: string) => hopper.markHopperRefilled(db, serial),
+  listLitterHopperRefills: hopper.listHopperRefills,
+  deleteLitterHopperRefill: hopper.deleteHopperRefill,
   markFeederRefilled: (db: Db, feederId: string) => food.markRefilled(db, feederId),
   markAllFeedersRefilled: (db: Db) => food.markAllRefilled(db),
   getFeederSettings: food.getFeederSettings,

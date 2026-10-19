@@ -1,6 +1,7 @@
 // Litter-Robot level settings (Settings → Litter-Robot): at what drawer and litter levels the
 // bars turn yellow (warning) and red (alarm), and whether reaching an alarm adds a "Clean the
-// litter box" task for today plus an alert (user, 2026-10-16). Stored in the synced `setting`
+// litter box" task for today plus an alert (user, 2026-10-16). Also the LitterHopper
+// estimate's thresholds in days (hopper.ts). Stored in the synced `setting`
 // table so both devices use the same values.
 import { localDate } from "../dates.ts";
 import { get, type Db } from "../db/types.ts";
@@ -21,13 +22,18 @@ export interface LitterSettings {
   cleanTaskAtAlarm: boolean;
   /** Alert when a cat's visit gets no clean cycle within this many minutes; null = off (stalls.ts). */
   stallAlertMinutes: number | null;
+  /** LitterHopper, estimated days of litter left at which its bar turns yellow, and red (hopper.ts). */
+  hopperWarningDays: number;
+  hopperAlarmDays: number;
+  /** At the hopper's alarm: add a "Refill the litter hopper" task for today and raise an alert. */
+  hopperTaskAtAlarm: boolean;
 }
 
 export type LevelState = "ok" | "warning" | "alarm";
 
 export const DEFAULT_LITTER_SETTINGS: LitterSettings = {
   drawerWarning: 70, drawerAlarm: 90, litterWarning: 40, litterAlarm: 20, cleanTaskAtAlarm: false,
-  stallAlertMinutes: 60,
+  stallAlertMinutes: 60, hopperWarningDays: 3, hopperAlarmDays: 1, hopperTaskAtAlarm: false,
 };
 
 const SETTING_ID = "litter_levels";
@@ -45,6 +51,10 @@ export async function saveLitterSettings(db: Db, settings: LitterSettings): Prom
   if (settings.stallAlertMinutes !== null && !(Number.isInteger(settings.stallAlertMinutes) && settings.stallAlertMinutes >= 15)) {
     throw new Error("The clean-cycle alert needs whole minutes, at least 15 (the robot can wait up to 15 minutes itself), or blank for off.");
   }
+  if (![settings.hopperWarningDays, settings.hopperAlarmDays].every((days) => Number.isFinite(days) && days >= 0)) {
+    throw new Error("Hopper days must be 0 or more.");
+  }
+  if (settings.hopperWarningDays <= settings.hopperAlarmDays) throw new Error("The hopper warning must be more days than its alarm.");
   await saveRecord(db, "setting", { id: SETTING_ID, value: JSON.stringify(settings) });
 }
 

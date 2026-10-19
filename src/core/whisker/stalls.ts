@@ -24,7 +24,7 @@ export interface CycleStall {
 }
 
 /** Whisker's "2026-10-18 14:03:07.123456789" (UTC) → ms since 1970. */
-function activityTime(timestamp: string): number {
+export function activityTime(timestamp: string): number {
   return Date.parse(`${timestamp.slice(0, 19).replace(" ", "T")}Z`);
 }
 

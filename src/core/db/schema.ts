@@ -317,6 +317,19 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
       await saveRecord(db, "device_status", { id: row.id, kind: row.kind, name: row.name, data: row.data, checked_at: row.updated_at });
     }
   },
+  // 21: LitterHopper estimate (core/whisker/hopper.ts): dispenses read from the activity log
+  // (id "<serial>-dispense-<time>", so both devices store the same rows) and the user's
+  // refills, whose `dispenses` is the count since the previous refill (null for the first).
+  `
+  CREATE TABLE litter_hopper_event (
+    ${syncColumns},
+    serial TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    at TEXT NOT NULL,
+    dispenses REAL
+  );
+  CREATE INDEX litter_hopper_event_serial ON litter_hopper_event (serial, kind, at);
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

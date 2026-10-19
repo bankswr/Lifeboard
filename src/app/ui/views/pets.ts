@@ -9,6 +9,7 @@ import type { FoodEstimate } from "../../../core/smartlife/food.ts";
 import { drawerState, litterState, type LevelState, type LitterSettings } from "../../../core/whisker/levels.ts";
 import type { CatSummary } from "../../../core/whisker/cats.ts";
 import type { LevelEstimate, LitterEstimate } from "../../../core/whisker/estimates.ts";
+import type { HopperEstimate } from "../../../core/whisker/hopper.ts";
 import type { LitterRobotStatus } from "../../../core/whisker/status.ts";
 import { call } from "../../backend.ts";
 import { act, route } from "../app.ts";
@@ -89,6 +90,7 @@ function catCharts(cats: CatSummary[]): Record<string, ChartSpec> {
 interface DeviceContext {
   litterSettings: LitterSettings;
   litterEstimates: Record<string, LitterEstimate>;
+  hopperEstimates: Record<string, HopperEstimate>;
   foodEstimates: Record<string, FoodEstimate>;
   fountain: FountainEstimate;
 }
@@ -97,8 +99,10 @@ interface DeviceContext {
 export function deviceCards(devices: DeviceStatus[], status: DeviceContext) {
   const feeders = devices.filter((device) => device.kind === "feeder");
   return html`
-    ${devices.filter((device) => device.kind === "litter_robot").map((device) =>
-      litterRobotCard(device, status.litterSettings, status.litterEstimates[(device.data as LitterRobotStatus).serial]))}
+    ${devices.filter((device) => device.kind === "litter_robot").map((device) => {
+      const serial = (device.data as LitterRobotStatus).serial;
+      return litterRobotCard(device, status.litterSettings, status.litterEstimates[serial], status.hopperEstimates[serial]);
+    })}
     ${feeders.length > 0 ? feedersCard(feeders, status.foodEstimates) : ""}
     ${fountainCard(status.fountain)}
   `;
@@ -135,18 +139,19 @@ async function refillFountain() {
   await act(() => call("refillFountain"));
 }
 
-function litterRobotCard(device: DeviceStatus, settings: LitterSettings, estimate: LitterEstimate | undefined) {
+function litterRobotCard(device: DeviceStatus, settings: LitterSettings, estimate: LitterEstimate | undefined, hopper: HopperEstimate | undefined) {
   const robot = device.data as LitterRobotStatus;
   return card(
     device.id,
     robot.name,
     html`
       ${levelBar("Waste Drawer", robot.drawerLevel, drawerState(robot, settings))}
-      ${levelBar("Litter Hopper", robot.litterLevel, litterState(robot, settings))}
+      ${levelBar("Litter level", robot.litterLevel, litterState(robot, settings))}
       ${estimate ? html`<p class="small">
         ${levelEstimateText("Drawer", `${settings.drawerAlarm}%`, estimate.drawer)}<br>
         ${levelEstimateText("Litter", `${settings.litterAlarm}%`, estimate.litter)}
       </p>` : ""}
+      ${hopperRows(robot, hopper)}
       ${robot.laserDirty ? html`<p class="small status error">Sensors need cleaning</p>` : ""}
       <p class="muted small">Checked ${formatTime(device.updatedAt)}</p>
     `,
@@ -202,6 +207,40 @@ function feederRow(feeder: FeederStatus, estimate: FoodEstimate | undefined) {
       </div>
     </div>
   `;
+}
+
+/** The LitterHopper: estimated from the activity log's dispenses and the user's refills (core/whisker/hopper.ts). */
+function hopperRows(robot: LitterRobotStatus, estimate: HopperEstimate | undefined) {
+  return html`
+    ${estimate?.percentLeft != null
+      ? levelBar("Litter hopper", estimate.percentLeft, estimate.state, `≈${estimate.percentLeft}%`)
+      : html`<div class="level"><span>Litter hopper</span><span class="muted small level-none">Learning</span></div>`}
+    <div class="feeder-meta small">
+      <span>
+        ${estimate?.daysLeft != null
+          ? html`<span class=${estimate.state === "ok" ? "" : `status ${estimate.state}`}>≈${estimate.daysLeft.toFixed(1)} days left</span> · `
+          : ""}
+        ${estimate?.lastRefill
+          ? html`<span class="muted">${dispenses(estimate.usedSinceRefill)} since refill ${shortDateTime(estimate.lastRefill)}</span>`
+          : html`<span class="muted">No refill recorded yet</span>`}
+      </span>
+      <button class="secondary small" @click=${() => refillHopper(robot)}>Refill</button>
+    </div>
+    <p class="muted small">
+      ${estimate?.capacity == null
+        ? "Hopper estimate: learning. Press Refill each time you fill the hopper; the estimate starts after the second refill."
+        : `A full hopper ≈ ${Math.round(estimate.capacity)} dispenses (median of your refills).`}
+    </p>
+  `;
+}
+
+async function refillHopper(robot: LitterRobotStatus) {
+  if (!confirm(`Record a refill of ${robot.name}'s litter hopper (full) now?`)) return;
+  await act(() => call("markLitterHopperRefilled", robot.serial));
+}
+
+function dispenses(n: number): string {
+  return `${n} dispense${n === 1 ? "" : "s"}`;
 }
 
 async function refill(feeder: FeederStatus) {

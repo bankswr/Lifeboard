@@ -24,7 +24,7 @@ When both are on the same network, they sync data with each other.
 | Tasks & reminders | To-dos with due dates, recurring tasks, reminders. Editable; two-way sync with Google Tasks. Repeat rules live in Lifeboard, which creates each occurrence as a plain Google task (the Tasks API doesn't expose recurrence). |
 | To-do lists | Generic checklists, kept in multiple separate lists. No external service; they only sync between Lifeboard's own devices. |
 | Calendar | Events and appointments. Editable; two-way sync with Google Calendar. |
-| Pets | Whisker Litter-Robot and Petory feeders: **read-only** status plus reliable notifications; feeder food and the (unconnected) water fountain are estimated from the user's "Refill" presses. Lifeboard never sends commands to the devices. **High priority.** |
+| Pets | Whisker Litter-Robot and Petory feeders: **read-only** status plus reliable notifications; feeder food, the Litter-Robot's LitterHopper and the (unconnected) water fountain are estimated from the user's "Refill" presses. Lifeboard never sends commands to the devices. **High priority.** |
 | Connections | Every external sign-in reports its status. A lost sign-in raises an alert; it never fails silently. |
 | Rules | User-defined IFTTT-style rules: *when* (an event from any module) *if* (conditions) *then* (actions). v1 has one action type: notify. Built-in alerts such as "signed out" are default rules the user can edit. |
 
@@ -299,7 +299,7 @@ current intent, not a commitment to details.
    - **Alerts:** current, undismissed alerts.
    - **Pets:** when each device needs attention, as a date and time (not a countdown,
      which would go stale between updates): feeder food, fountain refill, Litter-Robot
-     drawer full and litter low (see below).
+     drawer full, litter low and hopper empty (see below).
    - **Lists:** a chosen to-do list; items can be ticked on the widget, and a "+" in its
      header opens a small pop-up over the home screen to add an item (user, 2026-10-18).
    - Today's tasks on the **Calendar** widget can be ticked (and unticked) too (user,
@@ -323,6 +323,11 @@ current intent, not a commitment to details.
    level (Settings → Litter-Robot). Likewise when the litter falls to its alarm level.
    Shown on the Pets page as well. (Built 2026-10-17 ahead of the widgets; see
    agent-notes/2026-10-17-litter-estimates.md.)
+   **LitterHopper estimate (user, 2026-10-19):** Whisker reports no hopper fill level, so
+   it's learned like the feeders': dispenses from the activity log, counted between the
+   user's Refill presses, give the hopper's size; days left from the recent dispense rate.
+   Shown on the Litter-Robot card and the Pets widget; thresholds and an optional refill
+   task under Settings → Litter-Robot. See agent-notes/2026-10-19-litter-hopper.md.
    Widgets are display only apart from list ticks, list adds and task ticks, like the rest of Lifeboard's device
    handling (see "No device control").
 9. **Finances** (stretch). Not in the 2026-10-17 build batch (user: pin down the base
