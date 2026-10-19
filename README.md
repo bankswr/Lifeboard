@@ -29,6 +29,18 @@ npm run server        # desktop server, restarts on changes
 npm run dev           # Vite dev server, forwards /api to the desktop server
 ```
 
+**After building, restart the desktop server.** The running server (from `npm run desktop`
+or `start-lifeboard.sh`) loads `core` once when it starts; `npm run build` only replaces the
+UI in `dist/`, so the new UI ends up talking to the old server and new features don't
+appear (or pages fail). `start-lifeboard.sh` does nothing if a server is already up, so stop
+it first:
+
+```bash
+pkill -f "node src/desktop/server.ts"; ./start-lifeboard.sh
+```
+
+The restart also runs any new database migrations on the desktop database.
+
 The desktop database is `data/lifeboard.db` (gitignored). Set `LIFEBOARD_DATA_DIR`,
 `LIFEBOARD_PORT` or `LIFEBOARD_HOST` to change where it lives or where the server listens.
 
@@ -55,6 +67,7 @@ and desktop can be compared at a glance. To release, with a clean working tree:
 npm version patch   # or minor / major: bumps package.json, commits and tags vX.Y.Z
 git push --follow-tags
 npm run apk         # then install release/lifeboard.apk on the phone
+pkill -f "node src/desktop/server.ts"; ./start-lifeboard.sh   # restart the desktop server
 ```
 
 Android won't install an APK with a lower `versionCode` over a newer one, so always bump up.
