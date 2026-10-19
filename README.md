@@ -36,7 +36,7 @@ appear (or pages fail). `start-lifeboard.sh` does nothing if a server is already
 it first:
 
 ```bash
-pkill -f "node src/desktop/server.ts"; ./start-lifeboard.sh
+pkill -f "^node src/desktop/server.ts"; ./start-lifeboard.sh
 ```
 
 The restart also runs any new database migrations on the desktop database.
@@ -67,7 +67,7 @@ and desktop can be compared at a glance. To release, with a clean working tree:
 npm version patch   # or minor / major: bumps package.json, commits and tags vX.Y.Z
 git push --follow-tags
 npm run apk         # then install release/lifeboard.apk on the phone
-pkill -f "node src/desktop/server.ts"; ./start-lifeboard.sh   # restart the desktop server
+pkill -f "^node src/desktop/server.ts"; ./start-lifeboard.sh   # restart the desktop server
 ```
 
 Android won't install an APK with a lower `versionCode` over a newer one, so always bump up.

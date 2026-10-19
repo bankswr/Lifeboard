@@ -34,7 +34,7 @@ desktop `.ts` files directly (type stripping), so imports name the `.ts` file an
 TypeScript-only syntax such as enums and parameter properties is not allowed
 (`erasableSyntaxOnly` enforces this). Check work with `npm test` and `npm run build`.
 After a build, restart the desktop server
-(`pkill -f "node src/desktop/server.ts"; ./start-lifeboard.sh`): it loads `core` only at
+(`pkill -f "^node src/desktop/server.ts"; ./start-lifeboard.sh`): it loads `core` only at
 start, so otherwise the new UI runs against the old server (see `README.md`).
 
 ## Native Android code
