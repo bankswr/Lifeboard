@@ -42,8 +42,8 @@ removed (port 5181).
 - **Past targets** for days without a saved row are worked out with current settings and
   current verdicts, and marked "*" in the table. The goal used to judge a past day's
   calories is the one saved with its targets, else today's setting.
-- **Weight and body fat are two graphs, not one with two axes** (the dataviz rules forbid
-  dual axes). Each has the 7-day average line and raw dots; pending readings are yellow dots
+- **Weight and body fat** were two graphs at first (the dataviz rules forbid dual axes);
+  since 2026-10-20 they share one graph with two axes at the user's request (see below). Each has the 7-day average line and raw dots; pending readings are yellow dots
   and rejected ones red rings, shown only when there are any (legend entries carry the
   label, so state isn't color alone).
 - **Burn lines** on the energy graph are each morning's estimate of the average daily burn
@@ -54,3 +54,38 @@ removed (port 5181).
   band by design: they're status colors with labels). Targets are a muted dashed line.
 - **y-axis labels** use uPlot's own formatter (decimals follow the tick step); a custom
   one-decimal formatter mislabeled 9.25 as 9.3. Axis `space` is 22 px: the plots are short.
+
+## Trend projections, lean and fat mass graphs (2026-10-20)
+- User asked for each body graph's trend carried a week past the last data point, and for
+  lean mass and fat mass graphs (they move differently from body fat %).
+- `healthPage` returns `trends` (weight, body fat, lean, fat): the least-squares slope of the
+  fresh (not carried) 7-day averages over the fit window (`windowDays`) ending at the last
+  reading, the same fit as the targets' weight trend, so the weight graph's "+x lb/week"
+  matches the Body composition card. The line starts where the 7-day average line ends (today: the average covers the days before, so it runs a day past the last reading) at its value, so the two don't fork (user, 2026-10-20)
+  and runs `TREND_DAYS` (7) on. Null with fewer fresh averages than `minimumDays`.
+- Lean = weight average × (1 − body fat average), fat = weight average × body fat average
+  (product of averages, as `splitTrend` does); their fit ends at the last weight or body
+  fat reading.
+- Only the body graphs get the extra future dates (their `visibleDays` grows by the same
+  count); the other graphs end today.
+- The trend uses the full fit window, not the shown range, so in the 2-week view it can
+  point the other way from the last few days (seen on real data: lean mass).
+
+## One graph at a time, dual axes, data-fit y ranges (2026-10-20, user's layout)
+- The Graphs card has a selector (a `<select>`: six choices don't fit a segmented switch at
+  phone width) and shows one 320 px graph: weight + body fat, lean + fat mass (each pair on
+  two y axes, the second measure on the right, blue/orange), intake and burn, the three
+  macros with dashed targets in the same colors, the macros minus their targets on one axis,
+  resting heart rate. The shared cursor (`syncKey`) is no longer used here.
+- `chart.ts`: `SeriesSpec.axis: "right"` puts a series on a second scale (`y2`, right axis,
+  no grid of its own so the grid lines don't clash); `leftLabel`/`rightLabel`, `height`,
+  `rightDecimals`; `yRange: "data"` is exactly the lowest to highest shown value on each
+  axis (user), trends included. uPlot computes those from the visible x window only. Dots
+  at the very top or bottom are half clipped as a result.
+- The macro delta graph is lines, not bars (three series' bars would crowd), with a dashed
+  zero "On target" line, which also keeps zero inside the data-fit range.
+- Deviation lines (user, 2026-10-20): on the weight + body fat graph each reading has a
+  faint (alpha 0.5) vertical line to its 7-day average on the same day, to show the spread.
+  `SeriesSpec.deviationTo` names the line by label; `chart.ts` draws them in uPlot's
+  `drawAxes` hook so they sit under the series. "Fit line" was read as the 7-day average:
+  the dashed trend covers only days after the readings.

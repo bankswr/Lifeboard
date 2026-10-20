@@ -191,6 +191,21 @@ describe("analyzeHealth (database)", () => {
     expect(page.days.find((d) => d.date === odd)!.weightState).toBe("pending");
   });
 
+  it("projects the weight, body fat, lean and fat mass trends a week on from the end of their averages", async () => {
+    const page = await healthPage(await seededDb(), TODAY);
+    const { weight, bodyFat, lean, fat } = page.trends;
+    expect(weight!.perDay).toBeCloseTo(-0.1);
+    expect(weight!.points).toHaveLength(8);
+    // It carries on from the end of the average line (today), so the two don't fork.
+    expect(weight!.points[0]).toEqual({ date: TODAY, value: page.days.at(-1)!.weightAverage });
+    expect(weight!.points.at(-1)!.date).toBe(addDays(TODAY, 7));
+    expect(weight!.points.at(-1)!.value).toBeCloseTo(weight!.points[0].value - 0.7);
+    expect(bodyFat!.perDay).toBeCloseTo(0);
+    expect(lean!.perDay).toBeCloseTo(-0.08); // 80% of the weight lost
+    expect(fat!.perDay).toBeCloseTo(-0.02);
+    expect(page.days.at(-2)!.leanAverage! + page.days.at(-2)!.fatAverage!).toBeCloseTo(page.days.at(-2)!.weightAverage!);
+  });
+
   it("rejects out-of-range settings and accepting an unlogged day", async () => {
     const db = await seededDb();
     await expect(saveHealthSettings(db, { ...DEFAULT_HEALTH_SETTINGS, windowDays: 3 })).rejects.toThrow(/fit window/);
