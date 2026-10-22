@@ -109,7 +109,8 @@ export function nextTaskDue(repeat: Repeat, due: string): { due: string; repeat:
   return { due: next, repeat: { ...repeat, end } };
 }
 
-function nextDate(repeat: Repeat, due: string): string {
+/** The occurrence after `due`, ignoring the end. Monthly and yearly steps clamp to short months. */
+export function nextDate(repeat: Repeat, due: string): string {
   switch (repeat.freq) {
     case "daily":
       return addDays(due, repeat.interval);
@@ -134,7 +135,7 @@ export function mondayFirstWeekday(isoDate: string): number {
 }
 
 /** Same day `months` later, clamped to the month's last day (Jan 31 + 1 → Feb 28). */
-function addMonths(isoDate: string, months: number): string {
+export function addMonths(isoDate: string, months: number): string {
   const [y, m, d] = isoDate.split("-").map(Number);
   const target = new Date(Date.UTC(y, m - 1 + months, 1));
   const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();

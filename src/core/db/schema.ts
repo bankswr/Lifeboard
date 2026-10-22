@@ -330,6 +330,16 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
   );
   CREATE INDEX litter_hopper_event_serial ON litter_hopper_event (serial, kind, at);
   `,
+  // 22: maintenance schedules move when a task is done off its date (core/maintenance.ts).
+  // waits_for_task is the latest task made, which the next due date waits for; existing items
+  // wait for their latest task, so the rule applies from it on (user, 2026-10-22).
+  // shifted_from/shifted_repeat are the moved schedule; null while it's the original one.
+  `
+  ALTER TABLE maintenance_item ADD COLUMN waits_for_task TEXT;
+  ALTER TABLE maintenance_item ADD COLUMN shifted_from TEXT;
+  ALTER TABLE maintenance_item ADD COLUMN shifted_repeat TEXT;
+  UPDATE maintenance_item SET waits_for_task = 'maint-' || id || '-' || last_generated WHERE last_generated IS NOT NULL;
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

@@ -4,11 +4,17 @@
 // - Task ids are fixed per item and date, so both devices make the same task once.
 // - If updates didn't run across several due days, only the latest missed one gets a task
 //   (it shows as overdue on today) rather than a pile of them.
+// - The schedule follows when the work is done (user, 2026-10-22): while an item's latest
+//   task is open, no new one is made; once it's done on another day than its due date, the
+//   next due dates count from the day it was done, at the same frequency. Weekly items stay
+//   on their chosen weekdays. A deleted task counts as skipped (no move), unticking a task
+//   undoes its move until the next task is made, and editing the start date or repeat starts
+//   the schedule over.
 // Items are synced; `last_generated` is the latest due date a task was made for.
 import { localDate } from "./dates.ts";
 import { get, type Db, type Row } from "./db/types.ts";
 import { queueChange } from "./schedule/edit.ts";
-import { describeRepeat, nextTaskDue, type Repeat } from "./schedule/repeat.ts";
+import { addMonths, describeRepeat, mondayFirstWeekday, nextDate, type Repeat } from "./schedule/repeat.ts";
 import { deleteRecord, saveRecord } from "./sync/records.ts";
 
 export interface MaintenanceItem {
@@ -22,6 +28,12 @@ export interface MaintenanceItem {
   /** Null: a one-off item. */
   repeat: Repeat | null;
   lastGenerated: string | null;
+  /** The task made for `lastGenerated`, which the next due date waits for. Null after a schedule edit. */
+  waitsForTask: string | null;
+  /** Set once a task done off its date has moved the schedule: the day it counts from. */
+  shiftedFrom: string | null;
+  /** The repeat counted from `shiftedFrom` (an "after N times" end holds what's left). */
+  shiftedRepeat: Repeat | null;
 }
 
 export interface MaintenanceInput {
@@ -33,6 +45,19 @@ export interface MaintenanceInput {
   repeat: Repeat | null;
 }
 
+/** What became of the task an item waits for. */
+export type LastTask = "open" | "gone" | { doneOn: string };
+
+/**
+ * A run of due dates counted from `from` by `repeat`. `from` is itself due for the original
+ * schedule (the start date) but not for a moved one (the day a task was done).
+ */
+export interface Series {
+  from: string;
+  fromIsDue: boolean;
+  repeat: Repeat | null;
+}
+
 /** Safety stop for very long series (a daily item over decades). */
 const MAX_OCCURRENCES = 50_000;
 
@@ -40,31 +65,103 @@ function fromRow(row: Row): MaintenanceItem {
   return {
     id: row.id, name: row.name, notes: row.notes, startDate: row.start_date, time: row.time,
     repeat: row.repeat ? JSON.parse(row.repeat) : null, lastGenerated: row.last_generated,
+    waitsForTask: row.waits_for_task, shiftedFrom: row.shifted_from,
+    shiftedRepeat: row.shifted_repeat ? JSON.parse(row.shifted_repeat) : null,
   };
 }
 
 // ---------- occurrences ----------
 
 /**
- * Due dates in order, from the first, while `keepGoing` says so. Uses the same repeat rules
- * as repeating tasks (a COUNT end counts down, an UNTIL end stops).
+ * Due dates in order, each with the repeat left from it (an "after N times" end counts this
+ * one). Monthly and yearly dates are counted from `from` rather than from the previous date,
+ * so an item on the 31st is due on the last day of a short month and on the 31st again after.
  */
-function* occurrences(item: Pick<MaintenanceItem, "startDate" | "repeat">): Generator<string> {
-  let due: string = item.startDate;
-  let repeat = item.repeat;
-  for (let n = 0; n < MAX_OCCURRENCES; n++) {
-    yield due;
-    if (!repeat) return;
-    const next = nextTaskDue(repeat, due);
-    if (!next) return;
-    ({ due, repeat } = next);
+function* occurrences(series: Series): Generator<{ due: string; repeat: Repeat | null }> {
+  const { from, repeat } = series;
+  if (!repeat) {
+    if (series.fromIsDue) yield { due: from, repeat: null };
+    return;
+  }
+  let left = repeat.end.kind === "count" ? repeat.end.count : Infinity;
+  let step = series.fromIsDue ? 0 : 1;
+  let due = series.fromIsDue ? from : stepDate(repeat, from, from, step);
+  for (let n = 0; n < MAX_OCCURRENCES && left > 0; n++) {
+    if (repeat.end.kind === "until" && due > repeat.end.date) return;
+    yield { due, repeat: withCountLeft(repeat, left) };
+    left--;
+    step++;
+    due = stepDate(repeat, from, due, step);
   }
 }
 
-/** The latest due date on or before `today`, or null if the first is still ahead. */
-export function latestDue(item: Pick<MaintenanceItem, "startDate" | "repeat">, today: string): string | null {
+/** The `step`th date from `from`; daily and weekly dates step on from `previous`. */
+function stepDate(repeat: Repeat, from: string, previous: string, step: number): string {
+  if (repeat.freq === "monthly") return addMonths(from, step * repeat.interval);
+  if (repeat.freq === "yearly") return addMonths(from, step * 12 * repeat.interval);
+  return nextDate(repeat, previous);
+}
+
+function withCountLeft(repeat: Repeat, left: number): Repeat {
+  return repeat.end.kind === "count" ? { ...repeat, end: { kind: "count", count: left } } : repeat;
+}
+
+/** The schedule the latest task belongs to: the moved one if a task moved it, else the original. */
+function currentSeries(item: MaintenanceItem): Series {
+  if (item.shiftedFrom && item.shiftedRepeat) return { from: item.shiftedFrom, fromIsDue: false, repeat: item.shiftedRepeat };
+  return { from: item.startDate, fromIsDue: true, repeat: item.repeat };
+}
+
+/**
+ * The schedule the next due date comes from, given what became of the latest task: "waiting"
+ * while it's open, a moved schedule if it was done on another day, null if the repeat has ended.
+ */
+export function upcomingSeries(item: MaintenanceItem, last: LastTask | null): Series | "waiting" | null {
+  const current = currentSeries(item);
+  if (!item.lastGenerated || !last || last === "gone") return current;
+  if (last === "open") return "waiting";
+  if (last.doneOn === item.lastGenerated || !current.repeat) return current;
+  const left = repeatAfter(current, item.lastGenerated);
+  if (left === undefined) return current; // the date isn't in this schedule; nothing to move from
+  if (left === null) return null;
+  return movedSeries(item, left, last.doneOn);
+}
+
+/** The repeat left after `due` (null if it was the last one), or undefined if `due` isn't in the series. */
+function repeatAfter(series: Series, due: string): Repeat | null | undefined {
+  for (const occurrence of occurrences(series)) {
+    if (occurrence.due > due) return undefined;
+    if (occurrence.due !== due) continue;
+    const repeat = occurrence.repeat!;
+    if (repeat.end.kind !== "count") return repeat;
+    return repeat.end.count > 1 ? withCountLeft(repeat, repeat.end.count - 1) : null;
+  }
+  return undefined;
+}
+
+/**
+ * The schedule after a task due on `item.lastGenerated` was done on `doneOn`: the same repeat
+ * counted from that day. Weekly items keep their weekdays (the start date's when none were
+ * chosen) and so restart at the next chosen day; done early, they keep their dates.
+ */
+function movedSeries(item: MaintenanceItem, repeat: Repeat, doneOn: string): Series {
+  if (repeat.freq !== "weekly") return { from: doneOn, fromIsDue: false, repeat };
+  const weekdays = repeat.weekdays.length > 0 ? repeat.weekdays : [mondayFirstWeekday(item.startDate)];
+  const from = doneOn > item.lastGenerated! ? doneOn : item.lastGenerated!;
+  return { from, fromIsDue: false, repeat: { ...repeat, weekdays } };
+}
+
+/** Due dates in `series` that haven't had a task yet. */
+function* untaskedDates(item: MaintenanceItem, series: Series): Generator<string> {
+  for (const { due } of occurrences(series)) {
+    if (!item.lastGenerated || due > item.lastGenerated) yield due;
+  }
+}
+
+/** The latest untasked due date on or before `today`, or null if none is due yet. */
+export function latestDue(item: MaintenanceItem, series: Series, today: string): string | null {
   let latest: string | null = null;
-  for (const due of occurrences(item)) {
+  for (const due of untaskedDates(item, series)) {
     if (due > today) break;
     latest = due;
   }
@@ -72,21 +169,36 @@ export function latestDue(item: Pick<MaintenanceItem, "startDate" | "repeat">, t
 }
 
 /** The next due date that hasn't had a task yet (today's counts until its task is made). */
-export function nextDue(item: MaintenanceItem, today: string): string | null {
-  for (const due of occurrences(item)) {
-    if (due >= today && (!item.lastGenerated || due > item.lastGenerated)) return due;
+export function nextDue(item: MaintenanceItem, series: Series, today: string): string | null {
+  for (const due of untaskedDates(item, series)) {
+    if (due >= today) return due;
   }
   return null;
+}
+
+/** What became of the task the item waits for; null if it waits for none. */
+async function lastTask(db: Db, item: MaintenanceItem): Promise<LastTask | null> {
+  if (!item.waitsForTask) return null;
+  const task = await get(db, "SELECT deleted, done, completed_at FROM task WHERE id = ?", [item.waitsForTask]);
+  if (!task || task.deleted) return "gone";
+  if (!task.done) return "open";
+  // completed_at is a UTC time (from Google or setTaskDone); the day that counts is the local one.
+  return { doneOn: task.completed_at ? localDate(new Date(task.completed_at)) : item.lastGenerated! };
 }
 
 // ---------- reading and editing ----------
 
 export async function listMaintenance(db: Db, today = localDate()) {
   const rows = await db.all("SELECT * FROM maintenance_item WHERE deleted = 0");
-  return rows
-    .map(fromRow)
-    .map((item) => ({ ...item, nextDue: nextDue(item, today), repeatText: item.repeat ? describeRepeat(item.repeat) : "Once" }))
-    .sort((a, b) => (a.nextDue ?? "9999").localeCompare(b.nextDue ?? "9999") || a.name.localeCompare(b.name));
+  const items = [];
+  for (const item of rows.map(fromRow)) {
+    const series = upcomingSeries(item, await lastTask(db, item));
+    const waiting = series === "waiting";
+    // While its task is open, the item is shown by that task's date.
+    const due = waiting ? item.lastGenerated : series ? nextDue(item, series, today) : null;
+    items.push({ ...item, nextDue: due, waiting, repeatText: item.repeat ? describeRepeat(item.repeat) : "Once" });
+  }
+  return items.sort((a, b) => (a.nextDue ?? "9999").localeCompare(b.nextDue ?? "9999") || a.name.localeCompare(b.name));
 }
 
 export async function getMaintenance(db: Db, id: string): Promise<MaintenanceItem | null> {
@@ -100,14 +212,20 @@ export async function saveMaintenance(db: Db, input: MaintenanceInput, today = l
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.startDate)) throw new Error("Choose the first due date.");
   const existing = input.id ? await get(db, "SELECT * FROM maintenance_item WHERE id = ? AND deleted = 0", [input.id]) : undefined;
   if (input.id && !existing) throw new Error("This item no longer exists.");
+  const repeat = input.repeat ? JSON.stringify(input.repeat) : null;
+  // A new start date or repeat starts the schedule over: no move, no waiting for the old task.
+  const keepSchedule = existing && existing.start_date === input.startDate && existing.repeat === repeat;
   const id = await saveRecord(db, "maintenance_item", {
     ...(existing ? { id: existing.id } : {}),
     name: input.name.trim(),
     notes: input.notes.trim(),
     start_date: input.startDate,
     time: input.time || null,
-    repeat: input.repeat ? JSON.stringify(input.repeat) : null,
+    repeat,
     last_generated: existing?.last_generated ?? null,
+    waits_for_task: keepSchedule ? existing.waits_for_task : null,
+    shifted_from: keepSchedule ? existing.shifted_from : null,
+    shifted_repeat: keepSchedule ? existing.shifted_repeat : null,
   });
   await generateMaintenanceTasks(db, today);
   return id;
@@ -121,9 +239,10 @@ export async function deleteMaintenance(db: Db, id: string): Promise<void> {
 // ---------- making tasks ----------
 
 /**
- * For each item due today or earlier without a task for that date yet, adds the task (to the
- * first Google task list) and remembers the date. Returns how many tasks were added. Does
- * nothing until the task lists have been read from Google.
+ * For each item due today or earlier without a task for that date yet (and whose latest task
+ * isn't still open), adds the task (to the first Google task list) and remembers the date and
+ * the schedule it came from. Returns how many tasks were added. Does nothing until the task
+ * lists have been read from Google.
  */
 export async function generateMaintenanceTasks(db: Db, today = localDate()): Promise<number> {
   const list = await get(db, "SELECT id FROM task_list WHERE deleted = 0 ORDER BY position LIMIT 1");
@@ -132,8 +251,10 @@ export async function generateMaintenanceTasks(db: Db, today = localDate()): Pro
   await db.transaction(async () => {
     for (const row of await db.all("SELECT * FROM maintenance_item WHERE deleted = 0")) {
       const item = fromRow(row);
-      const due = latestDue(item, today);
-      if (!due || (item.lastGenerated && due <= item.lastGenerated)) continue;
+      const series = upcomingSeries(item, await lastTask(db, item));
+      if (!series || series === "waiting") continue;
+      const due = latestDue(item, series, today);
+      if (!due) continue;
       const taskId = `maint-${item.id}-${due}`;
       if (!(await get(db, "SELECT 1 FROM task WHERE id = ?", [taskId]))) {
         await saveRecord(db, "task", {
@@ -144,7 +265,12 @@ export async function generateMaintenanceTasks(db: Db, today = localDate()): Pro
         await queueChange(db, { type: "task.create", rowId: taskId, listId: list.id });
         added++;
       }
-      await saveRecord(db, "maintenance_item", { ...row, last_generated: due });
+      const moved = !series.fromIsDue;
+      await saveRecord(db, "maintenance_item", {
+        ...row, last_generated: due, waits_for_task: taskId,
+        shifted_from: moved ? series.from : null,
+        shifted_repeat: moved ? JSON.stringify(series.repeat) : null,
+      });
     }
   });
   return added;

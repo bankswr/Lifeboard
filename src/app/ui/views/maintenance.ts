@@ -25,13 +25,13 @@ route(/^\/maintenance$/, async () => {
         <h1>Maintenance</h1>
         <a class="button" href="#/maintenance/new">Add</a>
       </header>
-      <p class="muted">Each item adds a task to that day's Schedule when it comes due.</p>
+      <p class="muted">Each item adds a task to that day's Schedule when it comes due. Done on another day, the next due dates count from that day.</p>
       ${items.length === 0 ? html`<p class="muted">No maintenance items yet.</p>` : ""}
       ${items.map(
         (item) => html`
           <a class="card list-card" href="#/maintenance/${item.id}">
             <span>${item.name}<br><span class="muted small">${item.repeatText}${item.time ? ` · ${formatClock(item.time)}` : ""}</span></span>
-            <span class="small ${item.nextDue === today ? "status warning" : "muted"}">${dueText(item.nextDue, today)}</span>
+            <span class="small ${item.waiting || item.nextDue === today ? "status warning" : "muted"}">${dueText(item.nextDue, item.waiting, today)}</span>
           </a>
         `,
       )}
@@ -106,8 +106,10 @@ async function remove(item: MaintenanceItem) {
   location.hash = "#/maintenance";
 }
 
-function dueText(due: string | null, today: string): string {
+/** `waiting`: the item's task for `due` is still open, so the next date isn't known yet. */
+function dueText(due: string | null, waiting: boolean, today: string): string {
   if (!due) return "No more due dates";
   if (due === today) return "Due today";
-  return `Next ${new Date(`${due}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: due.slice(0, 4) === today.slice(0, 4) ? undefined : "numeric" })}`;
+  const date = new Date(`${due}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: due.slice(0, 4) === today.slice(0, 4) ? undefined : "numeric" });
+  return waiting ? `Overdue since ${date}` : `Next ${date}`;
 }

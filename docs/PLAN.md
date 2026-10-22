@@ -393,6 +393,15 @@ current intent, not a commitment to details.
   like a calendar entry, repeating by default (monthly). On each day one comes due, Lifeboard
   adds a Google task for it that day (fixed id per item and date; after missed days only the
   latest gets a task). Items are synced; the tasks go to the first Google task list.
+  **Schedule follows completion (user, 2026-10-22):** while an item's latest task is open, no
+  new one is made (it stays overdue on Today). Done on another day than its due date, late or
+  early, the next due dates count from the day it was done at the same frequency (monthly due
+  Oct 1, done Oct 10 → Nov 10, Dec 10, …). Weekly items keep their chosen weekdays and restart
+  at the next one (every 2 weeks on Mon, due Oct 5, done Oct 7 → Oct 19). "After N times" ends
+  keep counting down; end dates don't move. A deleted task counts as skipped (no move);
+  unticking a task undoes its move until the next task is made; editing the start date or
+  repeat starts the schedule over. A day missing from a short month falls back to its last
+  day, then the item returns to its usual day (31st → Feb 28 → Mar 31).
 - **Google OAuth:** publish the app ("In production"). If a hidden cost turns up,
   fall back to signing in again regularly.
 
