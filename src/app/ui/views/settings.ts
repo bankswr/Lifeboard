@@ -31,6 +31,7 @@ route(/^\/settings$/, async () => {
       ${platform === "desktop" ? await desktopPairing() : html`${await phoneSync()}${await remindersCard()}`}
       ${card("settings-device", "This device", html`
         <p>Lifeboard ${__APP_VERSION__} <span class="muted">(build ${__APP_COMMIT__})</span></p>
+        <p class="muted">Database schema ${info.databaseVersion}${info.databaseVersion === info.schemaVersion ? "" : ` (this build expects ${info.schemaVersion})`}</p>
         <p class="muted">Device ID ${info.deviceId}</p>`)}
     `,
   };

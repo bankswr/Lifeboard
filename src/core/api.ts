@@ -36,11 +36,15 @@ import { saveRecord } from "./sync/records.ts";
 
 export interface AppInfo {
   deviceId: string;
+  /** The schema this code expects. */
   schemaVersion: number;
+  /** The schema this device's database is at; sync needs both devices on the same one. */
+  databaseVersion: number;
 }
 
 async function getAppInfo(db: Db): Promise<AppInfo> {
-  return { deviceId: await getDeviceId(db), schemaVersion: SCHEMA_VERSION };
+  const [{ user_version }] = await db.all("PRAGMA user_version");
+  return { deviceId: await getDeviceId(db), schemaVersion: SCHEMA_VERSION, databaseVersion: Number(user_version) };
 }
 
 /** Phone only: where the desktop is and the key it gave for syncing. */
