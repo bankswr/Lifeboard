@@ -6,12 +6,32 @@ import { html } from "lit-html";
 import { localDate } from "../../../core/dates.ts";
 import type { ScheduleDay } from "../../../core/schedule/store.ts";
 import { call } from "../../backend.ts";
-import { act, route } from "../app.ts";
+import { act, route, showBusy } from "../app.ts";
 import { card } from "../card.ts";
 import { formatTime } from "../format.ts";
 import { targetsBody, yesterdayBody } from "./health.ts";
 import { deviceCards, NO_DEVICES_HINT } from "./pets.ts";
 import { eventRow, taskRow, timeRange } from "./schedule.ts";
+
+/** True while an update started here runs, so a re-render meanwhile keeps the button disabled. */
+let updating = false;
+
+/** An update takes a while (every connection is read), so the button and banner show it's running. */
+async function updateNow() {
+  if (updating) return;
+  updating = true;
+  showBusy("Updating devices and health…");
+  const button = document.querySelector<HTMLButtonElement>(".page-header button");
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Updating…";
+  }
+  // Cleared before act's refresh, so the redrawn page shows the button ready again.
+  await act(() => call("updateNow").finally(() => {
+    updating = false;
+    showBusy(null);
+  }));
+}
 
 route(/^\/monitor$/, async () => {
   const today = localDate();
@@ -24,7 +44,7 @@ route(/^\/monitor$/, async () => {
     content: html`
       <header class="page-header">
         <h1>Monitor</h1>
-        <button class="secondary" @click=${() => act(() => call("updateNow"))}>Update now</button>
+        <button class="secondary" ?disabled=${updating} @click=${updateNow}>${updating ? "Updating…" : "Update now"}</button>
       </header>
       <p class="muted">Last updated: ${formatTime(status.lastUpdateAt) ?? "never"}</p>
 
