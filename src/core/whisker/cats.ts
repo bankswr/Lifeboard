@@ -25,8 +25,8 @@ const VISIT_HISTORY_DAYS = 14;
 const MIN_VISIT_DAYS = 3;
 /** Visits above a typical day before the automatic limit is passed. */
 const AUTO_VISIT_MARGIN = 2;
-/** Days shown on the Pets page. */
-export const SHOWN_DAYS = 30;
+/** Days of history for the Pets page's charts (its longest range). */
+export const SHOWN_DAYS = 90;
 
 export interface CatSettings {
   weightChangePercent: number;

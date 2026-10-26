@@ -148,6 +148,8 @@ current intent, not a commitment to details.
      time and visits per day. Alerts, with thresholds in Settings: a weight change of 5%
      or more (default) between recent weigh-ins and those two weeks earlier; and more
      visits in a day than a per-cat limit (cats differ: Scout visits far more often).
+     **2026-10-26 (user):** the cats share one card with a cat selector and a range
+     (2 weeks, 4 weeks, 90 days, like Health); each cat keeps its two graphs.
    - **Clean-cycle stall alert (user, 2026-10-18; built):** alert when a cat's visit gets no
      clean cycle within 60 minutes (Settings → Litter-Robot, blank = off), read from the
      robot's activity log at each update. Visit-based rather than "time since the last
@@ -289,6 +291,13 @@ current intent, not a commitment to details.
        three macros on one axis); deltas as bars above and below zero; graphs open on the
        2-week range.
      - Not planned: a separate fat mass / lean mass graph (body fat % with weight covers it).
+     - **Steps graph and legends (user, 2026-10-26):** a steps bar graph with a dashed line at
+       10,000, for reference: it ends yesterday (today is partial and tracked elsewhere) and
+       days without recorded steps have no bar. On every graph (Health and Pets) the legend
+       puts each category (e.g. weight, body fat) on its own line, entries aligned in
+       columns, when a category has more than one entry; otherwise it stays one line. With
+       no day hovered, it shows the latest real value: the last reading, else the main
+       measure's last day, never a projected trend.
 8. ✅ **Android home-screen widgets** (user, 2026-10-17; reviewed and agreed the same day;
    built and verified on the emulator the same day, see agent-notes/2026-10-17-widgets.md;
    awaiting user review on the phone). One widget per function, each placed and sized on its own:

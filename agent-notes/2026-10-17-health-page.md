@@ -89,3 +89,19 @@ removed (port 5181).
   `SeriesSpec.deviationTo` names the line by label; `chart.ts` draws them in uPlot's
   `drawAxes` hook so they sit under the series. "Fit line" was read as the 7-day average:
   the dashed trend covers only days after the readings.
+
+## Steps graph, legend lines, default legend day (2026-10-26, user)
+- "Steps" in the graph selector: measured steps as bars up to yesterday (today is partial; the
+  user tracks it in another app), typical-day fill-ins left out (no bar), dashed 10,000 line.
+- `chart.ts` legend: `SeriesSpec.group` names a category (default: its own label). When any
+  category has more than one series, `groupLegend` turns uPlot's legend into a CSS grid
+  (`auto-fill` 170 px columns) and starts each category on column 1, so matching entries line
+  up and a long category wraps in the same columns. A chart whose categories all have one entry
+  (intake/burn, macros vs target) keeps uPlot's single wrapping line (user).
+- Default day: a `setLegend` hook re-sets the legend to the last value of the first "points"
+  series (raw readings), else the first series, whenever no day is hovered. Readings first
+  because the body graphs' 7-day average runs a day past the last weigh-in, which left the
+  readings blank.
+- The range switch (`RANGES`, `rangePicker`) moved to `chart.ts`, shared with the Pets cats card.
+- Checked with Playwright (scratch install of playwright-core, the cached chromium-1243) at 420
+  and 1000 px against the real desktop server.

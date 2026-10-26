@@ -363,6 +363,19 @@ dialog.sheet h2 { margin: 0 0 4px; }
 .chart { width: 100%; margin: 8px 0; }
 .chart .u-legend { color: var(--muted); font-size: 0.8rem; text-align: left; }
 .chart .u-legend .u-marker { border-radius: 2px; }
+/* A legend with categories (chart.ts groupLegend): one line per category, entries in shared
+   columns so they line up; a category with more entries than fit wraps onto the next line. */
+.chart .u-legend.grouped tbody {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 2px 0;
+}
+.chart .u-legend.grouped tr { display: flex; align-items: flex-start; gap: 4px; margin-right: 12px; }
+.chart .u-legend.grouped th { display: flex; align-items: center; text-align: left; }
+.chart .u-legend.grouped .u-marker { flex: none; }
+.chart .u-legend.grouped th::after { content: none; } /* uPlot's ":" would sit apart from a wrapped label */
+.chart .u-legend.grouped .legend-day { grid-column: 1 / -1; }
+.chart .u-legend.grouped .legend-group-start { grid-column-start: 1; }
 
 /* Health page (views/health.ts): the graph selector, compact range and tab switches, the
    "How this is worked out" fold-outs, and readings left out of the calculations. */

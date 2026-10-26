@@ -44,5 +44,6 @@ ran the queries above.
   too high (user), so changed the same day to + 2.
 - Pets page: a card per cat with uPlot charts (`app/ui/chart.ts`, first use of uPlot; the
   Health page graphs can reuse it): day's median weight and visits per day, from the first
-  stored day (at least a week, at most 30 days). Colors: dark-surface reference categorical
+  stored day (at least a week, at most 30 days; 90 since 2026-10-26, when the cats moved
+  into one card with a cat selector and the shared 2 weeks / 4 weeks / 90 days range). Colors: dark-surface reference categorical
   slots in name order, first three validated against `--surface` (#1e293b); never reused.

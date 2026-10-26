@@ -5,7 +5,7 @@
 //   "How this is worked out" using the actual numbers;
 // - graphs, one at a time from a selector, all sharing one range: weight and body fat, lean
 //   and fat mass (two y axes each, trends projected a week on), intake vs both burn
-//   estimates, the macros, the macros vs their targets, resting heart rate;
+//   estimates, the macros, the macros vs their targets, resting heart rate, steps;
 // - workouts found in the heart rate;
 // - the data table, tabbed: totals (met targets in green) and deltas (eaten − target).
 // #/health/history lists the saved targets.
@@ -18,11 +18,10 @@ import type { Flag } from "../../../core/healthReview.ts";
 import { call } from "../../backend.ts";
 import { act, isNewVisit, refresh, route } from "../app.ts";
 import { card } from "../card.ts";
-import { chartSlot, mountCharts, type ChartSpec, type SeriesSpec } from "../chart.ts";
+import { chartSlot, mountCharts, rangePicker, RANGES, type ChartSpec, type SeriesSpec } from "../chart.ts";
 
 // ---------- view state (kept while on the page) ----------
 
-const RANGES = [[14, "2 weeks"], [28, "4 weeks"], [90, "90 days"]] as const;
 type TableTab = "totals" | "deltas";
 
 let rangeDays = 14;
@@ -67,7 +66,7 @@ route(/^\/health$/, async () => {
       `, { actions: html`<a class="small" href="#/health/history">History ›</a>` })}
       ${analysis.targets ? card("health-body", "Body composition", bodyBody(analysis.targets)) : ""}
       ${analysis.targets ? card("health-metabolism", "Metabolism", metabolismBody(analysis.targets, page, analysis.settings)) : ""}
-      ${card("health-graphs", "Graphs", html`${graphPicker()}${rangePicker()}${graphsBody()}`)}
+      ${card("health-graphs", "Graphs", html`${graphPicker()}${rangePicker("health-range", rangeDays, (days) => { rangeDays = days; rerender(); })}${graphsBody()}`)}
       ${card("health-workouts", "Workouts", workoutsBody(page.workouts, analysis.settings))}
       ${card("health-data", "Data", html`${tableTabs()}${dataBody(days)}`)}
       ${analysis.pendingCount ? "" : reviewCard}
@@ -221,16 +220,6 @@ const COLORS = {
   target: "#94a3b8",
 };
 
-function rangePicker() {
-  return html`
-    <div class="segmented small-segmented" role="radiogroup" aria-label="Range">
-      ${RANGES.map(([days, label]) => html`
-        <label><input type="radio" name="health-range" .checked=${rangeDays === days}
-          @change=${() => { rangeDays = days; rerender(); }}> ${label}</label>`)}
-    </div>
-  `;
-}
-
 const GRAPHS = {
   body: "Weight and body fat",
   mass: "Lean and fat mass",
@@ -238,11 +227,14 @@ const GRAPHS = {
   macros: "Macros",
   "macro-deltas": "Macros vs target",
   resting: "Resting heart rate",
+  steps: "Steps",
 } as const;
 type GraphId = keyof typeof GRAPHS;
 
 /** One graph at a time, so it can be tall. */
 const GRAPH_HEIGHT = 320;
+/** The reference line on the steps graph (user, 2026-10-26). */
+const STEPS_GOAL = 10_000;
 
 function graphPicker() {
   return html`
@@ -267,6 +259,7 @@ const GRAPH_NOTES: Record<GraphId, string> = {
   macros: "Dashed lines are the targets. Carbs are the remainder of the calories, so their target moves with the others.",
   "macro-deltas": "Each macro eaten minus its target; above zero is over.",
   resting: "",
+  steps: "Ends yesterday: today's count is still partial. Days without recorded steps have no bar.",
 };
 
 /** The selected graph's spec. */
@@ -285,15 +278,15 @@ function chartSpecs(days: HealthPageDay[], trends: BodyTrends): Record<string, C
     if (!trend) return [];
     const byDate = new Map(trend.points.map((point) => [point.date, point.value]));
     const label = `${name} trend, ${signed(trend.perDay * 7, 2)} ${unit}/week`;
-    return [{ label, values: bodyDates.map((date) => byDate.get(date) ?? null), color, kind: "line", dashed: true, axis }];
+    return [{ label, values: bodyDates.map((date) => byDate.get(date) ?? null), color, kind: "line", dashed: true, axis, group: name }];
   };
   /** A measure's 7-day average, its readings split by review state (each state its own marker and legend entry), and its trend. */
   const readings = (name: string, unit: string, color: string, axis: Axis, value: (d: HealthPageDay) => number | null, state: (d: HealthPageDay) => string | null, average: (d: HealthPageDay) => number | null, trend: BodyTrend | null): SeriesSpec[] => {
     const byState = (wanted: (string | null)[]) => onBodyDates((d) => (wanted.includes(state(d)) ? value(d) : null));
     const averageLabel = `${name} 7-day average`;
-    const reading = { kind: "points", axis, deviationTo: averageLabel } as const; // each reading joined to the average
+    const reading = { kind: "points", axis, deviationTo: averageLabel, group: name } as const; // each reading joined to the average
     const shown: SeriesSpec[] = [
-      { label: averageLabel, values: onBodyDates(average), color, kind: "line", pointSize: 0, axis },
+      { label: averageLabel, values: onBodyDates(average), color, kind: "line", pointSize: 0, axis, group: name },
       { ...reading, label: `${name} readings`, values: byState([null, "accepted"]), color, pointSize: 4 },
       { ...reading, label: `${name} awaiting review`, values: byState(["pending"]), color: COLORS.pending, pointSize: 7 },
       { ...reading, label: `${name} left out`, values: byState(["rejected"]), color: COLORS.rejected, pointSize: 7, hollow: true },
@@ -302,7 +295,7 @@ function chartSpecs(days: HealthPageDay[], trends: BodyTrends): Record<string, C
     return [...shown.filter((series, index) => index < 2 || series.values.some((v) => v !== null)), ...trendLine(trend, name, unit, color, axis)];
   };
   const mass = (name: string, color: string, axis: Axis, average: (d: HealthPageDay) => number | null, trend: BodyTrend | null): SeriesSpec[] => [
-    { label: `${name} 7-day average`, values: onBodyDates(average), color, kind: "line", pointSize: 0, axis },
+    { label: `${name} 7-day average`, values: onBodyDates(average), color, kind: "line", pointSize: 0, axis, group: name },
     ...trendLine(trend, name, "lb", color, axis),
   ];
 
@@ -327,8 +320,8 @@ function chartSpecs(days: HealthPageDay[], trends: BodyTrends): Record<string, C
       { label: "Burn (fat/lean split)", values: days.map((d) => d.expenditureSplit), color: COLORS.aqua, kind: "line", pointSize: 0 },
     ] }),
     macros: () => ({ ...common, decimals: 0, leftLabel: "g", series: macros.flatMap(([label, color, eaten, target]): SeriesSpec[] => [
-      { label: `${label} eaten`, values: days.map(eaten), color, kind: "line", spanGaps: false },
-      { label: `${label} target`, values: days.map(target), color, kind: "line", dashed: true },
+      { label: `${label} eaten`, values: days.map(eaten), color, kind: "line", spanGaps: false, group: label },
+      { label: `${label} target`, values: days.map(target), color, kind: "line", dashed: true, group: label },
     ]) }),
     "macro-deltas": () => ({ ...common, decimals: 0, leftLabel: "g", series: [
       ...macros.map(([label, color, eaten, target]): SeriesSpec => ({
@@ -339,6 +332,14 @@ function chartSpecs(days: HealthPageDay[], trends: BodyTrends): Record<string, C
     resting: () => ({ ...common, decimals: 0, leftLabel: "bpm", series: [
       { label: "Resting heart rate", values: days.map((d) => d.restingHeartRate), color: COLORS.blue, kind: "line" },
     ] }),
+    // Measured steps only, up to yesterday (user, 2026-10-26: for reference; the typical-day fill-in isn't drawn).
+    steps: () => {
+      const past = days.filter((d) => d.date < dates.at(-1)!);
+      return { ...common, dates: past.map((d) => d.date), decimals: 0, yRange: "zero", leftLabel: "steps", series: [
+        { label: "Steps", values: past.map((d) => (d.stepsEstimated ? null : d.steps)), color: COLORS.blue, kind: "bars" },
+        { label: `${STEPS_GOAL.toLocaleString()} steps`, values: past.map(() => STEPS_GOAL), color: COLORS.target, kind: "line", dashed: true },
+      ] };
+    },
   };
   return { [graph]: specs[graph]() };
 }
