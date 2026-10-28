@@ -263,6 +263,12 @@ textarea {
 }
 .advanced > summary { color: var(--blue); cursor: pointer; font-size: 0.9rem; margin-bottom: 8px; }
 .advanced[open] { display: grid; gap: 10px; }
+.due-text { text-align: right; }
+.place-choices { display: grid; gap: 6px; margin-top: 8px; }
+.weather-condition { display: grid; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.weather-condition .line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--muted); font-size: 0.9rem; }
+.weather-condition .line select { flex: 1 1 120px; }
+.weather-condition .line input[type=number] { width: 72px; }
 .month-days { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .month-day { display: grid; grid-template-columns: 1fr 64px; gap: 6px; }
 .weekdays { display: flex; flex-wrap: wrap; gap: 6px; }

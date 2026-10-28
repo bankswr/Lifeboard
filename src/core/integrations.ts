@@ -3,6 +3,7 @@ import { cronometer } from "./cronometer/integration.ts";
 import { google } from "./google/integration.ts";
 import type { Integration } from "./integration.ts";
 import { smartlife } from "./smartlife/integration.ts";
+import { weather } from "./weather.ts";
 import { whisker } from "./whisker/integration.ts";
 
-export const INTEGRATIONS: Integration[] = [whisker, smartlife, cronometer, google];
+export const INTEGRATIONS: Integration[] = [whisker, smartlife, cronometer, google, weather];

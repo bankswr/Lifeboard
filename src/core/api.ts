@@ -26,6 +26,7 @@ import { analyzeHealth, getHealthSettings, saveHealthSettings, targetHistory, ty
 import { allowCronometerRepull } from "./cronometer/integration.ts";
 import { allowGoogleHealthRepull } from "./google/integration.ts";
 import { INTEGRATIONS } from "./integrations.ts";
+import * as weather from "./weather.ts";
 import { widgetSnapshot } from "./widgets.ts";
 import { snoozeReminder, takeMissedReminders, upcomingReminders } from "./reminders.ts";
 import { lastUpdateAt, listConnections, runUpdate } from "./updates.ts";
@@ -145,6 +146,16 @@ function qrIntegration(integrationId: string) {
   return integration;
 }
 
+/** Sets the weather location and fetches its forecast; a failed fetch is left to the next update to report. */
+async function setWeatherLocation(db: Db, place: weather.WeatherPlace) {
+  await weather.setWeatherLocation(db, place);
+  try {
+    await weather.saveForecast(db, await weather.fetchForecast(place));
+  } catch (error) {
+    console.warn("Weather forecast fetch failed:", error);
+  }
+}
+
 /** Records the phone's backup Google sign-in, after the app got Android's authorization. */
 async function savePhoneGoogleSignIn(db: Db) {
   await saveCredential<PhoneGoogleCredential>(db, "google", { android: true });
@@ -152,7 +163,9 @@ async function savePhoneGoogleSignIn(db: Db) {
 
 /** Forgets this device's sign-in to an integration. Data already fetched is kept. */
 async function signOut(db: Db, integrationId: string) {
-  await deleteCredential(db, integrationId);
+  const integration = INTEGRATIONS.find((i) => i.id === integrationId);
+  if (integration?.signOut) await integration.signOut(db);
+  else await deleteCredential(db, integrationId);
   await db.run("DELETE FROM connection WHERE id = ?", [integrationId]);
 }
 
@@ -238,6 +251,9 @@ export const api = {
   getMaintenance: maintenance.getMaintenance,
   saveMaintenance: thenSend((db: Db, input: maintenance.MaintenanceInput) => maintenance.saveMaintenance(db, input)),
   deleteMaintenance: maintenance.deleteMaintenance,
+  findWeatherPlaces: (_db: Db, query: string) => weather.findWeatherPlaces(query),
+  getWeatherLocation: weather.getWeatherLocation,
+  setWeatherLocation,
   refillFountain: (db: Db) => fountain.refillFountain(db),
   getFountainSettings: fountain.getFountainSettings,
   saveFountainSettings: fountain.saveFountainSettings,

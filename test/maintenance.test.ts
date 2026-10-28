@@ -17,7 +17,7 @@ async function newDb(withTaskList = true) {
 
 const base: MaintenanceItem = {
   id: "i", name: "Filter", notes: "", startDate: "2026-08-15", time: null, repeat: monthly,
-  lastGenerated: null, waitsForTask: null, shiftedFrom: null, shiftedRepeat: null, activeWindow: null,
+  lastGenerated: null, waitsForTask: null, shiftedFrom: null, shiftedRepeat: null, activeWindow: null, weather: [],
 };
 
 /** The schedule after the latest task; fails if it's waiting or ended. */
@@ -130,7 +130,7 @@ describe("maintenance active window", () => {
 
   it("checks the window's days", async () => {
     const db = await newDb();
-    const input = { name: "Mow", notes: "", startDate: "2026-10-01", time: null, repeat: weekly };
+    const input = { name: "Mow", notes: "", startDate: "2026-10-01", time: null, repeat: weekly, weather: [] };
     await expect(saveMaintenance(db, { ...input, activeWindow: { from: "02-29", to: "03-31" } })).rejects.toThrow("active period");
     await expect(saveMaintenance(db, { ...input, activeWindow: { from: "04-31", to: "05-31" } })).rejects.toThrow("active period");
     expect(await saveMaintenance(db, { ...input, activeWindow: { from: "04-01", to: "02-28" } }, "2026-09-01")).toBeTruthy();
@@ -140,11 +140,11 @@ describe("maintenance active window", () => {
 describe("maintenance tasks", () => {
   it("adds a task on the day an item comes due, once", async () => {
     const db = await newDb();
-    await saveMaintenance(db, { name: "Replace HVAC filter", notes: "20x25x1", startDate: "2026-10-20", time: "09:00", repeat: monthly, activeWindow: null }, "2026-10-16");
+    await saveMaintenance(db, { name: "Replace HVAC filter", notes: "20x25x1", startDate: "2026-10-20", time: "09:00", repeat: monthly, activeWindow: null, weather: [] }, "2026-10-16");
     expect(await db.all("SELECT id FROM task")).toEqual([]); // not due yet
 
-    expect(await generateMaintenanceTasks(db, "2026-10-20")).toBe(1);
-    expect(await generateMaintenanceTasks(db, "2026-10-20")).toBe(0);
+    expect((await generateMaintenanceTasks(db, "2026-10-20")).added).toBe(1);
+    expect((await generateMaintenanceTasks(db, "2026-10-20")).added).toBe(0);
     expect(await db.all("SELECT title, due, time FROM task")).toEqual([{ title: "Replace HVAC filter", due: "2026-10-20", time: "09:00" }]);
     expect((await listMaintenance(db, "2026-10-21"))[0]).toMatchObject({ nextDue: "2026-10-20", waiting: true }); // task open
     expect(await db.all("SELECT COUNT(*) AS n FROM schedule_change WHERE deleted = 0")).toEqual([{ n: 1 }]); // queued for Google
@@ -153,20 +153,20 @@ describe("maintenance tasks", () => {
   it("makes only the latest missed task after a gap, and waits for the task lists", async () => {
     const db = await newDb(false);
     const daily: Repeat = { freq: "daily", interval: 1, weekdays: [], end: { kind: "never" } };
-    await saveMaintenance(db, { name: "Scoop", notes: "", startDate: "2026-10-01", time: null, repeat: daily, activeWindow: null }, "2026-10-01");
-    expect(await generateMaintenanceTasks(db, "2026-10-05")).toBe(0); // no Google task list yet
+    await saveMaintenance(db, { name: "Scoop", notes: "", startDate: "2026-10-01", time: null, repeat: daily, activeWindow: null, weather: [] }, "2026-10-01");
+    expect((await generateMaintenanceTasks(db, "2026-10-05")).added).toBe(0); // no Google task list yet
 
     await db.run("INSERT INTO task_list (id, updated_at, updated_by, deleted, seq, title, position) VALUES ('list1', '2026-01-01', 'x', 0, 0, 'My Tasks', 0)");
-    expect(await generateMaintenanceTasks(db, "2026-10-05")).toBe(1);
+    expect((await generateMaintenanceTasks(db, "2026-10-05")).added).toBe(1);
     expect(await db.all("SELECT due FROM task")).toEqual([{ due: "2026-10-05" }]);
   });
 
   it("follows the task: waits while open, moves when done late, undoes on untick", async () => {
     const db = await newDb();
-    const id = await saveMaintenance(db, { name: "Filter", notes: "", startDate: "2026-10-01", time: null, repeat: monthly, activeWindow: null }, "2026-10-01");
+    const id = await saveMaintenance(db, { name: "Filter", notes: "", startDate: "2026-10-01", time: null, repeat: monthly, activeWindow: null, weather: [] }, "2026-10-01");
     expect(await db.all("SELECT id FROM task")).toEqual([{ id: `maint-${id}-2026-10-01` }]);
 
-    expect(await generateMaintenanceTasks(db, "2026-11-02")).toBe(0); // still open: no Nov 1 task
+    expect((await generateMaintenanceTasks(db, "2026-11-02")).added).toBe(0); // still open: no Nov 1 task
     expect((await listMaintenance(db, "2026-11-02"))[0]).toMatchObject({ nextDue: "2026-10-01", waiting: true });
 
     await db.run("UPDATE task SET done = 1, completed_at = ?", [new Date(2026, 10, 2, 18).toISOString()]); // Nov 2, local
@@ -175,7 +175,7 @@ describe("maintenance tasks", () => {
     expect((await listMaintenance(db, "2026-11-02"))[0].waiting).toBe(true);
 
     await db.run("UPDATE task SET done = 1, completed_at = ?", [new Date(2026, 10, 2, 18).toISOString()]);
-    expect(await generateMaintenanceTasks(db, "2026-12-02")).toBe(1);
+    expect((await generateMaintenanceTasks(db, "2026-12-02")).added).toBe(1);
     expect((await db.all("SELECT due FROM task ORDER BY due")).map((row) => row.due)).toEqual(["2026-10-01", "2026-12-02"]);
 
     // Done on time from the moved schedule: it stays on the 2nd.
@@ -183,7 +183,7 @@ describe("maintenance tasks", () => {
     expect((await listMaintenance(db, "2026-12-03"))[0].nextDue).toBe("2027-01-02");
 
     // Editing the schedule starts it over from the new start date.
-    await saveMaintenance(db, { id, name: "Filter", notes: "", startDate: "2027-01-10", time: null, repeat: monthly, activeWindow: null }, "2026-12-03");
+    await saveMaintenance(db, { id, name: "Filter", notes: "", startDate: "2027-01-10", time: null, repeat: monthly, activeWindow: null, weather: [] }, "2026-12-03");
     expect((await listMaintenance(db, "2026-12-03"))[0].nextDue).toBe("2027-01-10");
   });
 });

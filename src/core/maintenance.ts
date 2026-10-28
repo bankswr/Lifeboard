@@ -15,12 +15,20 @@
 //   Due dates outside it are skipped, and the schedule starts over each time the window opens
 //   (on its first day, or the first chosen weekday from it), so the dates are the same each
 //   year. Set in the form's Advanced section.
+// - Weather conditions (user, 2026-10-28; core/maintenanceWeather.ts) move a due date off days
+//   the forecast rules out, worked out again at every update until the task is made on the
+//   moved day. The task keeps the scheduled date's id, so devices with different forecasts
+//   still make one task. With no fitting day the task waits and an alert says so; past the
+//   end of the active window, that date is dropped. Weekly items go back to their weekdays.
 // Items are synced; `last_generated` is the latest due date a task was made for.
 import { addDays, localDate } from "./dates.ts";
 import { get, type Db, type Row } from "./db/types.ts";
 import { queueChange } from "./schedule/edit.ts";
+import { validConditions, weatherMove, weekdayName, type WeatherCondition } from "./maintenanceWeather.ts";
+import { recordAlert, type NewAlert } from "./rules.ts";
 import { addMonths, describeRepeat, mondayFirstWeekday, nextDate, type Repeat } from "./schedule/repeat.ts";
 import { deleteRecord, saveRecord } from "./sync/records.ts";
+import { currentForecast, type Forecast } from "./weather.ts";
 
 export interface MaintenanceItem {
   id: string;
@@ -41,6 +49,8 @@ export interface MaintenanceItem {
   shiftedRepeat: Repeat | null;
   /** Null: active all year. */
   activeWindow: ActiveWindow | null;
+  /** Empty: the weather doesn't matter. */
+  weather: WeatherCondition[];
 }
 
 /** Part of every year, as "MM-DD" days; `from` after `to` wraps over the new year. */
@@ -57,10 +67,11 @@ export interface MaintenanceInput {
   time: string | null;
   repeat: Repeat | null;
   activeWindow: ActiveWindow | null;
+  weather: WeatherCondition[];
 }
 
 /** What became of the task an item waits for. */
-export type LastTask = "open" | "gone" | { doneOn: string };
+export type LastTask = "open" | "gone" | { doneOn: string; due?: string };
 
 /**
  * A run of due dates counted from `from` by `repeat`. `from` is itself due for the original
@@ -71,6 +82,8 @@ export interface Series {
   fromIsDue: boolean;
   repeat: Repeat | null;
   window: ActiveWindow | null;
+  /** Dates up to this one aren't due any more (a weekly task the weather moved past them). */
+  skipThrough?: string;
 }
 
 /** Safety stop for very long series (a daily item over decades). */
@@ -83,6 +96,7 @@ function fromRow(row: Row): MaintenanceItem {
     waitsForTask: row.waits_for_task, shiftedFrom: row.shifted_from,
     shiftedRepeat: row.shifted_repeat ? JSON.parse(row.shifted_repeat) : null,
     activeWindow: row.active_window ? JSON.parse(row.active_window) : null,
+    weather: row.weather ? JSON.parse(row.weather) : [],
   };
 }
 
@@ -185,6 +199,10 @@ export function upcomingSeries(item: MaintenanceItem, last: LastTask | null): Se
   if (!item.lastGenerated || !last || last === "gone") return current;
   if (last === "open") return "waiting";
   if (last.doneOn === item.lastGenerated || !current.repeat) return current;
+  // A weekly task the weather moved, done by its moved day: back to the usual weekdays (user, 2026-10-28).
+  if (current.repeat.freq === "weekly" && last.due && last.due !== item.lastGenerated && last.doneOn <= last.due) {
+    return { ...current, skipThrough: last.due };
+  }
   const left = repeatAfter(current, item.lastGenerated);
   if (left === undefined) return current; // the date isn't in this schedule; nothing to move from
   if (left === null) return null;
@@ -219,7 +237,7 @@ function movedSeries(item: MaintenanceItem, repeat: Repeat, doneOn: string): Ser
 /** Due dates in `series` that haven't had a task yet. */
 function* untaskedDates(item: MaintenanceItem, series: Series): Generator<string> {
   for (const { due } of occurrences(series)) {
-    if (!item.lastGenerated || due > item.lastGenerated) yield due;
+    if ((!item.lastGenerated || due > item.lastGenerated) && (!series.skipThrough || due > series.skipThrough)) yield due;
   }
 }
 
@@ -244,24 +262,71 @@ export function nextDue(item: MaintenanceItem, series: Series, today: string): s
 /** What became of the task the item waits for; null if it waits for none. */
 async function lastTask(db: Db, item: MaintenanceItem): Promise<LastTask | null> {
   if (!item.waitsForTask) return null;
-  const task = await get(db, "SELECT deleted, done, completed_at FROM task WHERE id = ?", [item.waitsForTask]);
+  const task = await get(db, "SELECT deleted, done, completed_at, due FROM task WHERE id = ?", [item.waitsForTask]);
   if (!task || task.deleted) return "gone";
   if (!task.done) return "open";
   // completed_at is a UTC time (from Google or setTaskDone); the day that counts is the local one.
-  return { doneOn: task.completed_at ? localDate(new Date(task.completed_at)) : item.lastGenerated! };
+  return { doneOn: task.completed_at ? localDate(new Date(task.completed_at)) : item.lastGenerated!, due: task.due };
+}
+
+// ---------- weather ----------
+
+/**
+ * An item's next scheduled date and the day its task is to be made on: the same day without
+ * weather conditions (or a usable forecast), else the day the weather moves it to, null while
+ * none fits. `dropped`: none fits before the active window ends, which the forecast reaches.
+ */
+export interface Plan {
+  due: string;
+  on: string | null;
+  reason: string | null;
+  dropped: boolean;
+}
+
+export function planNext(item: MaintenanceItem, series: Series, today: string, forecast: Forecast | null): Plan | null {
+  if (item.weather.length === 0 || !forecast || forecast.days.length === 0) {
+    const due = latestDue(item, series, today);
+    return due ? { due, on: due, reason: null, dropped: false } : null;
+  }
+  // A weather item's task can come before its date, so the next date counts too.
+  const due = latestDue(item, series, today) ?? nextDue(item, series, today);
+  if (!due) return null;
+  let earliest = today;
+  for (const done of [item.lastGenerated, series.skipThrough]) {
+    if (done && addDays(done, 1) > earliest) earliest = addDays(done, 1);
+  }
+  const latest = item.activeWindow ? windowEnd(due, item.activeWindow) : null;
+  const move = weatherMove(due, item.weather, forecast.days, earliest, latest);
+  const lastForecastDay = forecast.days[forecast.days.length - 1].date;
+  return { due, on: move.date, reason: move.reason, dropped: move.date === null && latest !== null && latest <= lastForecastDay };
+}
+
+/** "Sat Oct 31". */
+function shortDate(date: string): string {
+  const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][Number(date.slice(5, 7)) - 1];
+  return `${weekdayName(date)} ${month} ${Number(date.slice(8))}`;
 }
 
 // ---------- reading and editing ----------
 
 export async function listMaintenance(db: Db, today = localDate()) {
   const rows = await db.all("SELECT * FROM maintenance_item WHERE deleted = 0");
+  const forecast = await currentForecast(db);
   const items = [];
   for (const item of rows.map(fromRow)) {
     const series = upcomingSeries(item, await lastTask(db, item));
     const waiting = series === "waiting";
     // While its task is open, the item is shown by that task's date.
-    const due = waiting ? item.lastGenerated : series ? nextDue(item, series, today) : null;
-    items.push({ ...item, nextDue: due, waiting, repeatText: item.repeat ? describeRepeat(item.repeat) : "Once" });
+    let due = waiting ? item.lastGenerated : series ? nextDue(item, series, today) : null;
+    let weather: { movedFrom: string | null; reason: string | null; noDay: boolean; dropping: boolean } | null = null;
+    if (series && !waiting && item.weather.length > 0) {
+      const plan = planNext(item, series, today, forecast);
+      if (plan) {
+        due = plan.on ?? plan.due;
+        weather = { movedFrom: plan.on !== plan.due ? plan.due : null, reason: plan.reason, noDay: plan.on === null, dropping: plan.dropped };
+      }
+    }
+    items.push({ ...item, nextDue: due, waiting, weatherPlan: weather, repeatText: item.repeat ? describeRepeat(item.repeat) : "Once" });
   }
   return items.sort((a, b) => (a.nextDue ?? "9999").localeCompare(b.nextDue ?? "9999") || a.name.localeCompare(b.name));
 }
@@ -276,6 +341,8 @@ export async function saveMaintenance(db: Db, input: MaintenanceInput, today = l
   if (!input.name.trim()) throw new Error("Give the item a name.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.startDate)) throw new Error("Choose the first due date.");
   if (input.activeWindow && !validWindow(input.activeWindow)) throw new Error("Choose real days for the active period (Feb 29 can't be used).");
+  const weatherProblem = validConditions(input.weather);
+  if (weatherProblem) throw new Error(weatherProblem);
   const existing = input.id ? await get(db, "SELECT * FROM maintenance_item WHERE id = ? AND deleted = 0", [input.id]) : undefined;
   if (input.id && !existing) throw new Error("This item no longer exists.");
   const repeat = input.repeat ? JSON.stringify(input.repeat) : null;
@@ -291,6 +358,7 @@ export async function saveMaintenance(db: Db, input: MaintenanceInput, today = l
     time: input.time || null,
     repeat,
     active_window: activeWindow,
+    weather: input.weather.length > 0 ? JSON.stringify(input.weather) : null,
     last_generated: existing?.last_generated ?? null,
     waits_for_task: keepSchedule ? existing.waits_for_task : null,
     shifted_from: keepSchedule ? existing.shifted_from : null,
@@ -308,39 +376,73 @@ export async function deleteMaintenance(db: Db, id: string): Promise<void> {
 // ---------- making tasks ----------
 
 /**
- * For each item due today or earlier without a task for that date yet (and whose latest task
- * isn't still open), adds the task (to the first Google task list) and remembers the date and
- * the schedule it came from. Returns how many tasks were added. Does nothing until the task
- * lists have been read from Google.
+ * For each item due today (or earlier, or moved to today by the weather) without a task for
+ * that date yet, and whose latest task isn't still open, adds the task (to the first Google
+ * task list) and remembers the date and the schedule it came from. Alerts when the weather
+ * holds a due item back. Does nothing until the task lists have been read from Google.
  */
-export async function generateMaintenanceTasks(db: Db, today = localDate()): Promise<number> {
+export async function generateMaintenanceTasks(db: Db, today = localDate()): Promise<{ added: number; alerts: NewAlert[] }> {
   const list = await get(db, "SELECT id FROM task_list WHERE deleted = 0 ORDER BY position LIMIT 1");
-  if (!list) return 0;
+  if (!list) return { added: 0, alerts: [] };
+  const forecast = await currentForecast(db);
   let added = 0;
+  const alerts: NewAlert[] = [];
   await db.transaction(async () => {
     for (const row of await db.all("SELECT * FROM maintenance_item WHERE deleted = 0")) {
       const item = fromRow(row);
       const series = upcomingSeries(item, await lastTask(db, item));
       if (!series || series === "waiting") continue;
-      const due = latestDue(item, series, today);
-      if (!due) continue;
-      const taskId = `maint-${item.id}-${due}`;
+      const plan = planNext(item, series, today, forecast);
+      const heldBack = plan !== null && plan.on === null && plan.due <= today;
+      const alert = await weatherAlert(db, item, plan, heldBack);
+      if (alert) alerts.push(alert);
+      if (heldBack && plan.dropped) {
+        await rememberDue(db, row, series, plan.due, null);
+        continue;
+      }
+      if (!plan || plan.on !== today) continue;
+      const taskId = `maint-${item.id}-${plan.due}`;
       if (!(await get(db, "SELECT 1 FROM task WHERE id = ?", [taskId]))) {
+        const notes = [
+          item.notes,
+          plan.reason ? `Moved from ${shortDate(plan.due)}: ${plan.reason}.` : "",
+          "(Maintenance item from Lifeboard)",
+        ].filter(Boolean).join("\n");
         await saveRecord(db, "task", {
-          id: taskId, list_id: list.id, google_id: null, title: item.name,
-          notes: item.notes ? `${item.notes}\n(Maintenance item from Lifeboard)` : "Maintenance item from Lifeboard",
-          due, time: item.time, done: 0, completed_at: null, repeat: null, etag: null,
+          id: taskId, list_id: list.id, google_id: null, title: item.name, notes,
+          due: today, time: item.time, done: 0, completed_at: null, repeat: null, etag: null,
         });
         await queueChange(db, { type: "task.create", rowId: taskId, listId: list.id });
         added++;
       }
-      const moved = !series.fromIsDue;
-      await saveRecord(db, "maintenance_item", {
-        ...row, last_generated: due, waits_for_task: taskId,
-        shifted_from: moved ? series.from : null,
-        shifted_repeat: moved ? JSON.stringify(series.repeat) : null,
-      });
+      await rememberDue(db, row, series, plan.due, taskId);
     }
   });
-  return added;
+  return { added, alerts };
+}
+
+/** Records that `due` is dealt with (its task made, or dropped) and the schedule it came from. */
+async function rememberDue(db: Db, row: Row, series: Series, due: string, taskId: string | null) {
+  const moved = !series.fromIsDue;
+  await saveRecord(db, "maintenance_item", {
+    ...row, last_generated: due, waits_for_task: taskId,
+    shifted_from: moved ? series.from : null,
+    shifted_repeat: moved ? JSON.stringify(series.repeat) : null,
+  });
+}
+
+/**
+ * Alerts once when the weather starts holding a due item back, and when it drops a date at
+ * the end of the active window. The held-back state is kept per device, like the alert rules'.
+ */
+async function weatherAlert(db: Db, item: MaintenanceItem, plan: Plan | null, heldBack: boolean): Promise<NewAlert | null> {
+  const before = await get(db, "SELECT matched FROM rule_state WHERE rule_id = 'maintenance-weather' AND subject = ?", [item.id]);
+  const stillHeld = heldBack && !plan!.dropped;
+  await db.run("INSERT OR REPLACE INTO rule_state (rule_id, subject, matched) VALUES ('maintenance-weather', ?, ?)", [item.id, stillHeld ? 1 : 0]);
+  if (!heldBack) return null;
+  if (plan!.dropped) {
+    return recordAlert(db, item.name, `${item.name}: skipped until its active period comes round again. No day before it ends suits the weather (${plan!.reason}).`);
+  }
+  if (before?.matched === 1) return null;
+  return recordAlert(db, item.name, `${item.name}: waiting for suitable weather (${plan!.reason}). No day in the forecast fits yet; Lifeboard keeps checking.`);
 }

@@ -30,7 +30,7 @@ export interface UpdateResult {
 
 export async function runUpdate(db: Db, integrations: Integration[] = INTEGRATIONS): Promise<UpdateResult> {
   // Before the integrations, so the Google one sends the new maintenance tasks in this run.
-  await generateMaintenanceTasks(db);
+  const maintenance = await generateMaintenanceTasks(db);
   const readings: Reading[] = [];
   for (const integration of integrations) {
     if (!(await integration.isSetUp(db))) continue;
@@ -53,7 +53,7 @@ export async function runUpdate(db: Db, integrations: Integration[] = INTEGRATIO
   const healthAlerts = await checkHealth(db);
   await setMeta(db, "last_update_at", utcNow());
   return {
-    alerts: [...(await evaluateRules(db, readings)), ...fountainAlerts, ...healthAlerts],
+    alerts: [...(await evaluateRules(db, readings)), ...fountainAlerts, ...healthAlerts, ...maintenance.alerts],
     connections: await listConnections(db),
   };
 }

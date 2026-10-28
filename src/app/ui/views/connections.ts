@@ -8,11 +8,14 @@ import { HEALTH_SCOPES, SCHEDULE_SCOPES } from "../../../core/google/oauth.ts";
 import { call, platform } from "../../backend.ts";
 import { revokeNativeGoogle } from "../../googleAuth.ts";
 import type { ConnectionInfo } from "../../../core/updates.ts";
+import type { WeatherPlace } from "../../../core/weather.ts";
 import { act, refresh, route } from "../app.ts";
 import { card } from "../card.ts";
 import { formatTime } from "../format.ts";
 
 let message = "";
+/** Places found for the weather location search, to pick from. */
+let placeChoices: WeatherPlace[] | null = null;
 /** The QR code of a sign-in in progress, as an image URL, and whose it is. */
 let qrSignIn: { integrationId: string; image: string } | null = null;
 
@@ -21,7 +24,9 @@ const QR_POLL_MS = 2000;
 const QR_WAIT_MS = 3 * 60 * 1000;
 
 route(/^\/connections$/, async () => {
-  const [integrations, { connections }] = await Promise.all([call("listIntegrations"), call("getStatus")]);
+  const [integrations, { connections }, weatherPlace] = await Promise.all([
+    call("listIntegrations"), call("getStatus"), call("getWeatherLocation"),
+  ]);
   const connectionOf = (id: string) => connections.find((connection) => connection.id === id);
   const shownMessage = message;
   message = "";
@@ -35,10 +40,18 @@ route(/^\/connections$/, async () => {
       <p class="muted">Sign-ins are saved on this device only.</p>
       ${shownMessage ? html`<p>${shownMessage}</p>` : ""}
       ${integrations.map((integration) =>
-        integration.signedIn
+        integration.signedIn && integration.signInMethod === "location"
+          ? card(`connection-${integration.id}`, integration.name, html`
+              <p class="small">${weatherPlace?.name}</p>
+              ${connectionStatus(connectionOf(integration.id))}`, {
+              actions: html`<button class="secondary" @click=${() => signOut(integration.id, integration.name)}>Remove location</button>`,
+            })
+        : integration.signedIn
           ? card(`connection-${integration.id}`, integration.name, connectionStatus(connectionOf(integration.id)), {
               actions: html`<button class="secondary" @click=${() => signOut(integration.id, integration.name)}>Sign out</button>`,
             })
+          : integration.signInMethod === "location"
+            ? locationCard(integration.id, integration.name)
           : integration.signInMethod === "google"
             ? googleSignIn(integration.id, integration.name)
             : integration.signInMethod === "qr"
@@ -98,6 +111,37 @@ async function signInOnPhone() {
     message = (error as Error).message;
   }
   await refresh();
+}
+
+/** Weather has no sign-in, only a home location, found by name and picked from a list. */
+function locationCard(integrationId: string, name: string) {
+  return card(`connection-${integrationId}`, name, html`
+    <p class="muted small">Forecasts from Open-Meteo for maintenance items' weather conditions. The location is shared with the other device.</p>
+    <form @submit=${findPlaces}>
+      <label>Town or postal code <input name="place" autocomplete="off" required></label>
+      <button type="submit">Search</button>
+    </form>
+    ${placeChoices?.length === 0 ? html`<p class="muted small">No places found.</p>` : ""}
+    ${placeChoices?.length
+      ? html`<div class="place-choices">${placeChoices.map((place) => html`<button class="secondary" @click=${() => choosePlace(place)}>${place.name}</button>`)}</div>`
+      : ""}
+  `);
+}
+
+async function findPlaces(event: SubmitEvent) {
+  event.preventDefault();
+  const query = String(new FormData(event.target as HTMLFormElement).get("place"));
+  try {
+    placeChoices = await call("findWeatherPlaces", query);
+  } catch (error) {
+    message = (error as Error).message;
+  }
+  await refresh();
+}
+
+async function choosePlace(place: WeatherPlace) {
+  placeChoices = null;
+  await act(() => call("setWeatherLocation", place));
 }
 
 function qrSignInCard(integrationId: string, name: string) {
@@ -177,7 +221,10 @@ async function signIn(event: SubmitEvent, integrationId: string) {
 }
 
 async function signOut(integrationId: string, name: string) {
-  if (!confirm(`Sign out of ${name} on this device? Data already fetched is kept.`)) return;
+  const question = integrationId === "weather"
+    ? "Remove the weather location on both devices? Maintenance items then keep their usual dates."
+    : `Sign out of ${name} on this device? Data already fetched is kept.`;
+  if (!confirm(question)) return;
   if (platform === "android" && integrationId === "google") {
     // On the phone, also withdraw Android's grant; sign out of Lifeboard even if that fails.
     try {

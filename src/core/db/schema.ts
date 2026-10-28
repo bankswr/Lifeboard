@@ -343,6 +343,8 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
   // 23: maintenance items active only part of the year (core/maintenance.ts): {from, to} as
   // "MM-DD" JSON; null = all year.
   "ALTER TABLE maintenance_item ADD COLUMN active_window TEXT;",
+  // 24: weather conditions on maintenance items (core/maintenanceWeather.ts), as JSON; null = none.
+  "ALTER TABLE maintenance_item ADD COLUMN weather TEXT;",
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
