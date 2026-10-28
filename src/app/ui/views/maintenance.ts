@@ -5,7 +5,7 @@
 //   #/maintenance/<id>      edit or delete an item
 import { html } from "lit-html";
 import { localDate } from "../../../core/dates.ts";
-import type { MaintenanceItem } from "../../../core/maintenance.ts";
+import type { ActiveWindow, MaintenanceItem } from "../../../core/maintenance.ts";
 import type { Repeat } from "../../../core/schedule/repeat.ts";
 import { call } from "../../backend.ts";
 import { route } from "../app.ts";
@@ -14,6 +14,7 @@ import { formatClock } from "./schedule.ts";
 
 /** New items repeat monthly by default (user: "repeats by default"). */
 const DEFAULT_REPEAT: Repeat = { freq: "monthly", interval: 1, weekdays: [], end: { kind: "never" } };
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 route(/^\/maintenance$/, async () => {
   const items = await call("listMaintenance");
@@ -30,7 +31,7 @@ route(/^\/maintenance$/, async () => {
       ${items.map(
         (item) => html`
           <a class="card list-card" href="#/maintenance/${item.id}">
-            <span>${item.name}<br><span class="muted small">${item.repeatText}${item.time ? ` · ${formatClock(item.time)}` : ""}</span></span>
+            <span>${item.name}<br><span class="muted small">${item.repeatText}${item.activeWindow ? ` · ${windowText(item.activeWindow)}` : ""}${item.time ? ` · ${formatClock(item.time)}` : ""}</span></span>
             <span class="small ${item.waiting || item.nextDue === today ? "status warning" : "muted"}">${dueText(item.nextDue, item.waiting, today)}</span>
           </a>
         `,
@@ -61,6 +62,7 @@ function formView(item: MaintenanceItem | null) {
         <label>Time <span class="muted small">(optional; Lifeboard only)</span> <input type="time" name="time" .value=${item?.time ?? ""}></label>
         <label>Notes <textarea name="notes" rows="3" .value=${item?.notes ?? ""}></textarea></label>
         ${repeatFieldset(item ? item.repeat : DEFAULT_REPEAT)}
+        ${advancedSection(item)}
         <p class="form-error status error" hidden></p>
         <div class="form-actions">
           <button type="submit">Save</button>
@@ -70,7 +72,10 @@ function formView(item: MaintenanceItem | null) {
     `,
     mount: (signal: AbortSignal) => {
       const form = document.querySelector<HTMLFormElement>(".maintenance-form")!;
-      const update = () => applyVisibility(form, repeatVisibility(new FormData(form)));
+      const update = () => {
+        const fields = new FormData(form);
+        applyVisibility(form, { ...repeatVisibility(fields), window: fields.has("windowOn") });
+      };
       update();
       form.addEventListener("change", update, { signal });
       if (!item) form.querySelector<HTMLInputElement>("[name=name]")!.focus();
@@ -91,6 +96,7 @@ async function save(event: SubmitEvent, item: MaintenanceItem | null) {
       startDate,
       time: String(fields.get("time")) || null,
       repeat: readRepeat(fields, startDate, item?.repeat ?? null),
+      activeWindow: readWindow(fields),
     });
     location.hash = "#/maintenance";
   } catch (error) {
@@ -98,6 +104,52 @@ async function save(event: SubmitEvent, item: MaintenanceItem | null) {
     message.textContent = (error as Error).message;
     message.hidden = false;
   }
+}
+
+/** Settings most items don't need (user, 2026-10-28); open when the item uses any of them. */
+function advancedSection(item: MaintenanceItem | null) {
+  const window = item?.activeWindow ?? null;
+  return html`
+    <details class="advanced" ?open=${!!window}>
+      <summary>Advanced</summary>
+      <fieldset>
+        <legend>Active period</legend>
+        <label class="check"><input type="checkbox" name="windowOn" ?checked=${!!window}> Only part of each year</label>
+        <div class="month-days" data-show="window">
+          ${monthDayField("windowFrom", "From", window?.from ?? "10-01")}
+          ${monthDayField("windowTo", "To", window?.to ?? "10-31")}
+        </div>
+        <p class="muted small" data-show="window">Due dates outside this period are skipped. The schedule starts again each time the period begins.</p>
+      </fieldset>
+    </details>
+  `;
+}
+
+/** A day of the year ("MM-DD") as a month list and a day number. */
+function monthDayField(name: string, label: string, value: string) {
+  const [month, day] = value.split("-").map(Number);
+  return html`
+    <label>${label}
+      <span class="month-day">
+        <select name="${name}Month" aria-label="${label} month">
+          ${MONTHS.map((text, index) => html`<option value=${index + 1} ?selected=${index + 1 === month}>${text}</option>`)}
+        </select>
+        <input type="number" name="${name}Day" min="1" max="31" aria-label="${label} day" .value=${String(day)}>
+      </span>
+    </label>
+  `;
+}
+
+function windowText(window: ActiveWindow): string {
+  const day = (monthDay: string) => `${MONTHS[Number(monthDay.slice(0, 2)) - 1]} ${Number(monthDay.slice(3))}`;
+  return `${day(window.from)} – ${day(window.to)}`;
+}
+
+function readWindow(fields: FormData): ActiveWindow | null {
+  if (!fields.has("windowOn")) return null;
+  const monthDay = (name: string) =>
+    `${String(fields.get(`${name}Month`)).padStart(2, "0")}-${String(fields.get(`${name}Day`)).padStart(2, "0")}`;
+  return { from: monthDay("windowFrom"), to: monthDay("windowTo") };
 }
 
 async function remove(item: MaintenanceItem) {

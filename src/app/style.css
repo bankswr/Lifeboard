@@ -261,6 +261,10 @@ textarea {
   font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border);
   border-radius: 8px; padding: 10px 12px; resize: vertical;
 }
+.advanced > summary { color: var(--blue); cursor: pointer; font-size: 0.9rem; margin-bottom: 8px; }
+.advanced[open] { display: grid; gap: 10px; }
+.month-days { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.month-day { display: grid; grid-template-columns: 1fr 64px; gap: 6px; }
 .weekdays { display: flex; flex-wrap: wrap; gap: 6px; }
 .weekdays label { display: flex; align-items: center; gap: 4px; color: var(--text); }
 .form-actions { display: grid; gap: 10px; }

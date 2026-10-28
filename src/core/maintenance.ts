@@ -10,8 +10,13 @@
 //   on their chosen weekdays. A deleted task counts as skipped (no move), unticking a task
 //   undoes its move until the next task is made, and editing the start date or repeat starts
 //   the schedule over.
+// - An item can be limited to part of the year (user, 2026-10-28): an active window from one
+//   day-month to another, every year, which may wrap over the new year (Nov 15 – Mar 15).
+//   Due dates outside it are skipped, and the schedule starts over each time the window opens
+//   (on its first day, or the first chosen weekday from it), so the dates are the same each
+//   year. Set in the form's Advanced section.
 // Items are synced; `last_generated` is the latest due date a task was made for.
-import { localDate } from "./dates.ts";
+import { addDays, localDate } from "./dates.ts";
 import { get, type Db, type Row } from "./db/types.ts";
 import { queueChange } from "./schedule/edit.ts";
 import { addMonths, describeRepeat, mondayFirstWeekday, nextDate, type Repeat } from "./schedule/repeat.ts";
@@ -34,6 +39,14 @@ export interface MaintenanceItem {
   shiftedFrom: string | null;
   /** The repeat counted from `shiftedFrom` (an "after N times" end holds what's left). */
   shiftedRepeat: Repeat | null;
+  /** Null: active all year. */
+  activeWindow: ActiveWindow | null;
+}
+
+/** Part of every year, as "MM-DD" days; `from` after `to` wraps over the new year. */
+export interface ActiveWindow {
+  from: string;
+  to: string;
 }
 
 export interface MaintenanceInput {
@@ -43,6 +56,7 @@ export interface MaintenanceInput {
   startDate: string;
   time: string | null;
   repeat: Repeat | null;
+  activeWindow: ActiveWindow | null;
 }
 
 /** What became of the task an item waits for. */
@@ -56,6 +70,7 @@ export interface Series {
   from: string;
   fromIsDue: boolean;
   repeat: Repeat | null;
+  window: ActiveWindow | null;
 }
 
 /** Safety stop for very long series (a daily item over decades). */
@@ -67,7 +82,49 @@ function fromRow(row: Row): MaintenanceItem {
     repeat: row.repeat ? JSON.parse(row.repeat) : null, lastGenerated: row.last_generated,
     waitsForTask: row.waits_for_task, shiftedFrom: row.shifted_from,
     shiftedRepeat: row.shifted_repeat ? JSON.parse(row.shifted_repeat) : null,
+    activeWindow: row.active_window ? JSON.parse(row.active_window) : null,
   };
+}
+
+// ---------- active window ----------
+
+export function inWindow(date: string, window: ActiveWindow): boolean {
+  const day = date.slice(5);
+  if (window.from <= window.to) return day >= window.from && day <= window.to;
+  return day >= window.from || day <= window.to;
+}
+
+/** The first day of the window after `date`. */
+function nextOpening(date: string, window: ActiveWindow): string {
+  const year = Number(date.slice(0, 4));
+  const opening = `${year}-${window.from}`;
+  return opening > date ? opening : `${year + 1}-${window.from}`;
+}
+
+/** The last day of the window that `date` (inside it) belongs to. */
+export function windowEnd(date: string, window: ActiveWindow): string {
+  const year = Number(date.slice(0, 4));
+  const wrapsIntoNextYear = window.from > window.to && date.slice(5) >= window.from;
+  return `${wrapsIntoNextYear ? year + 1 : year}-${window.to}`;
+}
+
+/** Where a schedule restarts when the window opens: that day, or a weekly item's first chosen weekday from it. */
+function restartDate(repeat: Repeat | null, opening: string): string {
+  if (repeat?.freq !== "weekly" || repeat.weekdays.length === 0) return opening;
+  let date = opening;
+  while (!repeat.weekdays.includes(mondayFirstWeekday(date))) date = addDays(date, 1);
+  return date;
+}
+
+function validWindow(window: ActiveWindow): boolean {
+  return [window.from, window.to].every((day) => {
+    const match = /^(\d{2})-(\d{2})$/.exec(day);
+    if (!match) return false;
+    const [month, date] = [Number(match[1]), Number(match[2])];
+    // Feb 29 is left out: most years it doesn't exist, so a window couldn't open on it.
+    const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+    return daysInMonth !== undefined && date >= 1 && date <= daysInMonth;
+  });
 }
 
 // ---------- occurrences ----------
@@ -76,19 +133,25 @@ function fromRow(row: Row): MaintenanceItem {
  * Due dates in order, each with the repeat left from it (an "after N times" end counts this
  * one). Monthly and yearly dates are counted from `from` rather than from the previous date,
  * so an item on the 31st is due on the last day of a short month and on the 31st again after.
+ * A date outside the active window isn't due; the schedule restarts when the window opens.
  */
 function* occurrences(series: Series): Generator<{ due: string; repeat: Repeat | null }> {
-  const { from, repeat } = series;
-  if (!repeat) {
-    if (series.fromIsDue) yield { due: from, repeat: null };
-    return;
-  }
-  let left = repeat.end.kind === "count" ? repeat.end.count : Infinity;
+  const { repeat, window } = series;
+  if (!repeat && !series.fromIsDue) return;
+  let from = series.from;
+  let left = repeat?.end.kind === "count" ? repeat.end.count : Infinity;
   let step = series.fromIsDue ? 0 : 1;
-  let due = series.fromIsDue ? from : stepDate(repeat, from, from, step);
+  let due = series.fromIsDue ? from : stepDate(repeat!, from, from, step);
   for (let n = 0; n < MAX_OCCURRENCES && left > 0; n++) {
-    if (repeat.end.kind === "until" && due > repeat.end.date) return;
-    yield { due, repeat: withCountLeft(repeat, left) };
+    if (repeat?.end.kind === "until" && due > repeat.end.date) return;
+    if (window && !inWindow(due, window)) {
+      from = restartDate(repeat, nextOpening(due, window));
+      step = 0;
+      due = from;
+      continue;
+    }
+    yield { due, repeat: repeat && withCountLeft(repeat, left) };
+    if (!repeat) return;
     left--;
     step++;
     due = stepDate(repeat, from, due, step);
@@ -108,8 +171,9 @@ function withCountLeft(repeat: Repeat, left: number): Repeat {
 
 /** The schedule the latest task belongs to: the moved one if a task moved it, else the original. */
 function currentSeries(item: MaintenanceItem): Series {
-  if (item.shiftedFrom && item.shiftedRepeat) return { from: item.shiftedFrom, fromIsDue: false, repeat: item.shiftedRepeat };
-  return { from: item.startDate, fromIsDue: true, repeat: item.repeat };
+  const window = item.activeWindow;
+  if (item.shiftedFrom && item.shiftedRepeat) return { from: item.shiftedFrom, fromIsDue: false, repeat: item.shiftedRepeat, window };
+  return { from: item.startDate, fromIsDue: true, repeat: item.repeat, window };
 }
 
 /**
@@ -145,10 +209,11 @@ function repeatAfter(series: Series, due: string): Repeat | null | undefined {
  * chosen) and so restart at the next chosen day; done early, they keep their dates.
  */
 function movedSeries(item: MaintenanceItem, repeat: Repeat, doneOn: string): Series {
-  if (repeat.freq !== "weekly") return { from: doneOn, fromIsDue: false, repeat };
+  const window = item.activeWindow;
+  if (repeat.freq !== "weekly") return { from: doneOn, fromIsDue: false, repeat, window };
   const weekdays = repeat.weekdays.length > 0 ? repeat.weekdays : [mondayFirstWeekday(item.startDate)];
   const from = doneOn > item.lastGenerated! ? doneOn : item.lastGenerated!;
-  return { from, fromIsDue: false, repeat: { ...repeat, weekdays } };
+  return { from, fromIsDue: false, repeat: { ...repeat, weekdays }, window };
 }
 
 /** Due dates in `series` that haven't had a task yet. */
@@ -210,11 +275,14 @@ export async function getMaintenance(db: Db, id: string): Promise<MaintenanceIte
 export async function saveMaintenance(db: Db, input: MaintenanceInput, today = localDate()): Promise<string> {
   if (!input.name.trim()) throw new Error("Give the item a name.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.startDate)) throw new Error("Choose the first due date.");
+  if (input.activeWindow && !validWindow(input.activeWindow)) throw new Error("Choose real days for the active period (Feb 29 can't be used).");
   const existing = input.id ? await get(db, "SELECT * FROM maintenance_item WHERE id = ? AND deleted = 0", [input.id]) : undefined;
   if (input.id && !existing) throw new Error("This item no longer exists.");
   const repeat = input.repeat ? JSON.stringify(input.repeat) : null;
-  // A new start date or repeat starts the schedule over: no move, no waiting for the old task.
-  const keepSchedule = existing && existing.start_date === input.startDate && existing.repeat === repeat;
+  const activeWindow = input.activeWindow ? JSON.stringify(input.activeWindow) : null;
+  // A new start date, repeat or window starts the schedule over: no move, no waiting for the old task.
+  const keepSchedule = existing && existing.start_date === input.startDate && existing.repeat === repeat
+    && existing.active_window === activeWindow;
   const id = await saveRecord(db, "maintenance_item", {
     ...(existing ? { id: existing.id } : {}),
     name: input.name.trim(),
@@ -222,6 +290,7 @@ export async function saveMaintenance(db: Db, input: MaintenanceInput, today = l
     start_date: input.startDate,
     time: input.time || null,
     repeat,
+    active_window: activeWindow,
     last_generated: existing?.last_generated ?? null,
     waits_for_task: keepSchedule ? existing.waits_for_task : null,
     shifted_from: keepSchedule ? existing.shifted_from : null,

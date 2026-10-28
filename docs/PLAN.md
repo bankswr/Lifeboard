@@ -411,6 +411,32 @@ current intent, not a commitment to details.
   unticking a task undoes its move until the next task is made; editing the start date or
   repeat starts the schedule over. A day missing from a short month falls back to its last
   day, then the item returns to its usual day (31st → Feb 28 → Mar 31).
+  **Advanced settings (user, 2026-10-28):** in a collapsible "Advanced" section of the item
+  form, open when the item uses any of them.
+  - **Active period:** an optional day-month to day-month window each year (may wrap over the
+    new year). Due dates outside it are skipped; each time it opens the schedule starts again
+    on its first day (weekly: the first chosen weekday from it), so dates are the same each
+    year. "After N times" counts only tasks made. A long interval in a short window is left to
+    the user.
+  - **Weather:** forecast from Open-Meteo (free, no key): 16 days ahead plus recent past days,
+    daily high/low °F, humidity, chance of rain, rain amount (in). Home location set in
+    Settings → Connections (place name, geocoded). Fetched at each update; stale or missing
+    forecast (over a day old) → items keep their normal dates, and the failure shows like any
+    connection. An item's conditions: measure, > or <, value, Avoid (a matching day is out)
+    or Only (a non-matching day is out), with lead/lag days (a day that rules a day out also
+    rules out N days before/after it). Any Avoid excludes; all Only must hold. Days whose
+    neighbours lie beyond the forecast are judged on what is known.
+    - If the due date is ruled out, it moves to the nearest fitting day, earlier winning ties
+      (sooner forecasts are more reliable): never before today, within the forecast, inside
+      the active period. Worked out again from the newest forecast at every update until the
+      task is made, on the moved day (task ids stay per scheduled date, so devices with
+      different forecasts still make one task).
+    - No fitting day: no task is made; once the due date arrives, an alert, and the item is
+      re-checked at every update until a day fits. If the active period ends first, that
+      occurrence is dropped with an alert.
+    - Afterwards: weekly items go back to their usual weekdays (a date passed by the move is
+      skipped); other items follow completion as usual.
+    - The list and the task show the move and why ("moved from Sat: rain 60%").
 - **Google OAuth:** publish the app ("In production"). If a hidden cost turns up,
   fall back to signing in again regularly.
 

@@ -340,6 +340,9 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
   ALTER TABLE maintenance_item ADD COLUMN shifted_repeat TEXT;
   UPDATE maintenance_item SET waits_for_task = 'maint-' || id || '-' || last_generated WHERE last_generated IS NOT NULL;
   `,
+  // 23: maintenance items active only part of the year (core/maintenance.ts): {from, to} as
+  // "MM-DD" JSON; null = all year.
+  "ALTER TABLE maintenance_item ADD COLUMN active_window TEXT;",
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
