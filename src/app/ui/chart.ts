@@ -1,4 +1,5 @@
 // Small time series charts with uPlot (the library the plan names for graphs, docs/PLAN.md).
+// Most are by date; a chart with `timeOfDay` is spread over one day instead (a histogram).
 // A template places `chartSlot(id)`; the view's `mount` calls `mountCharts` with each slot's
 // data, which draws the charts and keeps them sized to their slot. Used by the Pets page (a
 // cat's weight and visits) and the Health page (several series per chart, a second y axis on
@@ -65,6 +66,11 @@ export interface ChartSpec {
   rightLabel?: string;
   /** Plot height, px (default 160). */
   height?: number;
+  /**
+   * Plot across one day instead of by date (`dates` is then ignored): each value's x is the
+   * middle of its bin, in hours after midnight, and `binHours` is each bin's width.
+   */
+  timeOfDay?: { hours: number[]; binHours: number };
 }
 
 
@@ -109,6 +115,7 @@ export function mountCharts(specs: Record<string, ChartSpec>, signal: AbortSigna
 
 /** uPlot's x values are seconds; each date sits at its local midnight. */
 function data(spec: ChartSpec): uPlot.AlignedData {
+  if (spec.timeOfDay) return [spec.timeOfDay.hours, ...spec.series.map((series) => series.values)];
   const seconds = spec.dates.map((date) => new Date(`${date}T00:00:00`).getTime() / 1000);
   return [seconds, ...spec.series.map((series) => series.values)];
 }
@@ -139,21 +146,34 @@ function options(spec: ChartSpec, width: number): uPlot.Options {
     },
     cursor: { y: false, points: { size: 8 }, ...(spec.syncKey ? { sync: { key: spec.syncKey } } : {}) },
     scales: {
-      x: { time: true, range: xRange(spec.visibleDays) },
+      x: spec.timeOfDay ? { time: false, range: [0, 24] } : { time: true, range: xRange(spec.visibleDays) },
       y: { range: yRange(spec) },
       ...(right ? { y2: { range: yRange(spec) } } : {}),
     },
     axes: [
-      { ...axis, values: (_u, ticks) => ticks.map((t) => new Date(t * 1000).toLocaleDateString([], { month: "short", day: "numeric" })) },
+      spec.timeOfDay
+        ? { ...axis, incrs: [1, 2, 3, 6, 12], values: (_u, ticks) => ticks.map(clockTime) }
+        : { ...axis, values: (_u, ticks) => ticks.map((t) => new Date(t * 1000).toLocaleDateString([], { month: "short", day: "numeric" })) },
       { ...yAxis, ...(spec.leftLabel ? { label: spec.leftLabel, labelSize: 16 } : {}) },
       // The right axis draws no grid of its own: two sets of grid lines would not line up.
       ...(right ? [{ ...yAxis, scale: "y2", side: 1, grid: { show: false }, ...(spec.rightLabel ? { label: spec.rightLabel, labelSize: 16 } : {}) }] : []),
     ],
     series: [
-      { label: "Day", value: (_u, t) => (t == null ? "" : new Date(t * 1000).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })) },
+      spec.timeOfDay ? binSeries(spec.timeOfDay.binHours) : { label: "Day", value: (_u, t) => (t == null ? "" : new Date(t * 1000).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })) },
       ...spec.series.map((series) => seriesOptions(series, series.axis === "right" ? spec.rightDecimals ?? spec.decimals : spec.decimals)),
     ],
   };
+}
+
+/** The x series of a time-of-day chart: the hovered bin's span, "9:00 – 9:30 AM". */
+function binSeries(binHours: number): uPlot.Series {
+  return { label: "Time", value: (_u, middle) => (middle == null ? "" : `${clockTime(middle - binHours / 2)} – ${clockTime(middle + binHours / 2)}`) };
+}
+
+/** Hours after midnight as a clock time: 6 → "6 AM", 9.5 → "9:30 AM". */
+function clockTime(hours: number): string {
+  const time = new Date(2000, 0, 1, 0, Math.round(hours * 60));
+  return time.toLocaleTimeString([], { hour: "numeric", ...(time.getMinutes() ? { minute: "2-digit" } : {}) });
 }
 
 function seriesOptions(series: SeriesSpec, decimals: number): uPlot.Series {
@@ -179,7 +199,8 @@ function seriesOptions(series: SeriesSpec, decimals: number): uPlot.Series {
  * chart's main measure. Trends projected past it and averages carried past it don't count.
  */
 function showDefaultDay(u: uPlot, spec: ChartSpec) {
-  if (u.cursor.idx != null) return;
+  // A time-of-day chart has no latest bin: its legend waits for a hover.
+  if (u.cursor.idx != null || spec.timeOfDay) return;
   const main = spec.series.find((series) => series.kind === "points") ?? spec.series[0];
   const values = main?.values ?? [];
   let last = values.length - 1;

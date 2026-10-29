@@ -27,6 +27,8 @@ const MIN_VISIT_DAYS = 3;
 const AUTO_VISIT_MARGIN = 2;
 /** Days of history for the Pets page's charts (its longest range). */
 export const SHOWN_DAYS = 90;
+/** Width of each bar in the time-of-day histogram, minutes. */
+export const TIME_BIN_MINUTES = 30;
 
 export interface CatSettings {
   weightChangePercent: number;
@@ -42,6 +44,8 @@ export interface CatDay {
   /** Median of the day's weigh-ins, lb; null on a day without any. */
   weight: number | null;
   visits: number;
+  /** When each visit was, in minutes after the day's local midnight. */
+  visitMinutes: number[];
 }
 
 export interface CatSummary {
@@ -161,7 +165,28 @@ function catDays(weighIns: WeighIn[], today: string, firstAt: string | null): Ca
   const firstDay = firstAt ? localDate(new Date(firstAt)) : today;
   const from = [addDays(today, -(SHOWN_DAYS - 1)), [firstDay, addDays(today, -6)].sort()[0]].sort().at(-1)!;
   const days = visitsByDay(weighIns, from, today);
-  return [...days].map(([date, entries]) => ({ date, weight: median(entries.map((e) => e.weight)), visits: entries.length }));
+  return [...days].map(([date, entries]) => ({
+    date,
+    weight: median(entries.map((e) => e.weight)),
+    visits: entries.length,
+    visitMinutes: entries.map((e) => minutesAfterMidnight(new Date(e.at))),
+  }));
+}
+
+function minutesAfterMidnight(time: Date): number {
+  return time.getHours() * 60 + time.getMinutes();
+}
+
+/**
+ * Visits in each TIME_BIN_MINUTES slot of the day, from midnight, over the last `lastDays` of
+ * `days` (oldest first, as in CatSummary.days): the Pets page's time-of-day histogram.
+ */
+export function visitsByTimeOfDay(days: CatDay[], lastDays: number): number[] {
+  const counts: number[] = new Array((24 * 60) / TIME_BIN_MINUTES).fill(0);
+  for (const day of days.slice(-lastDays)) {
+    for (const minutes of day.visitMinutes) counts[Math.floor(minutes / TIME_BIN_MINUTES)]++;
+  }
+  return counts;
 }
 
 /**

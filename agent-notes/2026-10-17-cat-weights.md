@@ -47,3 +47,8 @@ ran the queries above.
   stored day (at least a week, at most 30 days; 90 since 2026-10-26, when the cats moved
   into one card with a cat selector and the shared 2 weeks / 4 weeks / 90 days range). Colors: dark-surface reference categorical
   slots in name order, first three validated against `--surface` (#1e293b); never reused.
+- 2026-10-29 (user): a third chart on the Cats card, a histogram of the shown cat's visits by
+  time of day in 30-minute bins over the card's range. It follows the existing cat selector and
+  range rather than plotting all cats at once (user dropped a cats-as-rows plot for this).
+  `CatDay.visitMinutes` + `visitsByTimeOfDay` in core; `ChartSpec.timeOfDay` gives
+  `chart.ts` a 0–24 h x axis (numeric hours, not uPlot's time scale, so no time-zone shifts).

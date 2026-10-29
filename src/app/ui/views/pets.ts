@@ -1,6 +1,6 @@
 // Pets (#/pets, in the Details menu): the latest status of each Litter-Robot and feeder,
-// then a Cats card: one cat at a time from a selector, its weight and visits graphs over a
-// chosen range (core/whisker/cats.ts).
+// then a Cats card: one cat at a time from a selector, its weight and visits graphs and a
+// histogram of its visits by time of day, all over a chosen range (core/whisker/cats.ts).
 // Monitor shows the same device cards (deviceCards).
 import { html } from "lit-html";
 import type { DeviceStatus } from "../../../core/devices.ts";
@@ -8,14 +8,14 @@ import { nextMeal, type FeederStatus } from "../../../core/smartlife/feeder.ts";
 import type { FountainEstimate } from "../../../core/fountain.ts";
 import type { FoodEstimate } from "../../../core/smartlife/food.ts";
 import { drawerState, litterState, type LevelState, type LitterSettings } from "../../../core/whisker/levels.ts";
-import type { CatSummary } from "../../../core/whisker/cats.ts";
+import { TIME_BIN_MINUTES, visitsByTimeOfDay, type CatSummary } from "../../../core/whisker/cats.ts";
 import type { LevelEstimate, LitterEstimate } from "../../../core/whisker/estimates.ts";
 import type { HopperEstimate } from "../../../core/whisker/hopper.ts";
 import type { LitterRobotStatus } from "../../../core/whisker/status.ts";
 import { call } from "../../backend.ts";
 import { act, refresh, route } from "../app.ts";
 import { card } from "../card.ts";
-import { chartSlot, mountCharts, rangePicker, type ChartSpec } from "../chart.ts";
+import { chartSlot, mountCharts, RANGES, rangePicker, type ChartSpec } from "../chart.ts";
 import { formatTime } from "../format.ts";
 
 export const NO_DEVICES_HINT = html`<p class="muted">No connected devices yet. Sign in to Whisker or Smart Life under Settings → Connections.</p>`;
@@ -86,6 +86,8 @@ function catBody(cat: CatSummary) {
       </span>
     </p>
     ${chartSlot(`${cat.id}-visits`)}
+    <p>Time of day <span class="muted small">visits per half hour, last ${RANGES.find(([days]) => days === rangeDays)?.[1]}</span></p>
+    ${chartSlot(`${cat.id}-times`)}
     ${cat.latestAt ? html`<p class="muted small">Last weighed ${shortDateTime(cat.latestAt)}: ${cat.latestWeight!.toFixed(2)} lb</p>` : ""}
   `;
 }
@@ -104,6 +106,13 @@ function catCharts(cats: CatSummary[]): Record<string, ChartSpec> {
     specs[`${cat.id}-visits`] = {
       dates, decimals: 0, yRange: "zero", counts: true, visibleDays: rangeDays,
       series: [{ label: "Visits", values: cat.days.map((day) => day.visits), color, kind: "bars" }],
+    };
+    const binHours = TIME_BIN_MINUTES / 60;
+    const counts = visitsByTimeOfDay(cat.days, rangeDays);
+    specs[`${cat.id}-times`] = {
+      dates: [], decimals: 0, yRange: "zero", counts: true,
+      timeOfDay: { hours: counts.map((_, bin) => (bin + 0.5) * binHours), binHours },
+      series: [{ label: "Visits", values: counts, color, kind: "bars" }],
     };
   });
   return specs;

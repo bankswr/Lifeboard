@@ -5,7 +5,7 @@ import { listDeviceStatuses } from "../src/core/devices.ts";
 import { listRules, saveRule } from "../src/core/rules.ts";
 import { runUpdate } from "../src/core/updates.ts";
 import { WhiskerSignInError, type ActivityEntry, type RawPet, type RawRobot, type WhiskerApi } from "../src/core/whisker/api.ts";
-import { catSummaries, checkCatAlerts, saveCatSettings, saveCats, DEFAULT_CAT_SETTINGS } from "../src/core/whisker/cats.ts";
+import { catSummaries, checkCatAlerts, saveCatSettings, saveCats, visitsByTimeOfDay, DEFAULT_CAT_SETTINGS } from "../src/core/whisker/cats.ts";
 import { makeWhiskerIntegration } from "../src/core/whisker/integration.ts";
 import { checkLitterAlarms, DEFAULT_LITTER_SETTINGS, drawerState, litterState, saveLitterSettings } from "../src/core/whisker/levels.ts";
 import { estimateLitter, litterEstimates, recordLitterLevels } from "../src/core/whisker/estimates.ts";
@@ -196,6 +196,18 @@ describe("cats", () => {
     await saveCatSettings(db, { ...DEFAULT_CAT_SETTINGS, visitLimits: { "pet-1": 10 } });
     expect((await catSummaries(db, now))[0]).toMatchObject({ visitLimit: 10, visitLimitIsAuto: false });
     await expect(saveCatSettings(db, { ...DEFAULT_CAT_SETTINGS, visitLimits: { "pet-1": 2.5 } })).rejects.toThrow(/whole numbers/);
+  });
+
+  it("counts visits per half hour of the day over the chosen last days", async () => {
+    const db = await newDb();
+    // 9:00 on each of the last 4 days, 15:00 today.
+    await saveCats(db, [pet([[3, 8, 9], [2, 8, 9], [1, 8, 9], [0, 8, 9], [0, 8, 15]])]);
+    const [cat] = await catSummaries(db, now);
+    const counts = visitsByTimeOfDay(cat.days, 2);
+    expect(counts).toHaveLength(48);
+    expect(counts[18]).toBe(2); // 9:00–9:30, today and yesterday
+    expect(counts[30]).toBe(1); // 15:00–15:30
+    expect(counts.reduce((sum, n) => sum + n, 0)).toBe(3);
   });
 
   it("reads the cats at each update", async () => {
