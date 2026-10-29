@@ -5,7 +5,8 @@
 // cat's weight and visits) and the Health page (several series per chart, a second y axis on
 // the right for two measures with different units, one range shown across all charts).
 // Hovering shows the day and each series' value in the legend under the plot; otherwise the
-// legend shows the latest day with a real value. When a category (`SeriesSpec.group`)
+// legend shows the latest day with a real value. On a touch screen, touching or dragging
+// across a plot does what hovering does. When a category (`SeriesSpec.group`)
 // has more than one series, each category gets its own legend line, entries aligned in columns.
 import { html } from "lit-html";
 import uPlot from "uplot";
@@ -106,11 +107,29 @@ export function mountCharts(specs: Record<string, ChartSpec>, signal: AbortSigna
     if (!spec) continue;
     const chart = new uPlot(options(spec, slot.clientWidth), data(spec), slot);
     if (hasGroups(spec)) groupLegend(chart, spec);
+    followTouch(chart, signal);
     charts.push([chart, slot]);
   }
   const resize = () => charts.forEach(([chart, slot]) => chart.setSize({ width: slot.clientWidth, height: chart.height }));
   window.addEventListener("resize", resize, { signal });
   signal.addEventListener("abort", () => charts.forEach(([chart]) => chart.destroy()));
+}
+
+/**
+ * uPlot's cursor follows only the mouse, and the Android WebView sends none while a finger
+ * moves, so a touch moves the cursor itself. Vertical drags still scroll the page (style.css).
+ */
+function followTouch(chart: uPlot, signal: AbortSignal) {
+  // uPlot's typings leave out setCursor's third argument, which passes the cursor to synced charts.
+  const setCursor = chart.setCursor as (opts: { left: number; top: number }, fireHook?: boolean, publish?: boolean) => void;
+  const move = (event: TouchEvent) => {
+    const touch = event.touches[0];
+    if (!touch) return;
+    const plot = chart.over.getBoundingClientRect();
+    setCursor({ left: touch.clientX - plot.left, top: touch.clientY - plot.top }, true, true);
+  };
+  chart.over.addEventListener("touchstart", move, { passive: true, signal });
+  chart.over.addEventListener("touchmove", move, { passive: true, signal });
 }
 
 /** uPlot's x values are seconds; each date sits at its local midnight. */

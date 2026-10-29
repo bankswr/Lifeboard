@@ -371,6 +371,7 @@ dialog.sheet h2 { margin: 0 0 4px; }
 
 /* uPlot charts (ui/chart.ts): fill the card's width; the hover readout sits under the plot. */
 .chart { width: 100%; margin: 8px 0; }
+.chart .u-over { touch-action: pan-y; } /* sideways drags move the chart's cursor (chart.ts) */
 .chart .u-legend { color: var(--muted); font-size: 0.8rem; text-align: left; }
 .chart .u-legend .u-marker { border-radius: 2px; }
 /* A legend with categories (chart.ts groupLegend): one line per category, entries in shared

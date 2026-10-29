@@ -105,3 +105,9 @@ removed (port 5181).
 - The range switch (`RANGES`, `rangePicker`) moved to `chart.ts`, shared with the Pets cats card.
 - Checked with Playwright (scratch install of playwright-core, the cached chromium-1243) at 420
   and 1000 px against the real desktop server.
+- 2026-10-29: charts respond to touch (user: tapping a chart on the phone showed nothing).
+  `followTouch` in `chart.ts` moves uPlot's cursor on touchstart/touchmove (with sync, so the
+  Health page's shared cursor follows); `.u-over` has `touch-action: pan-y` so vertical drags
+  still scroll the page. Checked in headless Chrome with CDP `Input.dispatchTouchEvent`: the
+  readout follows the finger and stays after it lifts; tapping another chart clears it, as on
+  desktop. The emulator has no chart data, so it wasn't checked there.
