@@ -12,8 +12,8 @@ draft.
 - Features: multiple lists; add (Enter keeps the cursor in the box for fast entry), check
   off (done items move to a "Done" section), tap text to edit, × to delete, "Clear done",
   rename list, delete list (with confirm; deletes its items too).
-- Rename/edit/confirm use the browser's `prompt`/`confirm` (Capacitor's WebView supports
-  them). Simple; replace with in-app sheets if the user wants nicer dialogs.
+- Rename/edit use an in-page dialog (`askText`); delete confirmations use the browser's
+  `confirm`. See "Update 2026-11-01" for why not `prompt`.
 
 ## Decisions
 - New lists/items go at the end (`position` = max + 1). Lists made on two devices before a
@@ -68,3 +68,11 @@ draft.
 - Verified: 2 new tests; desktop (Playwright, scratch server on another port): drag of an
   item and of a list card saved, A–Z for lists and items, picker groups. Emulator
   (`fitapp_test`, adb `input motionevent` drags): item and list-card touch drags work and save.
+
+## Update 2026-11-01: edits start with the current text
+- On the phone, editing an item or renaming a list opened an empty field. Cause: Capacitor
+  shows `prompt()` with its own native dialog (`BridgeWebChromeClient.onJsPrompt`), which
+  never uses the default value. Desktop browsers were fine.
+- Replaced `prompt()` with `askText` in `lists.ts`: a `<dialog class="sheet">` built per
+  call, `method="dialog"` form, resolves to the trimmed text or null on Cancel/Back. Don't
+  use `prompt()` anywhere in the app; `confirm()` is fine (no default value).

@@ -5,10 +5,10 @@
 //   "Copy selected to…" and are never saved.
 // A to-do list's "Copy mode" makes it work like a prototype list until switched off.
 // Each card's ⚙ menu has Rename, Sort items A–Z and Delete; the floating + makes a new list.
-// Renames, edits and delete confirmations use the browser's own prompt/confirm dialogs.
+// Renames and edits use an in-page dialog (askText); delete confirmations use confirm().
 // Lists (within their kind) and items are reordered by dragging their ⠿ handle (user,
 // 2026-10-18), with SortableJS; the A–Z button sorts the lists once.
-import { html } from "lit-html";
+import { html, render } from "lit-html";
 import { live } from "lit-html/directives/live.js";
 import Sortable from "sortablejs";
 import { byText, type ListKind, type TodoItem, type TodoListDetail } from "../../../core/todos.ts";
@@ -298,6 +298,37 @@ async function createList(event: SubmitEvent) {
 
 // ---------- editing ----------
 
+/**
+ * Asks for a line of text, starting with `current`; resolves to null on Cancel.
+ * Used instead of prompt(): Capacitor's Android prompt dialog ignores the default
+ * value, so edits started with an empty field.
+ */
+function askText(title: string, current: string): Promise<string | null> {
+  const dialog = document.createElement("dialog");
+  dialog.className = "sheet";
+  render(html`
+    <form method="dialog">
+      <h2>${title}</h2>
+      <input name="text" required autocomplete="off" .value=${current}>
+      <div class="dialog-actions">
+        <button type="button" class="secondary" @click=${() => dialog.close()}>Cancel</button>
+        <button type="submit" value="ok">Save</button>
+      </div>
+    </form>
+  `, dialog);
+  document.body.append(dialog);
+
+  return new Promise((resolve) => {
+    dialog.addEventListener("close", () => {
+      const input = dialog.querySelector("input")!;
+      resolve(dialog.returnValue === "ok" ? input.value.trim() : null);
+      dialog.remove();
+    });
+    dialog.showModal();
+    dialog.querySelector("input")!.select();
+  });
+}
+
 /** Adds what was typed in an add-row form, then keeps the cursor there for the next one. */
 async function addFromForm(event: SubmitEvent, add: (text: string) => Promise<unknown>) {
   event.preventDefault();
@@ -310,12 +341,12 @@ async function addFromForm(event: SubmitEvent, add: (text: string) => Promise<un
 }
 
 async function renameList(listId: string, current: string) {
-  const name = prompt("List name", current);
+  const name = await askText("List name", current);
   if (name !== null && name !== current) await act(() => call("renameTodoList", listId, name));
 }
 
 async function editItem(item: TodoItem) {
-  const text = prompt("Edit item", item.text);
+  const text = await askText("Edit item", item.text);
   if (text !== null && text !== item.text) await act(() => call("editTodoItem", item.id, text));
 }
 
