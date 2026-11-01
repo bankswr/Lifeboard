@@ -41,3 +41,14 @@ and 12 single visits answered 1–5 h later.
 - Per device like other alerts (desktop hourly; phone at its daily update).
 - Verified: 4 tests; live read of the last 72 h (255 entries, 41 cycles, 42 visits, no
   stall at the time). No real alert seen yet.
+
+## 2026-11-01: missed stall (no weigh-ins)
+From 2026-10-30 15:13 UTC the robot sat in `ROBOT_CAT_DETECT_DELAY` / `DC_CAT_DETECT_30M`
+("Cat sensor timing") for ~2 days: the last activity entry was `robotStatusCatDetect`, then
+nothing (no `catWeight`, no cycles), and the box overflowed. No alert, because only weigh-ins
+started a stall; the drawer level also stayed at 72% (it only updates after a cycle), so the
+drawer-full rule couldn't fire either. Fix: `robotStatusCatDetect` and
+`robotCycleStateCatDetect` after the last cycle also start a stall; with no weigh-ins the
+message says "since it detected a cat … (status: …)". Checked against the live log: flagged.
+Also seen: `lastSeen` (2026-10-29 22:42) lagged the activity log, so it is no use as a
+"robot silent" signal.

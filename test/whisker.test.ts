@@ -283,6 +283,20 @@ describe("clean-cycle stalls", () => {
     expect(findCycleStall([], now, 60)).toBeNull();
   });
 
+  it("counts a cat detection with no weigh-in as a stall (robot stuck on its curtain sensor)", async () => {
+    const detected = (minutes: number) => entry("robotStatusCatDetect", minutes);
+    expect(findCycleStall([cycle(3000), detected(2900)], now, 60)).toEqual({
+      since: new Date(now.getTime() - 2900 * 60_000).toISOString(),
+      visits: 0,
+    });
+    expect(findCycleStall([detected(30)], now, 60)).toBeNull(); // not long enough yet
+    expect(findCycleStall([detected(100), visit(98), cycle(95)], now, 60)).toBeNull(); // normal visit
+
+    const db = await newDb();
+    const [alert] = await checkCycleStall(db, litterRobotStatus(READY), [cycle(3000), detected(2900)], now);
+    expect(alert.message).toMatch(/^Litter-Robot hasn't run a clean cycle since it detected a cat 48 hours ago \(status: /);
+  });
+
   it("alerts once per stall, again if dismissed while still stalled, and again for a new stall", async () => {
     const db = await newDb();
     const robot = litterRobotStatus(READY);
