@@ -125,7 +125,7 @@ describe("reviewDays", () => {
 });
 
 describe("analyzeHealth (database)", () => {
-  async function seededDb() {
+  async function seededDb({ withBodyFat = true } = {}) {
     const db = openNodeDb(":memory:");
     await migrate(db);
     const days = steadyLoss(45); // enough for the default 28-day window plus its averages
@@ -135,7 +135,7 @@ describe("analyzeHealth (database)", () => {
     });
     const range = [`${days[0].date}T00:00:00Z`, `${TODAY}T00:00:00Z`] as const;
     await replaceHealthPoints(db, "weight", ...range, days.map((d) => point("weight", d, d.weightLbs! / 0.00220462262185)));
-    await replaceHealthPoints(db, "body-fat", ...range, days.map((d) => point("body-fat", d, 20)));
+    if (withBodyFat) await replaceHealthPoints(db, "body-fat", ...range, days.map((d) => point("body-fat", d, 20)));
     return db;
   }
 
@@ -204,6 +204,44 @@ describe("analyzeHealth (database)", () => {
     expect(lean!.perDay).toBeCloseTo(-0.08); // 80% of the weight lost
     expect(fat!.perDay).toBeCloseTo(-0.02);
     expect(page.days.at(-2)!.leanAverage! + page.days.at(-2)!.fatAverage!).toBeCloseTo(page.days.at(-2)!.weightAverage!);
+  });
+
+  describe("FFMI (72 in tall)", () => {
+    const HEIGHT_M = 72 * 0.0254;
+
+    it("is lean mass in kg over height squared, from the 7-day averages", async () => {
+      const yesterday = (await healthPage(await seededDb(), TODAY)).days.at(-2)!;
+      // Worked by hand: 200.3 lb average × 80% lean = 160.24 lb = 72.84 kg; ÷ 1.8288² m² = 21.78.
+      expect(yesterday.ffmi!).toBeCloseTo(21.778, 2);
+      expect(yesterday.ffmi!).toBeCloseTo(yesterday.leanAverage! / 2.2 / HEIGHT_M ** 2);
+    });
+
+    it("adjusted FFMI adds 6.1 × (1.8 m − height) on every day", async () => {
+      const page = await healthPage(await seededDb(), TODAY);
+      const withValues = page.days.filter((d) => d.ffmi !== null);
+      expect(withValues.length).toBeGreaterThan(0);
+      for (const day of withValues) expect(day.adFfmi! - day.ffmi!).toBeCloseTo(6.1 * (1.8 - HEIGHT_M)); // −0.176
+    });
+
+    it("trends follow lean mass and carry on from the end of their own average lines", async () => {
+      const page = await healthPage(await seededDb(), TODAY);
+      const { lean, ffmi, adFfmi } = page.trends;
+      expect(ffmi!.perDay).toBeCloseTo(lean!.perDay / 2.2 / HEIGHT_M ** 2); // ≈ −0.011 per day
+      // A constant offset doesn't change the slope ...
+      expect(adFfmi!.perDay).toBeCloseTo(ffmi!.perDay);
+      // ... but each line starts at its own average, so the adjusted one doesn't fork from its line.
+      expect(ffmi!.points[0]).toEqual({ date: TODAY, value: page.days.at(-1)!.ffmi });
+      expect(adFfmi!.points[0]).toEqual({ date: TODAY, value: page.days.at(-1)!.adFfmi });
+      expect(adFfmi!.points).toHaveLength(8);
+    });
+
+    it("is missing, with no trend, without body fat readings", async () => {
+      const page = await healthPage(await seededDb({ withBodyFat: false }), TODAY);
+      expect(page.days.every((d) => d.ffmi === null && d.adFfmi === null)).toBe(true);
+      expect(page.trends.ffmi).toBeNull();
+      expect(page.trends.adFfmi).toBeNull();
+      expect(page.days.at(-2)!.weightAverage).not.toBeNull(); // weight alone still shows
+    });
   });
 
   it("rejects out-of-range settings and accepting an unlogged day", async () => {

@@ -45,6 +45,9 @@ export interface HealthPageDay {
   /** Lean and fat mass from the 7-day averages of weight and body fat, lb. */
   leanAverage: number | null;
   fatAverage: number | null;
+  /** FFMI and adjusted FFMI based on 7-day averages of weight and body fat, lb */
+  ffmi: number | null;
+  adFfmi: number | null;
   steps: number | null;
   /** The typical day filled in for a day without steps. */
   stepsEstimated: boolean;
@@ -81,6 +84,8 @@ export interface BodyTrends {
   bodyFat: BodyTrend | null;
   lean: BodyTrend | null;
   fat: BodyTrend | null;
+  ffmi: BodyTrend | null;
+  adFfmi: BodyTrend | null;
 }
 
 export interface HealthPage {
@@ -108,6 +113,8 @@ export async function healthPage(db: Db, today = localDate()): Promise<HealthPag
   const bodyFatAverages = trailingAverages(spanDates, (d) => cleanedByDate.get(d)?.bodyFatPercent ?? null);
   const leanOn = (date: string) => massAverage(weightAverages.get(date), bodyFatAverages.get(date), (bf) => 1 - bf / 100);
   const fatOn = (date: string) => massAverage(weightAverages.get(date), bodyFatAverages.get(date), (bf) => bf / 100);
+  const ffmiOn = (date: string) => calcFFMI(weightAverages.get(date), bodyFatAverages.get(date), (bf) => bf / 100);
+  const adFfmiOn = (date: string) => calcAdFFMI(ffmiOn(date));
   const saved = await savedTargets(db, first, today);
 
   const simple = new Map<string, Targets | null>();
@@ -140,6 +147,8 @@ export async function healthPage(db: Db, today = localDate()): Promise<HealthPag
       bodyFatAverage: bodyFatAverages.get(date)?.value ?? null,
       leanAverage: leanOn(date)?.value ?? null,
       fatAverage: fatOn(date)?.value ?? null,
+      ffmi: ffmiOn(date)?.value ?? null,
+      adFfmi: adFfmiOn(date)?.value ?? null,
       steps: energy?.steps ?? null,
       stepsEstimated: energy?.stepsEstimated === true,
       restingHeartRate: raw?.restingHeartRate ?? null,
@@ -171,6 +180,8 @@ export async function healthPage(db: Db, today = localDate()): Promise<HealthPag
     bodyFat: projectTrend(lastBodyFat, lastAverage((row) => row.bodyFatAverage), settings.windowDays, (date) => bodyFatAverages.get(date)),
     lean: projectTrend(lastEither, lastAverage((row) => row.leanAverage), settings.windowDays, leanOn),
     fat: projectTrend(lastEither, lastAverage((row) => row.fatAverage), settings.windowDays, fatOn),
+    ffmi: projectTrend(lastEither, lastAverage((row) => row.ffmi), settings.windowDays, ffmiOn),
+    adFfmi: projectTrend(lastEither, lastAverage((row) => row.adFfmi), settings.windowDays, adFfmiOn),
   };
   return { analysis, days: rows, workouts: pageWorkouts, trends };
 }
@@ -179,6 +190,18 @@ export async function healthPage(db: Db, today = localDate()): Promise<HealthPag
 function massAverage(weight: AveragePoint | undefined, bodyFat: AveragePoint | undefined, share: (bodyFat: number) => number): AveragePoint | null {
   if (weight?.value == null || bodyFat?.value == null) return null;
   return { value: weight.value * share(bodyFat.value), carried: weight.carried || bodyFat.carried };
+}
+
+function calcFFMI(weight: AveragePoint | undefined, bodyFat: AveragePoint | undefined, share: (bodyFat: number) => number): AveragePoint | null {
+  if (weight?.value == null || bodyFat?.value == null) return null;
+  const leanWeight = weight.value * (1 - share(bodyFat.value));
+  const ffmi = (leanWeight/2.2) / (72 *.0254) ** 2;
+  return { value: ffmi, carried: weight.carried || bodyFat.carried };
+}
+
+function calcAdFFMI(ffmi: AveragePoint | null): AveragePoint | null {
+  if (ffmi?.value == null) return null;
+  return { value: ffmi.value + (6.1 * (1.8 - 72*.0254)), carried: ffmi.carried };
 }
 
 /**

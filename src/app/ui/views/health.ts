@@ -4,8 +4,8 @@
 // - today's targets and the body composition and metabolism behind them, each with a fold-out
 //   "How this is worked out" using the actual numbers;
 // - graphs, one at a time from a selector, all sharing one range: weight and body fat, lean
-//   and fat mass (two y axes each, trends projected a week on), intake vs both burn
-//   estimates, the macros, the macros vs their targets, resting heart rate, steps;
+//   and fat mass (two y axes each, trends projected a week on), FFMI and adjusted, intake vs 
+//   both burn estimates, the macros, the macros vs their targets, resting heart rate, steps;
 // - workouts found in the heart rate;
 // - the data table, tabbed: totals (met targets in green) and deltas (eaten − target).
 // #/health/history lists the saved targets.
@@ -223,6 +223,7 @@ const COLORS = {
 const GRAPHS = {
   body: "Weight and body fat",
   mass: "Lean and fat mass",
+  ffmi: "FFMI",
   energy: "Intake and burn",
   macros: "Macros",
   "macro-deltas": "Macros vs target",
@@ -255,6 +256,7 @@ const TREND_NOTE = "Dashed lines are the straight-line trend of each 7-day avera
 const GRAPH_NOTES: Record<GraphId, string> = {
   body: `Weight on the left axis, body fat on the right. Faint lines show how far each reading is from its 7-day average. ${TREND_NOTE}`,
   mass: `Lean mass = weight × (1 − body fat) and fat mass = weight × body fat, from the 7-day averages; lean on the left axis, fat on the right. ${TREND_NOTE}`,
+  ffmi: `Fat-free mass index = lean mass (kg) ÷ height² (m), from the 7-day averages; adjusted normalizes it to 1.8 m tall (Kouri et al. 1995). ${TREND_NOTE}`,
   energy: "Burn lines are each morning's estimate of the average daily burn, from the days before.",
   macros: "Dashed lines are the targets. Carbs are the remainder of the calories, so their target moves with the others.",
   "macro-deltas": "Each macro eaten minus its target; above zero is over.",
@@ -294,9 +296,9 @@ function chartSpecs(days: HealthPageDay[], trends: BodyTrends): Record<string, C
     // Review markers only when there are any.
     return [...shown.filter((series, index) => index < 2 || series.values.some((v) => v !== null)), ...trendLine(trend, name, unit, color, axis)];
   };
-  const mass = (name: string, color: string, axis: Axis, average: (d: HealthPageDay) => number | null, trend: BodyTrend | null): SeriesSpec[] => [
+  const mass = (name: string, color: string, axis: Axis, average: (d: HealthPageDay) => number | null, trend: BodyTrend | null, unit: string): SeriesSpec[] => [
     { label: `${name} 7-day average`, values: onBodyDates(average), color, kind: "line", pointSize: 0, axis, group: name },
-    ...trendLine(trend, name, "lb", color, axis),
+    ...trendLine(trend, name, unit, color, axis),
   ];
 
   const macros: [string, string, (d: HealthPageDay) => number | null, (d: HealthPageDay) => number | null][] = [
@@ -311,8 +313,12 @@ function chartSpecs(days: HealthPageDay[], trends: BodyTrends): Record<string, C
       ...readings("Body fat", "%", COLORS.orange, "right", (d) => d.bodyFatPercent, (d) => d.bodyFatState, (d) => d.bodyFatAverage, trends.bodyFat),
     ] }),
     mass: () => ({ ...body, decimals: 1, leftLabel: "Lean mass, lb", rightLabel: "Fat mass, lb", series: [
-      ...mass("Lean mass", COLORS.blue, "left", (d) => d.leanAverage, trends.lean),
-      ...mass("Fat mass", COLORS.orange, "right", (d) => d.fatAverage, trends.fat),
+      ...mass("Lean mass", COLORS.blue, "left", (d) => d.leanAverage, trends.lean,"lb"),
+      ...mass("Fat mass", COLORS.orange, "right", (d) => d.fatAverage, trends.fat,"lb"),
+    ] }),
+    ffmi: () => ({ ...body, decimals: 1, leftLabel: "kg/m²", series: [
+      ...mass("FFMI", COLORS.blue, "left", (d) => d.ffmi, trends.ffmi,"kg/m²"),
+      ...mass("Adjusted FFMI", COLORS.orange, "left", (d) => d.adFfmi, trends.adFfmi,"kg/m²"),
     ] }),
     energy: () => ({ ...common, decimals: 0, leftLabel: "kcal", series: [
       { label: "Intake", values: days.map((d) => d.intake?.calories ?? null), color: COLORS.blue, kind: "line", spanGaps: false },

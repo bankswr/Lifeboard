@@ -111,3 +111,14 @@ removed (port 5181).
   still scroll the page. Checked in headless Chrome with CDP `Input.dispatchTouchEvent`: the
   readout follows the finger and stays after it lifts; tapping another chart clears it, as on
   desktop. The emulator has no chart data, so it wasn't checked there.
+
+## FFMI graph (2026-11-01, user)
+- "FFMI" in the graph selector: fat-free mass index and adjusted FFMI on one axis (kg/m²), each
+  with its 7-day-average line and trend. Written by the user; tests added in
+  `test/healthTargets.test.ts` ("FFMI (72 in tall)").
+- FFMI = lean mass (from the 7-day averages, as for lean mass) ÷ 2.2 lb/kg ÷ height². Height is
+  hard-coded at 72 in for now; a Health setting would be needed for anyone else.
+- Adjusted = FFMI + 6.1 × (1.8 − height m), the Kouri et al. (1995) coefficient. Most online
+  calculators use 6.3; at 72 in the difference is about 0.005.
+- The adjusted trend must be fitted on `adFfmiOn`, not `ffmiOn`: the slope is the same (constant
+  offset) but the line would start ~0.18 below its average line. A test checks the start points.
