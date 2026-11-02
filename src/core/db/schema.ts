@@ -345,6 +345,8 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
   "ALTER TABLE maintenance_item ADD COLUMN active_window TEXT;",
   // 24: weather conditions on maintenance items (core/maintenanceWeather.ts), as JSON; null = none.
   "ALTER TABLE maintenance_item ADD COLUMN weather TEXT;",
+  // 25: the default alert rule for health data that stops arriving.
+  insertDefaultRules,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

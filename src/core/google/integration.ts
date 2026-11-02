@@ -3,16 +3,20 @@
 // then the Schedule's calendar and tasks (core/schedule/push.ts).
 // Health is pulled at most once per calendar day per device (user, 2026-10-17): the analysis
 // uses only days before today, so later pulls the same day would change nothing it shows.
-// The Schedule syncs on every update.
+// The Schedule syncs on every update, and so does a small check that the health data is still
+// arriving at Google (agent-notes/2026-10-15-google-health-port.md).
 // The desktop signs in with a browser redirect (src/desktop/googleSignIn.ts). The phone can
 // sign in with Android's own Google authorization as a backup, used only while it's away
 // from the desktop (token.ts); otherwise it gets this data through LAN sync.
 import { getCredential, saveCredential } from "../credentials.ts";
 import { addDays, localDate } from "../dates.ts";
 import type { Db } from "../db/types.ts";
-import { latestHealthDay, replaceHealthPoints, type HealthPoint, type PointType } from "../health.ts";
-import type { Integration } from "../integration.ts";
+import { healthCatchUpDay, latestRawPointTime, replaceHealthPoints, type HealthPoint, type PointType } from "../health.ts";
 import { summarizeDays } from "../healthSummary.ts";
+import { getHealthSettings } from "../healthTargets.ts";
+import { SignedOutError, type Integration } from "../integration.ts";
+import type { Reading } from "../readings.ts";
+import { STEP_SOURCES } from "../steps.ts";
 import { syncSchedule } from "../schedule/push.ts";
 import { listDataPoints, type DataPoint } from "./healthApi.ts";
 import { HEALTH_SCOPES } from "./oauth.ts";
@@ -29,6 +33,16 @@ const TYPES: PointType[] = ["steps", "weight", "body-fat", "heart-rate", "daily-
 export const HISTORY_DAYS = 90;
 const OVERLAP_DAYS = 3;
 
+/**
+ * The data that should arrive every day, so its silence means something stopped syncing rather
+ * than a quiet day. Two because they fail separately: the ring went silent for days while the
+ * phone's steps kept arriving (2026-10-29). Over 90 days neither had a gap above 12 hours.
+ */
+const HEALTH_CANARIES: { subject: string; type: PointType; sources: string[] }[] = [
+  { subject: "Phone steps", type: "steps", sources: ["com.android.healthconnect.phone", "com.google.android.apps.fitness"] },
+  { subject: "Ring heart rate", type: "heart-rate", sources: STEP_SOURCES.primary },
+];
+
 export const google: Integration = {
   id: "google",
   name: "Google",
@@ -44,7 +58,7 @@ export const google: Integration = {
     if (!(await googleActiveHere(db, credential))) return [];
     if (needsHealthPull(credential, localDate())) await pullHealth(db, credential);
     await syncSchedule(db);
-    return [];
+    return checkHealthDataArriving(db, credential);
   },
 };
 
@@ -68,8 +82,8 @@ async function pullHealth(db: Db, credential: GoogleCredential) {
   const needsHistory = !credential.historyFrom || credential.historyFrom > historyStart;
   let earliest = end;
   for (const type of TYPES) {
-    const latest = await latestHealthDay(db, type);
-    const start = latest && !needsHistory ? addDays(latest, -OVERLAP_DAYS) : historyStart;
+    const catchUpFrom = await healthCatchUpDay(db, type, end);
+    const start = catchUpFrom && !needsHistory ? addDays(catchUpFrom, -OVERLAP_DAYS) : historyStart;
     const points = await listDataPoints(token, type, start, end);
     const stored = points.map((point) => toHealthPoint(type, point)).filter((p): p is HealthPoint => p !== null);
     await replaceHealthPoints(db, type, `${start}T00:00:00Z`, `${end}T00:00:00Z`, stored);
@@ -80,6 +94,45 @@ async function pullHealth(db: Db, credential: GoogleCredential) {
   await saveCredential(db, "google", {
     ...credential, healthPulledOn: end, historyFrom: needsHistory ? historyStart : credential.historyFrom,
   });
+}
+
+/**
+ * One reading per canary, read from Google itself: the stored data can't tell, since it's pulled
+ * once a day and stops at the start of today. Only the last days are asked for; older points
+ * come from what's stored. A failed check says nothing about the data, so it stays quiet (the
+ * next update tries again) and doesn't mark the connection as having a problem.
+ */
+async function checkHealthDataArriving(db: Db, credential: GoogleCredential): Promise<Reading[]> {
+  try {
+    const token = await googleAccessToken(credential, HEALTH_SCOPES);
+    const { healthDataStaleHours } = await getHealthSettings(db);
+    const today = localDate();
+    const readings: Reading[] = [];
+    for (const { subject, type, sources } of HEALTH_CANARIES) {
+      // Two days ahead: the query's bounds are UTC, which is already tomorrow on evenings here.
+      const points = await listDataPoints(token, type, addDays(today, -1), addDays(today, 2));
+      const fetched = points
+        .map((point) => toHealthPoint(type, point))
+        .filter((point): point is HealthPoint => point !== null && sources.includes(point.source))
+        .map((point) => point.endTime);
+      const stored = await latestRawPointTime(db, type, sources);
+      const newest = [...fetched, ...(stored ? [stored] : [])];
+      // A source that has never reported isn't one that stopped.
+      if (newest.length > 0) readings.push(healthDataReading(subject, newest, healthDataStaleHours));
+    }
+    return readings;
+  } catch (error) {
+    if (error instanceof SignedOutError) throw error;
+    console.warn("Couldn't check that health data is arriving:", error);
+    return [];
+  }
+}
+
+/** The reading for one canary, given the end times of its points (at least one). */
+export function healthDataReading(subject: string, times: string[], staleHours: number, now = new Date()): Reading {
+  const newest = Math.max(...times.map((time) => Date.parse(time)));
+  const hours = Math.max(0, (now.getTime() - newest) / 3_600_000);
+  return { type: "health_data", subject, data: { stale: hours > staleHours, hoursSinceData: Math.round(hours) } };
 }
 
 /** Converts one API point to the stored form; null if it lacks what's needed. */

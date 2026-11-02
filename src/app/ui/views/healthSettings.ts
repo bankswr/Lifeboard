@@ -77,6 +77,11 @@ route(/^\/health-settings$/, async () => {
           </div>
           <p class="muted small">Adds effort steps miss, such as lifting. Faster stepping is a walk, which steps already count. Energy = (METs − 1) × weight × time, minus the steps taken meanwhile; 3.5 METs is typical resistance training.</p>
         </fieldset>
+        <fieldset>
+          <legend>Data stopped updating</legend>
+          ${number("healthDataStaleHours", "Alert after this many hours with nothing new", "1")}
+          <p class="muted small">Checked each update against Google Health, for phone steps and ring heart rate.</p>
+        </fieldset>
         <button type="submit">Save</button>
       </form>
       <section class="card">
@@ -118,6 +123,7 @@ async function save(event: SubmitEvent) {
       workoutMinMinutes: value("workoutMinMinutes"),
       workoutMaxStepsPerHour: value("workoutMaxStepsPerHour"),
       workoutMets: value("workoutMets"),
+      healthDataStaleHours: value("healthDataStaleHours"),
     });
     message = "Saved.";
   } catch (error) {

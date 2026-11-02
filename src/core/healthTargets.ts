@@ -14,7 +14,10 @@ import type { NewAlert } from "./rules.ts";
 import { saveRecord } from "./sync/records.ts";
 import { DEFAULT_WORKOUT_SETTINGS, workoutEnergy, type Workout, type WorkoutSettings } from "./workouts.ts";
 
-export type HealthSettings = TargetSettings & FlagSettings & WorkoutSettings;
+export type HealthSettings = TargetSettings & FlagSettings & WorkoutSettings & {
+  /** Alert when a daily source has sent Google nothing new for this long (user, 2026-11-02: 18). */
+  healthDataStaleHours: number;
+};
 
 export const DEFAULT_HEALTH_SETTINGS: HealthSettings = {
   goalLbsPerWeek: 0,
@@ -32,6 +35,7 @@ export const DEFAULT_HEALTH_SETTINGS: HealthSettings = {
   weightJumpLbs: 3,
   bodyFatJumpPoints: 2,
   ...DEFAULT_WORKOUT_SETTINGS,
+  healthDataStaleHours: 18,
 };
 
 const SETTING_ID = "health_targets";
@@ -60,6 +64,7 @@ export async function saveHealthSettings(db: Db, settings: HealthSettings): Prom
     ["workoutMinMinutes", "The workout length", 10, 240],
     ["workoutMaxStepsPerHour", "The workout step pace", 0, 20000],
     ["workoutMets", "The workout METs", 1, 15],
+    ["healthDataStaleHours", "The hours without new data", 1, 720],
   ];
   for (const [key, label, min, max] of numbers) {
     const value = settings[key] as number;

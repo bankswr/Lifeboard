@@ -92,6 +92,14 @@ const DEFAULT_RULES: Rule[] = [
     conditions: [{ field: "lastFeedPortions", operator: "equals", value: 0 }],
     message: "{subject} feeder: the last meal dispensed nothing. It may be empty or jammed.",
   },
+  {
+    id: "default-health-data-stale",
+    name: "Health data stopped updating",
+    enabled: true,
+    readingType: "health_data",
+    conditions: [{ field: "stale", operator: "equals", value: true }],
+    message: "{subject}: nothing new in Google Health for {hoursSinceData} hours. Check that it's still syncing.",
+  },
 ];
 
 /** Adds the default rules this database doesn't have yet (never overwrites the user's edits). */

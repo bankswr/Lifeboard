@@ -101,11 +101,31 @@ async function replaceRawPoints(db: Db, type: PointType, rangeStart: string, ran
   });
 }
 
-/** The newest day stored for a type, or null. */
-export async function latestHealthDay(db: Db, type: PointType): Promise<string | null> {
+/** A source silent for longer than this counts as retired, so it stops widening every fetch. */
+const RETIRED_SOURCE_DAYS = 30;
+
+/**
+ * The day a type's fetch has to catch up from: the newest stored day of whichever source is
+ * furthest behind, or null with nothing stored. Per source because they stall separately:
+ * going by the newest day overall, the phone's steps would carry the fetch past a stalled
+ * ring, and the ring's backlog would never be read once it reached Google (2026-11-02).
+ */
+export async function healthCatchUpDay(db: Db, type: PointType, today: string): Promise<string | null> {
   const table = tableOf(type);
   const live = table === "health_point" ? " AND deleted = 0" : "";
-  return (await get(db, `SELECT MAX(day) AS day FROM ${table} WHERE type = ?${live}`, [type]))?.day ?? null;
+  const rows = await db.all(`SELECT source, MAX(day) AS day FROM ${table} WHERE type = ?${live} GROUP BY source`, [type]);
+  const days: string[] = rows.map((row) => row.day).sort();
+  if (days.length === 0) return null;
+  const inUse = days.filter((day) => day >= addDays(today, -RETIRED_SOURCE_DAYS));
+  // All silent that long: nothing to tell apart, so carry on from the newest.
+  return inUse[0] ?? days[days.length - 1];
+}
+
+/** When the newest stored raw point of these sources ended, or null if there is none. */
+export async function latestRawPointTime(db: Db, type: PointType, sources: string[]): Promise<string | null> {
+  const marks = sources.map(() => "?").join(", ");
+  const row = await get(db, `SELECT MAX(end_time) AS time FROM raw_health_point WHERE type = ? AND source IN (${marks})`, [type, ...sources]);
+  return row?.time ?? null;
 }
 
 // ---------- daily summary ----------

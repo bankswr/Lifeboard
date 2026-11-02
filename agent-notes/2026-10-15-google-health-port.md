@@ -28,6 +28,33 @@ Google API** (needs the user's interactive sign-in); tested against a fake API.
 - `dailyHealth()` combines Cronometer + Google per day (weight shown in lb as in FitThing).
   Health tab shows two tables (nutrition; body and steps) for the last 14 days.
 
+## Sources stalling (2026-11-02)
+- **What happened:** the ring stopped reaching Google on 2026-10-29 (an update on the ring's
+  side reset its connection settings, per the user), and phone, scale and treadmill data lagged
+  about a day around 2026-11-01. Lifeboard's pull was fine and showed "connected" throughout.
+  Google returned the same cut-offs when queried directly.
+- **Fetch window per source** (`healthCatchUpDay`): starts 3 days before the newest day of the
+  source furthest behind. It used the newest day of any source, so phone steps would have moved
+  the window past a stalled ring and its backlog would never have been read. Sources silent
+  over 30 days count as retired, or the weight type's old sources would force 90-day fetches
+  forever. A ring outage longer than 30 days loses the part older than that (the alert below
+  should come long before).
+- **Canaries** (`HEALTH_CANARIES`): phone steps and ring heart rate, a `health_data` reading per
+  update and the editable default rule `default-health-data-stale`. Two, because steps from any
+  source stayed fresh during the ring outage. Largest gaps over 90 days: phone steps 11.9 h,
+  ring heart rate 6.2 h, ring steps 9.5 h, treadmill 112.8 h (unusable). These are gaps in when
+  data was recorded, not how late it reached Google; that lag isn't measured.
+- **Threshold:** 18 hours (user), Settings → Health → "Data stopped updating". Stored in
+  `HealthSettings`, so it syncs.
+- **Asks Google directly each update:** stored data is pulled once a day and stops at UTC
+  midnight of the local date, so it can look 18-42 hours old when nothing is wrong. Failed
+  checks are logged and stay quiet, so the extra hourly calls can't raise connection alerts.
+
+## Not changed: days without the ring
+`steps.ts` ignores phone steps, so a day without the ring counts only the treadmill (2026-10-31
+shows 11,114, treadmill only). Effect on the targets not checked. Corrected for the outage
+only if the ring's backlog reaches Google.
+
 ## Sign-in
 - **Desktop only for now.** Settings → Connections → "Sign in with Google" →
   `/oauth/google/start` → Google → `/oauth/google/callback` (loopback only) → refresh token

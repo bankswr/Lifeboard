@@ -4,9 +4,10 @@ import { getCredential, saveCredential } from "../src/core/credentials.ts";
 import { HEALTH_SCOPES, SCHEDULE_SCOPES } from "../src/core/google/oauth.ts";
 import { addDays, localDate } from "../src/core/dates.ts";
 import { migrate } from "../src/core/db/schema.ts";
-import { google, toHealthPoint } from "../src/core/google/integration.ts";
-import { dailyHealth, replaceHealthPoints, saveNutritionDays, type HealthPoint } from "../src/core/health.ts";
+import { google, healthDataReading, toHealthPoint } from "../src/core/google/integration.ts";
+import { dailyHealth, healthCatchUpDay, replaceHealthPoints, saveNutritionDays, type HealthPoint } from "../src/core/health.ts";
 import { RAW_KEEP_DAYS, summarizeDays, summarizeNewDays } from "../src/core/healthSummary.ts";
+import { getHealthSettings, saveHealthSettings } from "../src/core/healthTargets.ts";
 import { collectChanges } from "../src/core/sync/sync.ts";
 import { stepsByDay, type StepPoint } from "../src/core/steps.ts";
 import { runUpdate } from "../src/core/updates.ts";
@@ -183,13 +184,14 @@ describe("Google integration", () => {
       await saveCredential(db, "google", { clientId: "id", clientSecret: "secret", refreshToken: "refresh" });
       const result = await runUpdate(db, [google]);
       expect(result.connections[0]).toMatchObject({ name: "Google", status: "connected" });
-      // 90 days of history: one query per type, except heart rate (14 days at most per query).
+      // 90 days of history: one query per type, except heart rate (14 days at most per query),
+      // then one each for the steps and heart-rate check that data is arriving.
       const queries = site.requests.filter((p) => p.includes("dataPoints"));
-      expect(queries.filter((p) => p.includes("/heart-rate/"))).toHaveLength(7);
-      expect(queries).toHaveLength(4 + 7);
+      expect(queries.filter((p) => p.includes("/heart-rate/"))).toHaveLength(7 + 1);
+      expect(queries).toHaveLength(4 + 7 + 2);
       expect(await db.all("SELECT type, value FROM health_point")).toEqual([{ type: "weight", value: 80000 }]);
       // The Health API refuses tokens carrying other scopes, so each API gets its own token.
-      expect(site.tokenScopes).toEqual([HEALTH_SCOPES.join(" "), SCHEDULE_SCOPES.join(" ")]);
+      expect(site.tokenScopes).toEqual([HEALTH_SCOPES.join(" "), SCHEDULE_SCOPES.join(" "), HEALTH_SCOPES.join(" ")]);
       // The history pull is remembered, so later updates only re-read recent days of stored types.
       expect((await getCredential<{ historyFrom: string }>(db, "google"))!.historyFrom).toBe(addDays(localDate(), -90));
     });
@@ -204,8 +206,9 @@ describe("Google integration", () => {
       site.requests.length = 0;
       site.tokenScopes.length = 0;
       await runUpdate(db, [google]);
-      expect(site.requests.filter((p) => p.includes("dataPoints"))).toEqual([]);
-      expect(site.tokenScopes).toEqual([SCHEDULE_SCOPES.join(" ")]);
+      // Only the check that data is arriving, not a pull: no weight or body fat queries.
+      expect(site.requests.filter((p) => p.includes("dataPoints")).map((p) => p.split("/")[5])).toEqual(["steps", "heart-rate"]);
+      expect(site.tokenScopes).toEqual([SCHEDULE_SCOPES.join(" "), HEALTH_SCOPES.join(" ")]);
       expect((await getCredential<{ healthPulledOn: string }>(db, "google"))!.healthPulledOn).toBe(localDate());
     });
   });
@@ -229,6 +232,104 @@ describe("Google integration", () => {
       const result = await runUpdate(db, [google]);
       expect(result.connections[0]).toMatchObject({ status: "signed_out" });
       expect(result.alerts[0].message).toMatch(/Google sign-in expired/);
+    });
+  });
+
+  describe("a stalled source", () => {
+    const today = localDate();
+    const raw = (id: string, type: "steps" | "heart-rate", source: string, day: string, endTime: string) =>
+      ({ id, type, day, startTime: endTime, endTime, value: 1, source });
+    const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
+
+    /** A database signed in to Google whose health pull is done for today. */
+    async function pulledDb() {
+      const db = await newDb();
+      await saveCredential(db, "google", {
+        clientId: "id", clientSecret: "secret", refreshToken: "refresh", healthPulledOn: today, historyFrom: addDays(today, -90),
+      });
+      return db;
+    }
+
+    it("alerts once when it goes silent, and can again after it recovers", async () => {
+      const site = fakeGoogle(true);
+      await withFetch(site.fetch, async () => {
+        const db = await pulledDb();
+        const store = (hours: number) => replaceHealthPoints(db, "heart-rate", "2000-01-01T00:00:00Z", "2100-01-01T00:00:00Z",
+          [raw("hr", "heart-rate", RING, today, hoursAgo(hours))]);
+
+        await store(1);
+        expect((await runUpdate(db, [google])).alerts).toEqual([]);
+
+        await store(20);
+        const { alerts } = await runUpdate(db, [google]);
+        expect(alerts).toHaveLength(1);
+        expect(alerts[0].message).toBe("Ring heart rate: nothing new in Google Health for 20 hours. Check that it's still syncing.");
+        expect((await runUpdate(db, [google])).alerts).toEqual([]);
+
+        await store(1);
+        expect((await runUpdate(db, [google])).alerts).toEqual([]);
+        await store(20);
+        expect((await runUpdate(db, [google])).alerts).toHaveLength(1);
+      });
+    });
+
+    it("follows the setting for how long is too long", async () => {
+      const site = fakeGoogle(true);
+      await withFetch(site.fetch, async () => {
+        const db = await pulledDb();
+        await replaceHealthPoints(db, "heart-rate", "2000-01-01T00:00:00Z", "2100-01-01T00:00:00Z",
+          [raw("hr", "heart-rate", RING, today, hoursAgo(20))]);
+        await saveHealthSettings(db, { ...(await getHealthSettings(db)), healthDataStaleHours: 48 });
+        expect((await runUpdate(db, [google])).alerts).toEqual([]);
+      });
+    });
+
+    it("says nothing about a source that has never reported", async () => {
+      const site = fakeGoogle(true);
+      await withFetch(site.fetch, async () => {
+        const db = await pulledDb();
+        expect((await runUpdate(db, [google])).alerts).toEqual([]);
+      });
+    });
+
+    it("keeps the connection healthy when the check itself fails", async () => {
+      const site = fakeGoogle(true);
+      const failing = (async (input: RequestInfo | URL, init?: RequestInit) =>
+        String(input).includes("dataPoints") ? new Response("busy", { status: 503 }) : site.fetch(input, init)) as typeof fetch;
+      await withFetch(failing, async () => {
+        const db = await pulledDb();
+        const result = await runUpdate(db, [google]);
+        expect(result.connections[0]).toMatchObject({ status: "connected" });
+        expect(result.alerts).toEqual([]);
+      });
+    });
+
+    it("judges age from the newest point and rounds to hours", () => {
+      const now = new Date("2026-11-02T12:00:00Z");
+      const reading = (hours: number) => healthDataReading("Phone steps", ["2026-10-01T00:00:00Z", new Date(now.getTime() - hours * 3_600_000).toISOString()], 18, now);
+      expect(reading(18).data).toEqual({ stale: false, hoursSinceData: 18 });
+      expect(reading(18.6).data).toEqual({ stale: true, hoursSinceData: 19 });
+      expect(reading(-1).data).toEqual({ stale: false, hoursSinceData: 0 });
+    });
+
+    it("fetches far enough back for the source furthest behind", async () => {
+      const db = await newDb();
+      const store = (points: ReturnType<typeof raw>[]) => replaceHealthPoints(db, "steps", "2000-01-01T00:00:00Z", "2100-01-01T00:00:00Z", points);
+      const at = (day: string) => `${day}T12:00:00Z`;
+      const phoneDay = addDays(today, -1);
+      const ringDay = addDays(today, -6);
+      await store([raw("p", "steps", "com.google.android.apps.fitness", phoneDay, at(phoneDay)), raw("r", "steps", RING, ringDay, at(ringDay))]);
+      expect(await healthCatchUpDay(db, "steps", today)).toBe(ringDay);
+
+      // A source that's been silent over a month is taken as retired and no longer holds it back.
+      const oldDay = addDays(today, -31);
+      await store([raw("p", "steps", "com.google.android.apps.fitness", phoneDay, at(phoneDay)), raw("o", "steps", RING, oldDay, at(oldDay))]);
+      expect(await healthCatchUpDay(db, "steps", today)).toBe(phoneDay);
+
+      await store([raw("o", "steps", RING, oldDay, at(oldDay))]);
+      expect(await healthCatchUpDay(db, "steps", today)).toBe(oldDay);
+      await store([]);
+      expect(await healthCatchUpDay(db, "steps", today)).toBeNull();
     });
   });
 });

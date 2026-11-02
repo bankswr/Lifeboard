@@ -64,6 +64,14 @@ export const READING_TYPES: ReadingType[] = [
       { name: "lastFeedPortions", label: "Portions in last feed", type: "number" },
     ],
   },
+  {
+    id: "health_data",
+    label: "Health data checked",
+    fields: [
+      { name: "stale", label: "Stopped updating", type: "boolean" },
+      { name: "hoursSinceData", label: "Hours since new data", type: "number" },
+    ],
+  },
 ];
 
 export function readingType(id: string): ReadingType | undefined {
