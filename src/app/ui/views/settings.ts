@@ -37,10 +37,16 @@ route(/^\/settings$/, async () => {
       ${card("settings-device", "This device", html`
         <p>Lifeboard ${__APP_VERSION__} <span class="muted">(build ${__APP_COMMIT__})</span></p>
         <p class="muted">Database schema ${info.databaseVersion}${info.databaseVersion === info.schemaVersion ? "" : ` (this build expects ${info.schemaVersion})`}</p>
-        <p class="muted">Device ID ${info.deviceId}</p>`)}
+        <p class="muted">Device ID ${info.deviceId}</p>
+        ${platform === "desktop" ? "" : html`<p class="muted">WebView ${webViewVersion()}</p>`}`)}
     `,
   };
 });
+
+/** Older devices can lack browser features the app uses, so it helps to see this at a glance. */
+function webViewVersion(): string {
+  return navigator.userAgent.match(/Chrome\/([\d.]+)/)?.[1] ?? "unknown";
+}
 
 async function desktopPairing() {
   const pairing: Pairing = await (await fetch("./desktop/pairing")).json();

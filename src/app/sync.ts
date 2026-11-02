@@ -27,14 +27,16 @@ export async function syncNow(): Promise<SyncSummary> {
   const summary = await onPhoneDb((db) => syncWithDesktop(db, async (request) => {
     let response: Response;
     try {
-      response = await withTimeout(fetch(`${desktopAddress}/sync`, {
+      response = await withTimeout((signal) => fetch(`${desktopAddress}/sync`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${syncKey}` },
         body: JSON.stringify(request),
-        signal: AbortSignal.timeout(SYNC_REQUEST_TIMEOUT_MS),
+        signal,
       }), SYNC_REQUEST_TIMEOUT_MS);
-    } catch {
-      throw new Error(`Can't reach the desktop at ${desktopAddress}. Is it on and on the same network?`);
+    } catch (error) {
+      // The cause is included: this catch also sees failures that have nothing to do with the
+      // network, and hiding them made one look like an unreachable desktop.
+      throw new Error(`Can't reach the desktop at ${desktopAddress}. Is it on and on the same network? (${(error as Error).message})`);
     }
     if (response.status === 401) throw new SyncKeyRejected("The desktop rejected the sync key.");
     if (!response.ok) throw new Error(`The desktop answered ${response.status}: ${await response.text()}`);
@@ -47,15 +49,20 @@ export async function syncNow(): Promise<SyncSummary> {
 }
 
 /**
- * Rejects once `ms` have passed. The abort signal alone isn't enough: Capacitor's native
- * HTTP, which handles fetch on the phone, may not honour it.
+ * Aborts and rejects once `ms` have passed. Rejecting too because Capacitor's native HTTP, which
+ * handles fetch on the phone, may not honour the abort. An AbortController rather than
+ * AbortSignal.timeout, which needs WebView 103 (2022) and throws on an older tablet's.
  */
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+function withTimeout<T>(start: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {
+  const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`No answer within ${ms / 1000} s.`)), ms);
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`No answer within ${ms / 1000} s.`));
+    }, ms);
   });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  return Promise.race([start(controller.signal), timeout]).finally(() => clearTimeout(timer));
 }
 
 /** Syncs if the desktop is set up, and reports nothing on failure (the desktop may just be off). */
