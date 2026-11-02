@@ -1,8 +1,12 @@
-// Settings. Sync pairing: the desktop shows its address and sync key; the phone enters them
-// and can sync on demand (it also syncs on its own when opened, see main.ts).
+// Settings. Sync pairing: the desktop shows its address and sync key, also as a QR code; the
+// phone scans or enters them and can sync on demand (it also syncs on its own when opened, see
+// main.ts). Any number of phones can pair with the same desktop.
 import { html } from "lit-html";
+import QRCode from "qrcode";
+import { firstWorkingAddress, pairingCodeText, parsePairingCode } from "../../../core/sync/pairing.ts";
 import { call, platform } from "../../backend.ts";
 import { allowExactAlarms, exactAlarmsAllowed } from "../../reminders.ts";
+import { scanQrCode } from "../../scanner.ts";
 import { syncNow } from "../../sync.ts";
 import { refresh, route } from "../app.ts";
 import { card } from "../card.ts";
@@ -14,6 +18,7 @@ interface Pairing {
 }
 
 let syncMessage = "";
+let pairingBusy = false;
 
 route(/^\/settings$/, async () => {
   const info = await call("getAppInfo");
@@ -39,10 +44,13 @@ route(/^\/settings$/, async () => {
 
 async function desktopPairing() {
   const pairing: Pairing = await (await fetch("./desktop/pairing")).json();
+  const svg = await QRCode.toString(pairingCodeText(pairing), { type: "svg", margin: 4 });
   return card("settings-phone-sync", "Phone sync", html`
       ${pairing.lanSyncOn
         ? html`
-            <p>In the phone app's Settings, enter one of these addresses and the sync key.</p>
+            <p>In the phone app's Settings, under Desktop sync, tap Scan and point it at this code.</p>
+            <img class="qr-code" src=${`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`} alt="Phone pairing QR code">
+            <p>Or enter one of these addresses and the sync key.</p>
             <p class="label">Desktop address</p>
             ${pairing.addresses.length
               ? pairing.addresses.map((address) => html`<p class="mono">${address}</p>`)
@@ -57,6 +65,7 @@ async function desktopPairing() {
 async function phoneSync() {
   const settings = await call("getSyncSettings");
   return card("settings-desktop-sync", "Desktop sync", html`
+      <button class="secondary" ?disabled=${pairingBusy} @click=${scanAndPair}>Scan the desktop's code</button>
       <form @submit=${saveAndSync}>
         <label>Desktop address
           <input name="address" type="url" placeholder="http://192.168.1.20:5180" .value=${settings.desktopAddress}>
@@ -82,6 +91,34 @@ async function remindersCard() {
             <p class="small">Android may deliver them a few minutes late. Allow Lifeboard "Alarms &amp; reminders" to have them on time.</p>
             <button class="secondary" @click=${async () => { await allowExactAlarms(); await refresh(); }}>Allow exact timing</button>`}
   `);
+}
+
+async function scanAndPair() {
+  pairingBusy = true;
+  syncMessage = "";
+  await refresh();
+  try {
+    const text = await scanQrCode();
+    if (text !== null) {
+      const { addresses, syncKey } = parsePairingCode(text);
+      syncMessage = "Syncing…";
+      await refresh();
+      let summary = { sent: 0, received: 0 };
+      await firstWorkingAddress(addresses, async (address) => {
+        await call("saveSyncSettings", address, syncKey);
+        summary = await syncNow();
+      }).catch(async (error) => {
+        // Left on the first address, so the fields show what was scanned.
+        await call("saveSyncSettings", addresses[0], syncKey);
+        throw error;
+      });
+      syncMessage = `Paired. Synced: sent ${summary.sent}, received ${summary.received}.`;
+    }
+  } catch (error) {
+    syncMessage = (error as Error).message;
+  }
+  pairingBusy = false;
+  await refresh();
 }
 
 async function saveAndSync(event: SubmitEvent) {

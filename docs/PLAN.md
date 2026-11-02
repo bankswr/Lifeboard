@@ -124,8 +124,9 @@ current intent, not a commitment to details.
    the APIs are unofficial and may change, and the Petory API is still unknown.
    (Superseded, user 2026-10-17: phase 4 built and live-verified both integrations.)
 2. ✅ **Data model and LAN sync.** Build both, tested with a throwaway record type.
-   - **Later (user, 2026-10-17; not started):** pair the phone by scanning the desktop's sync
-     key with the phone's camera (a QR code), instead of typing it.
+   - **QR pairing (user, 2026-10-17; built 2026-11-02):** the phone can scan the desktop's
+     address and sync key from a QR code instead of typing them. Several phones can pair with
+     one desktop.
    - **Device status is synced (user, 2026-10-17):** the phone shows the desktop's hourly
      Litter-Robot and feeder readings without signing in to Whisker or Smart Life itself.
    - **Later (user, 2026-10-17; on hold):** phone sign-ins to Whisker, Smart Life and

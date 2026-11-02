@@ -30,6 +30,48 @@ async function names(db: Db) {
   return (await db.all(`SELECT name, deleted FROM ${TABLE} ORDER BY name`)).map((row) => `${row.name}${row.deleted ? " (deleted)" : ""}`);
 }
 
+describe("sync with two phones", () => {
+  it("passes edits and deletes between phones through the desktop, and settles", async () => {
+    const [first, second, desktop] = [await newDevice(), await newDevice(), await newDevice()];
+    await saveRecord(desktop, TABLE, { id: "shared", name: "from desktop" });
+    await saveRecord(first, TABLE, { id: "doomed", name: "from first phone" });
+    await syncPhone(first, desktop);
+
+    // A device paired later gets everything so far.
+    await syncPhone(second, desktop);
+    expect(await names(second)).toEqual(["from desktop", "from first phone"]);
+
+    await saveRecord(second, TABLE, { id: "shared", name: "edited on second phone" });
+    await deleteRecord(second, TABLE, "doomed");
+    await syncPhone(second, desktop);
+    await syncPhone(first, desktop);
+    expect(await names(first)).toEqual(["edited on second phone", "from first phone (deleted)"]);
+
+    // Echoes die out for both phones, and neither's progress disturbs the other's.
+    await syncPhone(second, desktop);
+    await syncPhone(first, desktop);
+    await syncPhone(second, desktop);
+    expect(await syncPhone(first, desktop)).toEqual({ sent: 0, received: 0 });
+    expect(await syncPhone(second, desktop)).toEqual({ sent: 0, received: 0 });
+  });
+
+  it("keeps the newest edit when both phones change the same record offline", async () => {
+    const [first, second, desktop] = [await newDevice(), await newDevice(), await newDevice()];
+    await saveRecord(desktop, TABLE, { id: "shared", name: "original" });
+    await syncPhone(first, desktop);
+    await syncPhone(second, desktop);
+    await saveRecord(first, TABLE, { id: "shared", name: "older edit" });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await saveRecord(second, TABLE, { id: "shared", name: "newer edit" });
+
+    // The older edit reaching the desktop last must not win.
+    await syncPhone(second, desktop);
+    await syncPhone(first, desktop);
+    await syncPhone(second, desktop);
+    for (const device of [first, second, desktop]) expect(await names(device)).toEqual(["newer edit"]);
+  });
+});
+
 describe("sync", () => {
   it("copies new rows both ways", async () => {
     const [phone, desktop] = [await newDevice(), await newDevice()];

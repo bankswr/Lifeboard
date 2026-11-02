@@ -2,6 +2,7 @@
 // fetch goes through Capacitor's native HTTP on the phone (capacitor.config.ts), which
 // allows plain http:// to a LAN address.
 import { App } from "@capacitor/app";
+import { SyncKeyRejected } from "../core/sync/pairing.ts";
 import { syncWithDesktop, type SyncSummary } from "../core/sync/sync.ts";
 import { call, onPhoneDb } from "./backend.ts";
 import { rescheduleReminders } from "./reminders.ts";
@@ -35,7 +36,7 @@ export async function syncNow(): Promise<SyncSummary> {
     } catch {
       throw new Error(`Can't reach the desktop at ${desktopAddress}. Is it on and on the same network?`);
     }
-    if (response.status === 401) throw new Error("The desktop rejected the sync key.");
+    if (response.status === 401) throw new SyncKeyRejected("The desktop rejected the sync key.");
     if (!response.ok) throw new Error(`The desktop answered ${response.status}: ${await response.text()}`);
     return response.json();
   }));
