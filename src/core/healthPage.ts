@@ -5,6 +5,7 @@
 // fact", marked as such), from the same data and current settings. Weight, body fat, lean
 // mass and fat mass also carry their trend, projected a week past the last reading.
 import { addDays, localDate } from "./dates.ts";
+import { healthDays } from "./health.ts";
 import type { Db } from "./db/types.ts";
 import { checkIntake, computeTargets, datesBetween, minimumDays, slope, trailingAverages, type AveragePoint, type EnergyDay, type Intake, type IntakeCheck, type Targets } from "./energy.ts";
 import { analyzeHealth, getHealthSettings, prepareDays, type HealthAnalysis } from "./healthTargets.ts";
@@ -92,6 +93,8 @@ export interface HealthPage {
   analysis: HealthAnalysis;
   /** Oldest first, ending today (today has targets but no totals yet). */
   days: HealthPageDay[];
+  /** Today's weight and body fat, for showing only: the analysis counts them from tomorrow. */
+  todayWeighIn: { weightLbs: number | null; bodyFatPercent: number | null };
   /** Newest first. */
   workouts: PageWorkout[];
   trends: BodyTrends;
@@ -183,7 +186,8 @@ export async function healthPage(db: Db, today = localDate()): Promise<HealthPag
     ffmi: projectTrend(lastEither, lastAverage((row) => row.ffmi), settings.windowDays, ffmiOn),
     adFfmi: projectTrend(lastEither, lastAverage((row) => row.adFfmi), settings.windowDays, adFfmiOn),
   };
-  return { analysis, days: rows, workouts: pageWorkouts, trends };
+  const [{ weightLbs, bodyFatPercent }] = await healthDays(db, today, today);
+  return { analysis, days: rows, todayWeighIn: { weightLbs, bodyFatPercent }, workouts: pageWorkouts, trends };
 }
 
 /** Weight × a share of it set by body fat (lean or fat mass), fresh only when both averages are. */

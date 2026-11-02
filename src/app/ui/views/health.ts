@@ -61,6 +61,7 @@ route(/^\/health$/, async () => {
       </header>
       ${analysis.pendingCount ? reviewCard : ""}
       ${card("health-targets", "Today's targets", html`
+        ${todayWeighInLine(page.todayWeighIn)}
         ${targetsBody(analysis.targets)}
         ${analysis.targets ? targetsExplained(analysis.targets, analysis.settings) : ""}
       `, { actions: html`<a class="small" href="#/health/history">History ›</a>` })}
@@ -80,6 +81,15 @@ function todayOf(page: HealthPage): string {
 }
 
 // ---------- today's targets ----------
+
+function todayWeighInLine({ weightLbs, bodyFatPercent }: HealthPage["todayWeighIn"]) {
+  const parts = [
+    weightLbs === null ? null : `${weightLbs.toFixed(1)} lb`,
+    bodyFatPercent === null ? null : `${bodyFatPercent.toFixed(1)}% body fat`,
+  ].filter(Boolean);
+  if (parts.length === 0) return "";
+  return html`<p>Today's weigh-in: ${parts.join(" · ")} <span class="muted small">(counts toward targets from tomorrow)</span></p>`;
+}
 
 /** Calories and macros for today, plus any warnings. Also used by Monitor's Health card. */
 export function targetsBody(targets: Targets | null) {

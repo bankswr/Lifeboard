@@ -88,7 +88,9 @@ reasons:
   once per calendar day on each device, at its first update that day. The analysis uses
   only days before today, so later pulls the same day would change nothing it shows. The
   rest of Google (Calendar, Tasks) syncs on every update. After fixing an entry, the user
-  can pull again with **Re-pull health data** under Settings → Health.
+  can pull again with **Re-pull health data** under Settings → Health. Each day runs from
+  local midnight. Exception (user, 2026-11-02): today's weight and body fat are fetched at
+  every update and shown on the Health page; the analysis counts them from tomorrow.
 - **Health data arriving (user, 2026-11-02):** every update also asks Google for the newest
   phone steps and ring heart rate, and alerts once when either has had nothing new for 18
   hours (adjustable under Settings → Health).

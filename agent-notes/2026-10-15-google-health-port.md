@@ -13,7 +13,7 @@ Google API** (needs the user's interactive sign-in); tested against a fake API.
   credential) isn't today or the history is missing (`needsHealthPull`). The Schedule sync
   still runs every update, so a revoked refresh token is still noticed hourly.
 - `core/google/healthApi.ts`: paginated `dataPoints` list with FitThing's AIP-160 filters
-  (UTC-midnight bounds) for `steps`, `weight`, `body-fat`.
+  for `steps`, `weight`, `body-fat`. Bounds are local midnight since 2026-11-02 (see below).
 - `core/google/integration.ts`: first pull 30 days (90 since 2026-10-16, see
   2026-10-16-health-targets.md), then from 3 days before the newest
   stored day of each type, up to today (exclusive), as FitThing did.
@@ -49,6 +49,16 @@ Google API** (needs the user's interactive sign-in); tested against a fake API.
 - **Asks Google directly each update:** stored data is pulled once a day and stops at UTC
   midnight of the local date, so it can look 18-42 hours old when nothing is wrong. Failed
   checks are logged and stay quiet, so the extra hourly calls can't raise connection alerts.
+
+## Day bounds and today's weigh-in (2026-11-02)
+- FitThing's UTC-midnight bounds cut each day at 6 PM in Chicago, so a day's evening data missed
+  that night's pull and arrived a day late; targets ran on a partial yesterday. Now local midnight
+  (`localDayStartUtc`). `daily-resting-heart-rate` keeps plain dates, stored at UTC midnight
+  (`storedDayStart`). Data recorded before midnight but uploaded after it still waits a day.
+- Today's weight and body fat are fetched every update (user: a morning weigh-in is final when
+  taken) into `health_point`, so they sync. `healthPage.todayWeighIn` shows them; the analysis
+  reads days before today only, so targets and flags don't move (tested). Not in the graphs or
+  the Data table, which also stop at yesterday.
 
 ## Not changed: days without the ring
 `steps.ts` ignores phone steps, so a day without the ring counts only the treadmill (2026-10-31

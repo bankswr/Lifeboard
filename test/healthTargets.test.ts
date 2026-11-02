@@ -206,6 +206,25 @@ describe("analyzeHealth (database)", () => {
     expect(page.days.at(-2)!.leanAverage! + page.days.at(-2)!.fatAverage!).toBeCloseTo(page.days.at(-2)!.weightAverage!);
   });
 
+  it("shows today's weigh-in without letting it move the targets or the rows", async () => {
+    const db = await seededDb();
+    const before = await healthPage(db, TODAY);
+    expect(before.todayWeighIn).toEqual({ weightLbs: null, bodyFatPercent: null });
+
+    const at = `${TODAY}T12:00:00Z`;
+    const reading = (type: "weight" | "body-fat", value: number) => ({ id: `${type}-today`, type, day: TODAY, startTime: at, endTime: at, value, source: "scale" });
+    const range = [`${TODAY}T00:00:00Z`, `${addDays(TODAY, 1)}T00:00:00Z`] as const;
+    await replaceHealthPoints(db, "weight", ...range, [reading("weight", 150000)]); // far off the trend
+    await replaceHealthPoints(db, "body-fat", ...range, [reading("body-fat", 35)]);
+
+    const after = await healthPage(db, TODAY);
+    expect(after.todayWeighIn.weightLbs).toBeCloseTo(150000 * 0.00220462262185);
+    expect(after.todayWeighIn.bodyFatPercent).toBe(35);
+    expect(after.analysis).toEqual(before.analysis);
+    expect(after.days).toEqual(before.days);
+    expect(after.trends).toEqual(before.trends);
+  });
+
   describe("FFMI (72 in tall)", () => {
     const HEIGHT_M = 72 * 0.0254;
 

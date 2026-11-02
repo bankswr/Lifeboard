@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { api } from "../src/core/api.ts";
 import { getCredential, saveCredential } from "../src/core/credentials.ts";
 import { HEALTH_SCOPES, SCHEDULE_SCOPES } from "../src/core/google/oauth.ts";
-import { addDays, localDate } from "../src/core/dates.ts";
+import { addDays, localDate, localDayStartUtc } from "../src/core/dates.ts";
 import { migrate } from "../src/core/db/schema.ts";
 import { google, healthDataReading, toHealthPoint } from "../src/core/google/integration.ts";
 import { dailyHealth, healthCatchUpDay, replaceHealthPoints, saveNutritionDays, type HealthPoint } from "../src/core/health.ts";
@@ -24,6 +24,16 @@ const TREADMILL = "com.urevo.app";
 const at = (time: string) => Date.parse(`2026-10-03T${time}:00Z`);
 const step = (source: string, from: string, to: string, count: number): StepPoint => ({
   day: "2026-10-03", start: at(from), end: at(to), count, source,
+});
+
+describe("localDayStartUtc", () => {
+  it("is the first moment of that local day, across clock changes", () => {
+    for (const date of ["2026-03-08", "2026-03-09", "2026-11-01", "2026-11-02", "2026-12-31"]) {
+      const start = Date.parse(localDayStartUtc(date));
+      expect(localDate(new Date(start))).toBe(date);
+      expect(localDate(new Date(start - 1))).toBe(addDays(date, -1));
+    }
+  });
 });
 
 describe("stepsByDay (ported from FitThing)", () => {
@@ -185,10 +195,10 @@ describe("Google integration", () => {
       const result = await runUpdate(db, [google]);
       expect(result.connections[0]).toMatchObject({ name: "Google", status: "connected" });
       // 90 days of history: one query per type, except heart rate (14 days at most per query),
-      // then one each for the steps and heart-rate check that data is arriving.
+      // then today's weight and body fat, then the steps and heart-rate check that data is arriving.
       const queries = site.requests.filter((p) => p.includes("dataPoints"));
       expect(queries.filter((p) => p.includes("/heart-rate/"))).toHaveLength(7 + 1);
-      expect(queries).toHaveLength(4 + 7 + 2);
+      expect(queries).toHaveLength(4 + 7 + 2 + 2);
       expect(await db.all("SELECT type, value FROM health_point")).toEqual([{ type: "weight", value: 80000 }]);
       // The Health API refuses tokens carrying other scopes, so each API gets its own token.
       expect(site.tokenScopes).toEqual([HEALTH_SCOPES.join(" "), SCHEDULE_SCOPES.join(" "), HEALTH_SCOPES.join(" ")]);
@@ -206,8 +216,8 @@ describe("Google integration", () => {
       site.requests.length = 0;
       site.tokenScopes.length = 0;
       await runUpdate(db, [google]);
-      // Only the check that data is arriving, not a pull: no weight or body fat queries.
-      expect(site.requests.filter((p) => p.includes("dataPoints")).map((p) => p.split("/")[5])).toEqual(["steps", "heart-rate"]);
+      // Today's weigh-in and the check that data is arriving, not a pull: no resting heart rate.
+      expect(site.requests.filter((p) => p.includes("dataPoints")).map((p) => p.split("/")[5])).toEqual(["weight", "body-fat", "steps", "heart-rate"]);
       expect(site.tokenScopes).toEqual([SCHEDULE_SCOPES.join(" "), HEALTH_SCOPES.join(" ")]);
       expect((await getCredential<{ healthPulledOn: string }>(db, "google"))!.healthPulledOn).toBe(localDate());
     });
@@ -232,6 +242,43 @@ describe("Google integration", () => {
       const result = await runUpdate(db, [google]);
       expect(result.connections[0]).toMatchObject({ status: "signed_out" });
       expect(result.alerts[0].message).toMatch(/Google sign-in expired/);
+    });
+  });
+
+  it("asks for whole local days, except types that are dated rather than timed", async () => {
+    const filters = new Map<string, string>();
+    const site = fakeGoogle(true);
+    const recording = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.pathname.includes("dataPoints")) filters.set(url.pathname.split("/")[5], url.searchParams.get("filter")!);
+      return site.fetch(input, init);
+    }) as typeof fetch;
+    await withFetch(recording, async () => {
+      const db = await newDb();
+      await saveCredential(db, "google", { clientId: "id", clientSecret: "secret", refreshToken: "refresh" });
+      await runUpdate(db, [google]);
+    });
+    const today = localDate();
+    expect(filters.get("weight")).toContain(`< "${localDayStartUtc(addDays(today, 1))}"`);
+    expect(filters.get("daily-resting-heart-rate")).toContain(`< "${today}"`);
+  });
+
+  it("stores today's weigh-in at every update, even after the day's pull", async () => {
+    const today = localDate();
+    const [year, month, day] = today.split("-").map(Number);
+    const site = fakeGoogle(true);
+    const withWeighIn = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (!String(input).includes("/weight/")) return site.fetch(input, init);
+      const physicalTime = new Date(year, month - 1, day, 5, 18).toISOString();
+      return Response.json({ dataPoints: [{ name: "today", weight: { sampleTime: { physicalTime, civilTime: { date: { year, month, day } } }, weightGrams: 90000 } }] });
+    }) as typeof fetch;
+    await withFetch(withWeighIn, async () => {
+      const db = await newDb();
+      await saveCredential(db, "google", {
+        clientId: "id", clientSecret: "secret", refreshToken: "refresh", healthPulledOn: today, historyFrom: addDays(today, -90),
+      });
+      await runUpdate(db, [google]);
+      expect(await db.all("SELECT day, value FROM health_point WHERE type = 'weight' AND deleted = 0")).toEqual([{ day: today, value: 90000 }]);
     });
   });
 

@@ -1,7 +1,7 @@
 // Google Health API v4 data points (ported from FitThing client.py and datatypes.py), for
 // the types Lifeboard uses. Each type is queried with an AIP-160 filter over a date
 // range; FitThing's agent-notes explain the field names (2026-09-16-account-not-linked-finding).
-import { addDays } from "../dates.ts";
+import { addDays, localDayStartUtc } from "../dates.ts";
 
 const BASE_URL = "https://health.googleapis.com/v4";
 
@@ -29,7 +29,15 @@ function maxQueryDays(type: HealthType): number {
 
 export type DataPoint = Record<string, any>;
 
-/** Every point of `type` from `start` up to (not including) `end`, both "YYYY-MM-DD" (UTC midnight, as in FitThing). */
+/** Where a local day begins among stored start times. Daily types are stored at UTC midnight. */
+export function storedDayStart(type: HealthType, date: string): string {
+  return DAILY_TYPES.includes(type) ? `${date}T00:00:00Z` : localDayStartUtc(date);
+}
+
+/**
+ * Every point of `type` from `start` up to (not including) `end`, both local "YYYY-MM-DD" days.
+ * Local, not UTC midnight as in FitThing: in Chicago, UTC midnight cut off each day at 6 PM.
+ */
 export async function listDataPoints(token: string, type: HealthType, start: string, end: string): Promise<DataPoint[]> {
   const points: DataPoint[] = [];
   for (let from = start; from < end; from = addDays(from, maxQueryDays(type))) {
@@ -42,7 +50,7 @@ export async function listDataPoints(token: string, type: HealthType, start: str
 /** One query's worth: a range no longer than the type allows. */
 async function listRange(token: string, type: HealthType, start: string, end: string): Promise<DataPoint[]> {
   const field = FILTER_FIELD[type];
-  const bound = (date: string) => (DAILY_TYPES.includes(type) ? date : `${date}T00:00:00Z`);
+  const bound = (date: string) => (DAILY_TYPES.includes(type) ? date : localDayStartUtc(date));
   const filter = `${field} >= "${bound(start)}" AND ${field} < "${bound(end)}"`;
   const points: DataPoint[] = [];
   let pageToken: string | undefined;

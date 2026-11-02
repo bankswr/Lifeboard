@@ -3,8 +3,9 @@
 // then the Schedule's calendar and tasks (core/schedule/push.ts).
 // Health is pulled at most once per calendar day per device (user, 2026-10-17): the analysis
 // uses only days before today, so later pulls the same day would change nothing it shows.
-// The Schedule syncs on every update, and so does a small check that the health data is still
-// arriving at Google (agent-notes/2026-10-15-google-health-port.md).
+// The Schedule syncs on every update. So do two small health checks: today's weigh-in, which
+// is final when taken but only shown until the analysis counts it tomorrow, and whether health
+// data is still arriving at Google (agent-notes/2026-10-15-google-health-port.md).
 // The desktop signs in with a browser redirect (src/desktop/googleSignIn.ts). The phone can
 // sign in with Android's own Google authorization as a backup, used only while it's away
 // from the desktop (token.ts); otherwise it gets this data through LAN sync.
@@ -18,7 +19,7 @@ import { SignedOutError, type Integration } from "../integration.ts";
 import type { Reading } from "../readings.ts";
 import { STEP_SOURCES } from "../steps.ts";
 import { syncSchedule } from "../schedule/push.ts";
-import { listDataPoints, type DataPoint } from "./healthApi.ts";
+import { listDataPoints, storedDayStart, type DataPoint } from "./healthApi.ts";
 import { HEALTH_SCOPES } from "./oauth.ts";
 import { googleAccessToken, googleActiveHere, type GoogleCredential } from "./token.ts";
 
@@ -58,7 +59,7 @@ export const google: Integration = {
     if (!(await googleActiveHere(db, credential))) return [];
     if (needsHealthPull(credential, localDate())) await pullHealth(db, credential);
     await syncSchedule(db);
-    return checkHealthDataArriving(db, credential);
+    return checkHealthToday(db, credential);
   },
 };
 
@@ -86,7 +87,7 @@ async function pullHealth(db: Db, credential: GoogleCredential) {
     const start = catchUpFrom && !needsHistory ? addDays(catchUpFrom, -OVERLAP_DAYS) : historyStart;
     const points = await listDataPoints(token, type, start, end);
     const stored = points.map((point) => toHealthPoint(type, point)).filter((p): p is HealthPoint => p !== null);
-    await replaceHealthPoints(db, type, `${start}T00:00:00Z`, `${end}T00:00:00Z`, stored);
+    await replaceHealthPoints(db, type, storedDayStart(type, start), storedDayStart(type, end), stored);
     if (start < earliest) earliest = start;
   }
   // Steps and heart rate stay here as raw data; the days just fetched get their synced summaries.
@@ -97,35 +98,52 @@ async function pullHealth(db: Db, credential: GoogleCredential) {
 }
 
 /**
- * One reading per canary, read from Google itself: the stored data can't tell, since it's pulled
- * once a day and stops at the start of today. Only the last days are asked for; older points
- * come from what's stored. A failed check says nothing about the data, so it stays quiet (the
- * next update tries again) and doesn't mark the connection as having a problem.
+ * The health checks of every update. If one fails it stays quiet and the next update tries again:
+ * neither is worth reporting the connection as having a problem.
  */
-async function checkHealthDataArriving(db: Db, credential: GoogleCredential): Promise<Reading[]> {
+async function checkHealthToday(db: Db, credential: GoogleCredential): Promise<Reading[]> {
   try {
     const token = await googleAccessToken(credential, HEALTH_SCOPES);
-    const { healthDataStaleHours } = await getHealthSettings(db);
     const today = localDate();
-    const readings: Reading[] = [];
-    for (const { subject, type, sources } of HEALTH_CANARIES) {
-      // Two days ahead: the query's bounds are UTC, which is already tomorrow on evenings here.
-      const points = await listDataPoints(token, type, addDays(today, -1), addDays(today, 2));
-      const fetched = points
-        .map((point) => toHealthPoint(type, point))
-        .filter((point): point is HealthPoint => point !== null && sources.includes(point.source))
-        .map((point) => point.endTime);
-      const stored = await latestRawPointTime(db, type, sources);
-      const newest = [...fetched, ...(stored ? [stored] : [])];
-      // A source that has never reported isn't one that stopped.
-      if (newest.length > 0) readings.push(healthDataReading(subject, newest, healthDataStaleHours));
-    }
-    return readings;
+    await pullTodaysWeighIn(db, token, today);
+    return await healthDataReadings(db, token, today);
   } catch (error) {
     if (error instanceof SignedOutError) throw error;
-    console.warn("Couldn't check that health data is arriving:", error);
+    console.warn("Couldn't check today's health data:", error);
     return [];
   }
+}
+
+/** Stores today's weight and body fat. The analysis only reads days before today, so targets don't move. */
+async function pullTodaysWeighIn(db: Db, token: string, today: string) {
+  const tomorrow = addDays(today, 1);
+  for (const type of ["weight", "body-fat"] as const) {
+    const points = await listDataPoints(token, type, today, tomorrow);
+    const stored = points.map((point) => toHealthPoint(type, point)).filter((p): p is HealthPoint => p !== null);
+    await replaceHealthPoints(db, type, storedDayStart(type, today), storedDayStart(type, tomorrow), stored);
+  }
+}
+
+/**
+ * One reading per canary, read from Google itself: the stored data can't tell, since it's pulled
+ * once a day and stops at the start of today. Only the last days are asked for; older points
+ * come from what's stored.
+ */
+async function healthDataReadings(db: Db, token: string, today: string): Promise<Reading[]> {
+  const { healthDataStaleHours } = await getHealthSettings(db);
+  const readings: Reading[] = [];
+  for (const { subject, type, sources } of HEALTH_CANARIES) {
+    const points = await listDataPoints(token, type, addDays(today, -1), addDays(today, 1));
+    const fetched = points
+      .map((point) => toHealthPoint(type, point))
+      .filter((point): point is HealthPoint => point !== null && sources.includes(point.source))
+      .map((point) => point.endTime);
+    const stored = await latestRawPointTime(db, type, sources);
+    const newest = [...fetched, ...(stored ? [stored] : [])];
+    // A source that has never reported isn't one that stopped.
+    if (newest.length > 0) readings.push(healthDataReading(subject, newest, healthDataStaleHours));
+  }
+  return readings;
 }
 
 /** The reading for one canary, given the end times of its points (at least one). */

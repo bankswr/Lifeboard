@@ -89,5 +89,5 @@ Sign in under **Settings → Connections** on each device (sign-ins are never sy
 
 The desktop updates when it starts and every hour; the phone when first opened each day
 or with **Update now**. Health data (Cronometer, Google Health) is pulled at most once a
-day on each device. Alerts are set under
+day on each device, except today's weight and body fat, fetched at every update. Alerts are set under
 **Settings → Alert rules**.
