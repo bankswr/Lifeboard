@@ -11,6 +11,7 @@
 import { html } from "lit-html";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
+import { axisReadings, matchAxes, type MatchedAxes } from "./matchedAxes.ts";
 
 export interface SeriesSpec {
   label: string;
@@ -52,9 +53,10 @@ export interface ChartSpec {
   /**
    * "zero": from zero (counts, bars); "span": at least `minSpan` around the data (a weight that
    * moves by tenths); "symmetric": centered on zero (deltas); "data": exactly the lowest and
-   * highest shown values. Applies to both axes.
+   * highest shown values; these apply to both axes. "matched": for two axes in one unit, the
+   * same span on both, set by the wider, with ticks at the same heights (matchedAxes.ts).
    */
-  yRange: "zero" | "span" | "symmetric" | "data";
+  yRange: "zero" | "span" | "symmetric" | "data" | "matched";
   minSpan?: number;
   /** Small whole-number counts (visits): ticks at whole steps only, so no two read the same. */
   counts?: boolean;
@@ -79,6 +81,10 @@ const HEIGHT = 160;
 /** Opacity of the lines from readings to the line they stray from (user, 2026-10-20). */
 const DEVIATION_ALPHA = 0.5;
 const HALF_DAY_S = 43_200;
+/** uPlot's default height for the date axis, px. */
+const X_AXIS_SIZE = 50;
+/** Least room between y ticks, px; the plots are short and uPlot's default (30) leaves some with a single tick. */
+const Y_TICK_SPACE = 22;
 /** Card background (--surface), for hollow dots. */
 const SURFACE = "#1e293b";
 
@@ -149,11 +155,12 @@ function options(spec: ChartSpec, width: number): uPlot.Options {
   const yAxis = {
     ...axis,
     size: 48,
-    space: 22, // the plots are short; uPlot's default (30 px) leaves some with a single tick
+    space: Y_TICK_SPACE,
     ...(spec.counts ? { incrs: [1, 2, 5, 10, 20, 50, 100] } : {}),
     // uPlot's own labels: as many decimals as the tick step needs (9.25, not a rounded 9.3).
   };
   const right = hasRightAxis(spec);
+  const matched = spec.yRange === "matched" ? matchedAxes(spec) : null;
   return {
     width,
     height: spec.height ?? HEIGHT,
@@ -166,22 +173,37 @@ function options(spec: ChartSpec, width: number): uPlot.Options {
     cursor: { y: false, points: { size: 8 }, ...(spec.syncKey ? { sync: { key: spec.syncKey } } : {}) },
     scales: {
       x: spec.timeOfDay ? { time: false, range: [0, 24] } : { time: true, range: xRange(spec.visibleDays) },
-      y: { range: yRange(spec) },
-      ...(right ? { y2: { range: yRange(spec) } } : {}),
+      y: { range: matched ? () => matched.left.range : yRange(spec) },
+      ...(right ? { y2: { range: matched ? () => matched.right.range : yRange(spec) } } : {}),
     },
     axes: [
       spec.timeOfDay
         ? { ...axis, incrs: [1, 2, 3, 6, 12], values: (_u, ticks) => ticks.map(clockTime) }
         : { ...axis, values: (_u, ticks) => ticks.map((t) => new Date(t * 1000).toLocaleDateString([], { month: "short", day: "numeric" })) },
-      { ...yAxis, ...(spec.leftLabel ? { label: spec.leftLabel, labelSize: 16 } : {}) },
+      { ...yAxis, ...(matched ? { splits: () => matched.left.ticks } : {}), ...(spec.leftLabel ? { label: spec.leftLabel, labelSize: 16 } : {}) },
       // The right axis draws no grid of its own: two sets of grid lines would not line up.
-      ...(right ? [{ ...yAxis, scale: "y2", side: 1, grid: { show: false }, ...(spec.rightLabel ? { label: spec.rightLabel, labelSize: 16 } : {}) }] : []),
+      ...(right ? [{ ...yAxis, scale: "y2", side: 1, grid: { show: false }, ...(matched ? { splits: () => matched.right.ticks } : {}), ...(spec.rightLabel ? { label: spec.rightLabel, labelSize: 16 } : {}) }] : []),
     ],
     series: [
       spec.timeOfDay ? binSeries(spec.timeOfDay.binHours) : { label: "Day", value: (_u, t) => (t == null ? "" : new Date(t * 1000).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })) },
       ...spec.series.map((series) => seriesOptions(series, series.axis === "right" ? spec.rightDecimals ?? spec.decimals : spec.decimals)),
     ],
   };
+}
+
+/**
+ * The shared scale of a "matched" chart, from the values in its shown range (the same dates
+ * `xRange` shows). Null with an axis that has nothing to plot, which then fits its own data.
+ */
+function matchedAxes(spec: ChartSpec): MatchedAxes | null {
+  const shownOn = (side: "left" | "right") => spec.series
+    .filter((series) => (series.axis ?? "left") === side)
+    .map((series) => (spec.visibleDays ? series.values.slice(-spec.visibleDays) : series.values));
+  const left = axisReadings(shownOn("left"));
+  const right = axisReadings(shownOn("right"));
+  if (!left || !right) return null;
+  const plotHeight = (spec.height ?? HEIGHT) - X_AXIS_SIZE;
+  return matchAxes(left, right, Math.floor(plotHeight / Y_TICK_SPACE));
 }
 
 /** The x series of a time-of-day chart: the hovered bin's span, "9:00 – 9:30 AM". */
@@ -287,7 +309,7 @@ function xRange(visibleDays: number | undefined): uPlot.Range.Function {
 function yRange(spec: ChartSpec): uPlot.Range.Function {
   return (_u, min, max) => {
     if (min == null || max == null) return [0, 1];
-    if (spec.yRange === "data") return min === max ? [min - 1, max + 1] : [min, max];
+    if (spec.yRange === "data" || spec.yRange === "matched") return min === max ? [min - 1, max + 1] : [min, max];
     if (spec.yRange === "zero") return [0, Math.max(1, Math.ceil(max * 1.05))];
     if (spec.yRange === "symmetric") {
       const reach = Math.max(1, Math.abs(min), Math.abs(max)) * 1.1;

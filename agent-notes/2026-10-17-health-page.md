@@ -82,6 +82,14 @@ removed (port 5181).
   `rightDecimals`; `yRange: "data"` is exactly the lowest to highest shown value on each
   axis (user), trends included. uPlot computes those from the visible x window only. Dots
   at the very top or bottom are half clipped as a result.
+- Lean + fat mass axes (user, 2026-11-05), `yRange: "matched"`, `app/ui/matchedAxes.ts`:
+  both axes have one span, set by the wider measure (lowest to highest shown, trend end
+  included), which runs edge to edge. The narrower axis centers on its latest 7-day average
+  and then moves in whole tick steps from the wider axis's start, so its ticks sit on the
+  grid lines. Priority when these conflict: no point off the axis and aligned ticks win over
+  centering. If the spans are within a tick of each other no aligned window may fit; both
+  axes then grow at the top by under one step. Ticks are computed (`splits`) because uPlot
+  choosing per axis wouldn't guarantee alignment.
 - The macro delta graph is lines, not bars (three series' bars would crowd), with a dashed
   zero "On target" line, which also keeps zero inside the data-fit range.
 - Deviation lines (user, 2026-10-20): on the weight + body fat graph each reading has a

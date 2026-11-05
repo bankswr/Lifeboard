@@ -265,7 +265,7 @@ function graphsBody() {
 const TREND_NOTE = "Dashed lines are the straight-line trend of each 7-day average over the fit window, carried on for a week from the end of the average line.";
 const GRAPH_NOTES: Record<GraphId, string> = {
   body: `Weight on the left axis, body fat on the right. Faint lines show how far each reading is from its 7-day average. ${TREND_NOTE}`,
-  mass: `Lean mass = weight × (1 − body fat) and fat mass = weight × body fat, from the 7-day averages; lean on the left axis, fat on the right. ${TREND_NOTE}`,
+  mass: `Lean mass = weight × (1 − body fat) and fat mass = weight × body fat, from the 7-day averages; lean on the left axis, fat on the right, both axes spanning the same number of pounds. ${TREND_NOTE}`,
   ffmi: `Fat-free mass index = lean mass (kg) ÷ height² (m), from the 7-day averages; adjusted normalizes it to 1.8 m tall (Kouri et al. 1995). ${TREND_NOTE}`,
   energy: "Burn lines are each morning's estimate of the average daily burn, from the days before.",
   macros: "Dashed lines are the targets. Carbs are the remainder of the calories, so their target moves with the others.",
@@ -322,7 +322,7 @@ function chartSpecs(days: HealthPageDay[], trends: BodyTrends): Record<string, C
       ...readings("Weight", "lb", COLORS.blue, "left", (d) => d.weightLbs, (d) => d.weightState, (d) => d.weightAverage, trends.weight),
       ...readings("Body fat", "%", COLORS.orange, "right", (d) => d.bodyFatPercent, (d) => d.bodyFatState, (d) => d.bodyFatAverage, trends.bodyFat),
     ] }),
-    mass: () => ({ ...body, decimals: 1, leftLabel: "Lean mass, lb", rightLabel: "Fat mass, lb", series: [
+    mass: () => ({ ...body, yRange: "matched", decimals: 1, leftLabel: "Lean mass, lb", rightLabel: "Fat mass, lb", series: [
       ...mass("Lean mass", COLORS.blue, "left", (d) => d.leanAverage, trends.lean,"lb"),
       ...mass("Fat mass", COLORS.orange, "right", (d) => d.fatAverage, trends.fat,"lb"),
     ] }),
