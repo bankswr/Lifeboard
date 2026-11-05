@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { migrate } from "../src/core/db/schema.ts";
-import { notificationId, snoozeReminder, takeMissedReminders, upcomingReminders } from "../src/core/reminders.ts";
+import { markReminderHandled, notificationId, snoozeReminder, takeLateReminders, upcomingReminders } from "../src/core/reminders.ts";
 import { saveTask, setTaskDone } from "../src/core/schedule/edit.ts";
 import { openNodeDb } from "../src/desktop/db/nodeSqlite.ts";
 
@@ -16,6 +16,7 @@ async function newDb() {
 // Local times throughout, so the tests don't depend on the machine's time zone.
 const now = new Date(2026, 9, 17, 9, 0);
 const task = (title: string, date: string, time: string) => ({ title, notes: "", date, time, repeat: null });
+const dateOnly = (title: string, date: string) => ({ title, notes: "", date, time: null, repeat: null });
 
 describe("task reminders", () => {
   it("reminds of open tasks with a time still ahead, at that time", async () => {
@@ -29,7 +30,7 @@ describe("task reminders", () => {
 
     const reminders = await upcomingReminders(db, now);
     expect(reminders).toEqual([
-      { taskId: later, title: "Take meds", at: new Date(2026, 9, 17, 20, 0).toISOString(), notificationId: notificationId(later), snoozed: false },
+      { taskId: later, title: "Take meds", at: new Date(2026, 9, 17, 20, 0).toISOString(), notificationId: notificationId(later), snoozed: false, timed: true },
     ]);
   });
 
@@ -52,9 +53,9 @@ describe("task reminders", () => {
     expect(id).toBeLessThanOrEqual(2_147_483_647);
   });
 
-  it("returns reminders missed since the last check once, skipping ones still showing", async () => {
+  it("returns late reminders once, skipping ones still showing", async () => {
     const db = await newDb();
-    expect(await takeMissedReminders(db, [], now)).toEqual([]); // first check: only records the time
+    expect(await takeLateReminders(db, [], now)).toEqual([]); // first check: only records the time
     const missed = await saveTask(db, task("Missed it", "2026-10-17", "10:00"));
     const showing = await saveTask(db, task("Still in the shade", "2026-10-17", "10:30"));
     await saveTask(db, task("Not yet", "2026-10-17", "13:00"));
@@ -62,16 +63,77 @@ describe("task reminders", () => {
     await setTaskDone(db, done, true);
 
     const later = new Date(2026, 9, 17, 12, 0);
-    const result = await takeMissedReminders(db, [showing], later);
+    const result = await takeLateReminders(db, [showing], later);
     expect(result.map((r) => r.taskId)).toEqual([missed]);
-    expect(await takeMissedReminders(db, [], later)).toEqual([]); // already returned
+    expect(await takeLateReminders(db, [], later)).toEqual([]); // already returned
   });
 
-  it("doesn't bring up reminders older than 48 hours", async () => {
+  it("brings up old reminders too, once", async () => {
     const db = await newDb();
-    await takeMissedReminders(db, [], new Date(2026, 9, 10, 9, 0));
-    await saveTask(db, task("Long ago", "2026-10-11", "09:00"));
+    await takeLateReminders(db, [], new Date(2026, 9, 10, 9, 0));
+    const old = await saveTask(db, task("Long ago", "2026-10-11", "09:00"));
     const recent = await saveTask(db, task("Yesterday", "2026-10-16", "18:00"));
-    expect((await takeMissedReminders(db, [], now)).map((r) => r.taskId)).toEqual([recent]);
+    expect((await takeLateReminders(db, [], now)).map((r) => r.taskId)).toEqual([old, recent]);
+    expect(await takeLateReminders(db, [], now)).toEqual([]);
+  });
+
+  it("reminds of a date-only task at 8 AM", async () => {
+    const db = await newDb();
+    const id = await saveTask(db, dateOnly("No time", "2026-10-18"));
+    const [reminder] = await upcomingReminders(db, now);
+    expect(reminder.taskId).toBe(id);
+    expect(reminder.at).toBe(new Date(2026, 9, 18, 8, 0).toISOString());
+    expect(reminder.timed).toBe(false);
+  });
+
+  it("notifies a task that arrives after a check later than its reminder time", async () => {
+    const db = await newDb();
+    await takeLateReminders(db, [], now); // 9:00, before the task exists
+    const timed = await saveTask(db, task("Morning", "2026-10-17", "07:30"));
+    const untimed = await saveTask(db, dateOnly("Refill", "2026-10-17"));
+    const result = await takeLateReminders(db, [], new Date(2026, 9, 17, 14, 0));
+    expect(result.map((r) => r.taskId)).toEqual([timed, untimed]);
+  });
+
+  it("stays quiet on a new install's first check, later ones included", async () => {
+    const db = await newDb();
+    await saveTask(db, task("Old", "2026-10-16", "08:00"));
+    expect(await takeLateReminders(db, [], now)).toEqual([]);
+    expect(await takeLateReminders(db, [], new Date(2026, 9, 17, 10, 0))).toEqual([]);
+  });
+
+  it("doesn't bring back a reminder that was showing", async () => {
+    const db = await newDb();
+    await takeLateReminders(db, [], now);
+    const id = await saveTask(db, task("Showing", "2026-10-17", "10:00"));
+    expect(await takeLateReminders(db, [id], new Date(2026, 9, 17, 11, 0))).toEqual([]);
+    expect(await takeLateReminders(db, [], new Date(2026, 9, 17, 12, 0))).toEqual([]);
+  });
+
+  it("doesn't repeat a task's reminder after a snooze ends, and does for a later time", async () => {
+    const db = await newDb();
+    await takeLateReminders(db, [], now);
+    const id = await saveTask(db, task("Snoozed", "2026-10-17", "08:00"));
+    expect(await takeLateReminders(db, [], now)).toHaveLength(1);
+    await snoozeReminder(db, id, now);
+    const afterSnooze = new Date(2026, 9, 17, 9, 30);
+    const snoozed = await takeLateReminders(db, [], afterSnooze);
+    expect(snoozed.map((r) => r.snoozed)).toEqual([true]);
+    await snoozeReminder(db, "another", new Date(2026, 9, 17, 10, 0)); // drops the ended snooze
+    expect(await takeLateReminders(db, [], new Date(2026, 9, 17, 11, 0))).toEqual([]);
+
+    await saveTask(db, { ...task("Snoozed", "2026-10-17", "11:30"), id });
+    expect(await takeLateReminders(db, [], new Date(2026, 9, 17, 12, 0))).toHaveLength(1);
+  });
+
+  it("doesn't notify a task typed in with its time already passed", async () => {
+    const db = await newDb();
+    await takeLateReminders(db, [], now);
+    const typed = await saveTask(db, dateOnly("Just typed", "2026-10-17"));
+    await markReminderHandled(db, typed, now);
+    const ahead = await saveTask(db, task("Still ahead", "2026-10-17", "10:00"));
+    await markReminderHandled(db, ahead, now);
+    const result = await takeLateReminders(db, [], new Date(2026, 9, 17, 11, 0));
+    expect(result.map((r) => r.taskId)).toEqual([ahead]);
   });
 });

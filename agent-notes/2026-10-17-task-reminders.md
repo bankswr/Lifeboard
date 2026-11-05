@@ -54,13 +54,27 @@
 
 ## Follow-ups (2026-10-17, user decisions after Lane B)
 - **Exact timing:** the opt-in "Allow exact timing" button is enough (user).
-- **Missed reminders (built on main, 6dc3e4d):** `takeMissedReminders` (core) returns open
-  tasks whose reminder time passed since the last check (meta `reminders_checked_at`, at most
-  48 h back) and whose reminder isn't in the shade (`getDeliveredNotifications`); the app posts
-  them at once as "Missed reminder: <time>" with the same id and buttons. The first check only
-  records the time. Trade-off accepted: a reminder swiped away without Done comes back once.
-  Unit-tested; **not yet run on the emulator**.
+- **Late reminders (replaced 2026-11-05, below):** a reminder swiped away without Done comes
+  back once (trade-off accepted by the user).
 - **Sign-out revokes the grant (built, 6dc3e4d):** `GoogleAuthorizationPlugin.revoke` gets the
   account from a silent authorization and calls `revokeAccess`; Connections signs out of
   Lifeboard even if that fails and says where to remove access. **Untested**: needs the user's
   Android OAuth client.
+
+## Update 2026-11-05: 8 AM default, nothing skipped (user)
+- Date-only tasks are reminded of at `DEFAULT_REMINDER_TIME` (08:00 local). `task.time` stays
+  null, so the Schedule shows no time. Tasks with no date get no reminder.
+- User rejected scheduling maintenance tasks ahead so the reminder is set before its time: tasks
+  should appear on their due day, and the app is opened several times a day. So a reminder can
+  fire late, when the app opens or syncs.
+- `takeLateReminders` replaces `takeMissedReminders`. The old time window (reminder time after
+  the last check) silently dropped a task arriving after a check later than its reminder time,
+  e.g. an automatic date-only task made at 2 PM. Now meta `reminders_handled` holds, per open
+  task, the latest reminder time handled; a later one (moved task, snooze) counts as new.
+- No age limit: the 48-hour lookback is gone (user). The first check on a new install only
+  records (no burst); an update from the old code isn't a first check, so open tasks past their
+  reminder time notify once then.
+- Not notified: a task typed in on this device with its time already passed
+  (`markReminderHandled` in the `saveTask` API wrapper; user accepted), and one tapped open.
+- Text is "Task reminder", with when it was due only where that adds something; "Missed" is gone.
+- Unit-tested; **not run on the emulator or phone**.

@@ -35,7 +35,7 @@ route(/^\/calendars$/, async () => {
             @change=${(event: Event) => act(() => call("setTasksToGoogle", (event.target as HTMLInputElement).checked))}>
           Add new tasks to Google Tasks
         </label>
-        <p class="muted small">When off, new tasks stay in Lifeboard, automatic ones and the next time a repeating task comes up included. Tasks already in Google stay there and keep syncing. Lifeboard's phone reminders only cover tasks with a date and a time.</p>
+        <p class="muted small">When off, new tasks stay in Lifeboard, automatic ones and the next time a repeating task comes up included. Tasks already in Google stay there and keep syncing. Lifeboard's phone reminders cover tasks with a date, at 8 AM if they have no time.</p>
       </section>
     `,
   };

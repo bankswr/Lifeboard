@@ -167,8 +167,9 @@ current intent, not a commitment to details.
    together with phase 6 as the Schedule page; reminders deferred (user), the only part left.
    **Reminders, planned 2026-10-17 (user); built 2026-10-17 and verified on the emulator
    (agent-notes/2026-10-17-task-reminders.md):**
-   - **What:** tasks that have a (Lifeboard-only) time, not done. Not calendar events
-     (Google Calendar already notifies), no morning summary, nothing for date-only tasks.
+   - **What:** tasks with a date, not done, at their (Lifeboard-only) time or, without one,
+     8 AM local (user, 2026-11-05). Not calendar events (Google Calendar already notifies),
+     no morning summary, nothing for tasks with no date.
    - **Where:** the phone only, as notifications scheduled in advance with Android's local
      notifications, so they arrive with the app closed. Lifeboard reschedules them each time
      the phone opens, updates or syncs; a task added or changed on the desktop gets its
@@ -177,9 +178,11 @@ current intent, not a commitment to details.
    - **Buttons:** Done (marks the task done; it reaches Google through the desktop at the
      next sync) and Snooze (10 minutes). Android opens the app briefly to run a button.
    - **Decided 2026-10-17 (user):** exact timing is a one-time "Allow exact timing" button in
-     Settings; reminders missed since the app last ran (up to 48 h; phone off, task synced
-     late, or swiped away without Done) are shown once when it next runs; signing out of
-     Google on the phone also withdraws Android's grant.
+     Settings; signing out of Google on the phone also withdraws Android's grant.
+   - **Late reminders (user, 2026-11-05):** a reminder whose time has passed (phone off, task
+     reached the phone late, or swiped away without Done) is shown once when the app next
+     opens or syncs, however old. Exceptions: a task typed in on the phone itself, and the first
+     check of a new install. Tasks still appear on their due day, not ahead of it.
    - **Timing (built):** exact to the minute only with Android's "Alarms & reminders"
      access, which Settings offers ("Allow exact timing"); without it Android may deliver
      a few minutes late.

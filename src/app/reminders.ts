@@ -3,6 +3,7 @@
 // this file only talks to Android. Done and Snooze buttons open the app briefly (Android
 // starts it to run the button), which marks the task done or snoozes it, then reschedules.
 import { LocalNotifications, type ActionPerformed } from "@capacitor/local-notifications";
+import type { Reminder } from "../core/reminders.ts";
 import { call } from "./backend.ts";
 import { refresh } from "./ui/app.ts";
 
@@ -34,22 +35,22 @@ async function scheduleNow(): Promise<void> {
   const pending = await LocalNotifications.getPending();
   const stale = pending.notifications.filter((n) => n.extra?.kind === KIND);
   if (stale.length > 0) await LocalNotifications.cancel({ notifications: stale.map((n) => ({ id: n.id })) });
-  // Reminders still in the notification shade weren't missed.
+  // Reminders still in the notification shade aren't late.
   const delivered = await LocalNotifications.getDeliveredNotifications();
   const showing = delivered.notifications.filter((n) => n.extra?.kind === KIND).map((n) => String(n.extra.taskId));
-  const missed = await call("takeMissedReminders", showing);
-  if (reminders.length === 0 && missed.length === 0) return;
+  const late = await call("takeLateReminders", showing);
+  if (reminders.length === 0 && late.length === 0) return;
 
   // Android 13+ asks once; afterwards this returns the saved answer.
   const { display } = await LocalNotifications.requestPermissions();
   if (display !== "granted") return;
-  if (missed.length > 0) {
+  if (late.length > 0) {
     // Shown now (no schedule), with the same buttons and ids as the reminder itself.
     await LocalNotifications.schedule({
-      notifications: missed.map((reminder) => ({
+      notifications: late.map((reminder) => ({
         id: reminder.notificationId,
         title: reminder.title,
-        body: `Missed reminder: ${new Date(reminder.at).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}`,
+        body: lateBody(reminder),
         actionTypeId: ACTION_TYPE,
         extra: { kind: KIND, taskId: reminder.taskId },
       })),
@@ -73,6 +74,16 @@ async function scheduleNow(): Promise<void> {
   });
 }
 
+/** A late reminder's text: plain, with when it was due only where that adds something. */
+function lateBody(reminder: Reminder): string {
+  if (reminder.snoozed) return "Task reminder (snoozed)";
+  const at = new Date(reminder.at);
+  const day = at.toDateString() === new Date().toDateString() ? "" : at.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+  const time = reminder.timed ? at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+  const due = [day, time].filter(Boolean).join(", ");
+  return due ? `Task reminder, due ${due}` : "Task reminder";
+}
+
 async function handleAction(action: ActionPerformed): Promise<void> {
   const taskId: string | undefined = action.notification.extra?.taskId;
   if (action.notification.extra?.kind !== KIND || !taskId) return;
@@ -81,7 +92,9 @@ async function handleAction(action: ActionPerformed): Promise<void> {
   } else if (action.actionId === "snooze") {
     await call("snoozeReminder", taskId);
   } else {
-    location.hash = "#/schedule"; // a tap on the notification itself
+    // A tap on the notification itself; it has been seen, so it isn't late once it leaves the shade.
+    await call("markReminderHandled", taskId);
+    location.hash = "#/schedule";
   }
   await rescheduleReminders();
   await refresh();

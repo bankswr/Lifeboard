@@ -90,7 +90,7 @@ async function phoneSync() {
 async function remindersCard() {
   const exact = await exactAlarmsAllowed();
   return card("settings-reminders", "Task reminders", html`
-      <p class="muted small">Tasks with a time get a reminder on this phone at that time, with Done and Snooze (10 minutes).</p>
+      <p class="muted small">Tasks with a date get a reminder on this phone at their time, or 8 AM if they have none, with Done and Snooze (10 minutes). A task that reaches the phone after that time notifies when the app next opens or syncs.</p>
       ${exact
         ? html`<p class="small">On time to the minute.</p>`
         : html`

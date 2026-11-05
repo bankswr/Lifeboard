@@ -28,7 +28,7 @@ import { allowGoogleHealthRepull } from "./google/integration.ts";
 import { INTEGRATIONS } from "./integrations.ts";
 import * as weather from "./weather.ts";
 import { widgetSnapshot } from "./widgets.ts";
-import { snoozeReminder, takeMissedReminders, upcomingReminders } from "./reminders.ts";
+import { markReminderHandled, snoozeReminder, takeLateReminders, upcomingReminders } from "./reminders.ts";
 import { lastUpdateAt, listConnections, runUpdate } from "./updates.ts";
 import * as scheduleEdit from "./schedule/edit.ts";
 import { sendInBackground, syncSchedule } from "./schedule/push.ts";
@@ -291,11 +291,16 @@ export const api = {
   refreshSchedule,
   saveEvent: thenSend(scheduleEdit.saveEvent),
   deleteEvent: thenSend(scheduleEdit.deleteEvent),
-  saveTask: thenSend(scheduleEdit.saveTask),
+  saveTask: thenSend(async (db: Db, input: scheduleEdit.TaskInput) => {
+    const id = await scheduleEdit.saveTask(db, input);
+    await markReminderHandled(db, id); // typed in just now: no notification if its time has passed
+    return id;
+  }),
   setTaskDone: thenSend(scheduleEdit.setTaskDone),
   deleteTask: thenSend(scheduleEdit.deleteTask),
   getReminders: (db: Db) => upcomingReminders(db),
-  takeMissedReminders: (db: Db, showingTaskIds: string[]) => takeMissedReminders(db, showingTaskIds),
+  takeLateReminders: (db: Db, showingTaskIds: string[]) => takeLateReminders(db, showingTaskIds),
+  markReminderHandled: (db: Db, taskId: string) => markReminderHandled(db, taskId),
   getWidgetSnapshot: (db: Db) => widgetSnapshot(db),
   snoozeReminder: (db: Db, taskId: string) => snoozeReminder(db, taskId),
 };
