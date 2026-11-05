@@ -122,7 +122,7 @@ function formView(initial: Initial, options: ScheduleOptions) {
           ? html`<label data-show="event">Calendar <select name="calendarId">
               ${options.calendars.map((c) => html`<option value=${c.id}>${c.name}</option>`)}</select></label>`
           : ""}
-        ${!editing && options.taskLists.length > 1
+        ${!editing && options.tasksToGoogle && options.taskLists.length > 1
           ? html`<label data-show="task">List <select name="listId">
               ${options.taskLists.map((l) => html`<option value=${l.id}>${l.title}</option>`)}</select></label>`
           : ""}

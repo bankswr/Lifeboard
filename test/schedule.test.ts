@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { migrate } from "../src/core/db/schema.ts";
 import type { Db } from "../src/core/db/types.ts";
-import { deleteEvent, saveEvent, saveTask, setTaskDone, type EventInput } from "../src/core/schedule/edit.ts";
+import { deleteEvent, deleteTask, saveEvent, saveTask, setTaskDone, type EventInput } from "../src/core/schedule/edit.ts";
 import type { GoogleEvent, GoogleTask, ScheduleGoogle } from "../src/core/schedule/googleApi.ts";
 import { GoogleGoneError } from "../src/core/schedule/googleApi.ts";
 import { hasQueuedChanges, syncSchedule } from "../src/core/schedule/push.ts";
 import { endRecurrenceBefore, fromRecurrence, nextTaskDue, toRRule, type Repeat } from "../src/core/schedule/repeat.ts";
-import { getEvent, getSchedule, getTask, scheduleDays, type EventItem, type TaskItem } from "../src/core/schedule/store.ts";
+import { getEvent, getSchedule, getTask, scheduleDays, setTasksToGoogle, type EventItem, type TaskItem } from "../src/core/schedule/store.ts";
+import { upcomingReminders } from "../src/core/reminders.ts";
 import { openNodeDb } from "../src/desktop/db/nodeSqlite.ts";
 
 const TODAY = "2026-10-16"; // a Friday
@@ -293,5 +294,74 @@ describe("Schedule and Google", () => {
     await saveTask(db, { title: "Buy milk", notes: "", date: null, time: null, repeat: null });
     expect(await syncSchedule(db)).toEqual([]);
     expect(await hasQueuedChanges(db)).toBe(true);
+  });
+});
+
+describe("Keeping new tasks out of Google", () => {
+  const callTask = { title: "Call", notes: "", date: TODAY, time: "09:00", repeat: null };
+  const daily: Repeat = { freq: "daily", interval: 1, weekdays: [], end: { kind: "never" } };
+
+  async function signedIn() {
+    const google = fakeGoogle();
+    const db = await newDb();
+    await syncSchedule(db, google.api); // reads the task lists first
+    return { google, db };
+  }
+
+  it("never sends a task made with the setting off, through edits, ticks and re-reads", async () => {
+    const { google, db } = await signedIn();
+    await setTasksToGoogle(db, false);
+    const id = await saveTask(db, callTask);
+    expect(await hasQueuedChanges(db)).toBe(false);
+    expect((await getTask(db, id))!.pending).toBe(false); // not "Not in Google yet"
+
+    await saveTask(db, { ...callTask, id, title: "Call back" });
+    await setTaskDone(db, id, true);
+    await setTaskDone(db, id, false);
+    expect(await hasQueuedChanges(db)).toBe(false);
+
+    await syncSchedule(db, google.api);
+    expect(google.calls).toEqual([]);
+    expect((await getTask(db, id))!.title).toBe("Call back"); // the re-read leaves it alone
+
+    await deleteTask(db, id);
+    expect(await hasQueuedChanges(db)).toBe(false);
+    expect(await getTask(db, id)).toBeNull();
+  });
+
+  it("still reminds on the phone for a task kept out of Google", async () => {
+    const { db } = await signedIn();
+    await setTasksToGoogle(db, false);
+    const id = await saveTask(db, callTask);
+    const reminders = await upcomingReminders(db, new Date(`${TODAY}T00:00:00`));
+    expect(reminders.map((reminder) => reminder.taskId)).toEqual([id]);
+  });
+
+  it("keeps syncing a task already in Google, whose next repeat then stays out", async () => {
+    const { google, db } = await signedIn();
+    const id = await saveTask(db, { ...callTask, repeat: daily });
+    await syncSchedule(db, google.api);
+    expect(google.tasks.size).toBe(1);
+
+    await setTasksToGoogle(db, false);
+    await setTaskDone(db, id, true);
+    await syncSchedule(db, google.api);
+
+    expect(google.tasks.size).toBe(1); // no new task in Google
+    expect([...google.tasks.values()][0].status).toBe("completed"); // the tick reached it
+    const next = await db.all("SELECT google_id, local_only, repeat FROM task WHERE deleted = 0 AND done = 0");
+    expect(next).toEqual([{ google_id: null, local_only: 1, repeat: JSON.stringify(daily) }]);
+  });
+
+  it("sends only tasks made after the setting is back on", async () => {
+    const { google, db } = await signedIn();
+    await setTasksToGoogle(db, false);
+    const kept = await saveTask(db, callTask);
+    await setTasksToGoogle(db, true);
+    await saveTask(db, { ...callTask, title: "Sent" });
+    await syncSchedule(db, google.api);
+
+    expect([...google.tasks.values()].map((task) => task.title)).toEqual(["Sent"]);
+    expect((await getTask(db, kept))!.title).toBe("Call");
   });
 });

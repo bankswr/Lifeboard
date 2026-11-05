@@ -347,6 +347,8 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
   "ALTER TABLE maintenance_item ADD COLUMN weather TEXT;",
   // 25: the default alert rule for health data that stops arriving.
   insertDefaultRules,
+  // 26: tasks kept out of Google (user, 2026-11-05; schedule/edit.ts addTask).
+  "ALTER TABLE task ADD COLUMN local_only INTEGER NOT NULL DEFAULT 0;",
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

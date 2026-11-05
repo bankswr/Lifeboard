@@ -23,7 +23,7 @@
 // Items are synced; `last_generated` is the latest due date a task was made for.
 import { addDays, localDate } from "./dates.ts";
 import { get, type Db, type Row } from "./db/types.ts";
-import { queueChange } from "./schedule/edit.ts";
+import { addTask } from "./schedule/edit.ts";
 import { validConditions, weatherMove, weekdayName, type WeatherCondition } from "./maintenanceWeather.ts";
 import { recordAlert, type NewAlert } from "./rules.ts";
 import { addMonths, describeRepeat, mondayFirstWeekday, nextDate, type Repeat } from "./schedule/repeat.ts";
@@ -408,11 +408,10 @@ export async function generateMaintenanceTasks(db: Db, today = localDate()): Pro
           plan.reason ? `Moved from ${shortDate(plan.due)}: ${plan.reason}.` : "",
           "(Maintenance item from Lifeboard)",
         ].filter(Boolean).join("\n");
-        await saveRecord(db, "task", {
+        await addTask(db, {
           id: taskId, list_id: list.id, google_id: null, title: item.name, notes,
           due: today, time: item.time, done: 0, completed_at: null, repeat: null, etag: null,
         });
-        await queueChange(db, { type: "task.create", rowId: taskId, listId: list.id });
         added++;
       }
       await rememberDue(db, row, series, plan.due, taskId);

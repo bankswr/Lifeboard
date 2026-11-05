@@ -400,6 +400,10 @@ current intent, not a commitment to details.
   tasks on today, highlighted; done tasks crossed out; tasks may have a Lifeboard-only time;
   main calendar only, others added in Settings → Calendars; all task lists; repeating-event
   edits for this / this and following / all. Reminders: see phase 5.
+- **Tasks out of Google (user, 2026-11-05):** Settings → Calendars and tasks has "Add new tasks
+  to Google Tasks" (on by default, synced). When off, new tasks, automatic ones and repeats
+  included, stay in Lifeboard for good; tasks already in Google keep syncing, and Google is
+  still read.
 - **Lists (user, 2026-10-16):** two kinds. To-do lists: ticked items are crossed out and
   cleared when the app next loads. Prototype lists: standard items whose checkboxes select
   items to copy into other lists. Items can be copied singly, by selection or all at once.

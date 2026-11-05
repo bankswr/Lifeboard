@@ -4,6 +4,7 @@
 // returns after sending it any pending changes (schedule/edit.ts).
 import { addDays, localDate } from "../dates.ts";
 import { get, type Db, type Row } from "../db/types.ts";
+import { saveRecord } from "../sync/records.ts";
 import type { GoogleEvent, GoogleTask } from "./googleApi.ts";
 import { fromRecurrence, type Repeat } from "./repeat.ts";
 
@@ -112,7 +113,7 @@ export function toTaskItem(row: Row): TaskItem {
     done: row.done === 1,
     completedAt: row.completed_at,
     repeat: row.repeat ? JSON.parse(row.repeat) : null,
-    pending: !row.google_id,
+    pending: !row.google_id && row.local_only !== 1,
   };
 }
 
@@ -148,6 +149,20 @@ export interface ScheduleOptions {
   /** Calendars shown on the Schedule (the main one plus any added in Settings); main first. */
   calendars: { id: string; name: string; primary: boolean }[];
   taskLists: { id: string; title: string }[];
+  /** Whether new tasks are added to Google Tasks. */
+  tasksToGoogle: boolean;
+}
+
+const TASKS_TO_GOOGLE_ID = "tasks_to_google";
+
+/** Whether new tasks go to Google Tasks (the default) or stay in Lifeboard (Settings; synced). */
+export async function getTasksToGoogle(db: Db): Promise<boolean> {
+  const row = await get(db, "SELECT value FROM setting WHERE id = ? AND deleted = 0", [TASKS_TO_GOOGLE_ID]);
+  return row ? JSON.parse(row.value) === true : true;
+}
+
+export async function setTasksToGoogle(db: Db, toGoogle: boolean): Promise<void> {
+  await saveRecord(db, "setting", { id: TASKS_TO_GOOGLE_ID, value: JSON.stringify(toGoogle) });
 }
 
 export async function getScheduleOptions(db: Db): Promise<ScheduleOptions> {
@@ -156,6 +171,7 @@ export async function getScheduleOptions(db: Db): Promise<ScheduleOptions> {
   return {
     calendars: calendars.map((c) => ({ id: c.id, name: c.name, primary: c.is_primary === 1 })),
     taskLists: lists.map((l) => ({ id: l.id, title: l.title })),
+    tasksToGoogle: await getTasksToGoogle(db),
   };
 }
 

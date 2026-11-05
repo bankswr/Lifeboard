@@ -9,7 +9,7 @@
 import { localDate } from "./dates.ts";
 import { get, type Db } from "./db/types.ts";
 import { recordAlert, type NewAlert } from "./rules.ts";
-import { queueChange } from "./schedule/edit.ts";
+import { addTask } from "./schedule/edit.ts";
 import { median } from "./smartlife/food.ts";
 import { deleteRecord, saveRecord } from "./sync/records.ts";
 import type { LevelState } from "./whisker/levels.ts";
@@ -123,10 +123,9 @@ async function addRefillTask(db: Db, today: string): Promise<boolean> {
   if (!list) return false;
   const id = `auto-fountain-${today}`;
   if (await get(db, "SELECT 1 FROM task WHERE id = ?", [id])) return true;
-  await saveRecord(db, "task", {
+  await addTask(db, {
     id, list_id: list.id, google_id: null, title: "Refill the water fountain", notes: "Added by Lifeboard.",
     due: today, time: null, done: 0, completed_at: null, repeat: null, etag: null,
   });
-  await queueChange(db, { type: "task.create", rowId: id, listId: list.id });
   return true;
 }

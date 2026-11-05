@@ -15,7 +15,7 @@ import { get, type Db } from "../db/types.ts";
 import { listDeviceStatuses } from "../devices.ts";
 import { deliverAlerts } from "../notify.ts";
 import { recordAlert, type NewAlert } from "../rules.ts";
-import { queueChange } from "../schedule/edit.ts";
+import { addTask } from "../schedule/edit.ts";
 import { deleteRecord, saveRecord } from "../sync/records.ts";
 import type { LevelState } from "../whisker/levels.ts";
 import type { FeederStatus, Meal } from "./feeder.ts";
@@ -212,11 +212,10 @@ async function addRefillTask(db: Db, which: string, today: string): Promise<bool
   if (!list) return false;
   const id = `auto-feeders-${today}`;
   if (await get(db, "SELECT 1 FROM task WHERE id = ?", [id])) return true;
-  await saveRecord(db, "task", {
+  await addTask(db, {
     id, list_id: list.id, google_id: null, title: "Refill the feeders", notes: `Added by Lifeboard: ${which}.`,
     due: today, time: null, done: 0, completed_at: null, repeat: null, etag: null,
   });
-  await queueChange(db, { type: "task.create", rowId: id, listId: list.id });
   return true;
 }
 

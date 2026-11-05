@@ -4,10 +4,10 @@
 // queue reaches the desktop through LAN sync). For a repeating event, only the occurrence
 // on screen is updated locally; the rest of the series follows when Google is re-read.
 import { addDays } from "../dates.ts";
-import { get, utcNow, type Db } from "../db/types.ts";
+import { get, utcNow, type Db, type Row } from "../db/types.ts";
 import { deleteRecord, saveRecord } from "../sync/records.ts";
 import { nextTaskDue, toRRule, type Repeat } from "./repeat.ts";
-import { getEventRow, getSeriesRow, getTaskRow } from "./store.ts";
+import { getEventRow, getSeriesRow, getTaskRow, getTasksToGoogle } from "./store.ts";
 
 /** Which occurrences of a repeating event an edit or delete applies to. */
 export type Scope = "this" | "following" | "all";
@@ -154,6 +154,24 @@ function checkTask(input: TaskInput) {
   if (input.repeat && !input.date) throw new Error("A repeating task needs a date.");
 }
 
+/**
+ * Makes a task, automatic ones included. While "Add new tasks to Google Tasks" is off it stays
+ * in Lifeboard for good (local_only), so nothing about it is ever queued for Google; turning the
+ * setting back on affects only tasks made after that. Returns its row id.
+ */
+export async function addTask(db: Db, fields: Row): Promise<string> {
+  const toGoogle = await getTasksToGoogle(db);
+  const rowId = await saveRecord(db, "task", { ...fields, local_only: toGoogle ? 0 : 1 });
+  if (toGoogle) await queueChange(db, { type: "task.create", rowId, listId: fields.list_id });
+  return rowId;
+}
+
+/** Queues an edit of a task for Google, unless the task lives only in Lifeboard. */
+async function queueTaskEdit(db: Db, type: "task.patch" | "task.delete", row: Row): Promise<void> {
+  if (row.local_only === 1) return;
+  await queueChange(db, { type, rowId: row.id, listId: row.list_id, baseEtag: row.etag });
+}
+
 /** Creates or edits a task. Returns its row id. */
 export async function saveTask(db: Db, input: TaskInput): Promise<string> {
   checkTask(input);
@@ -164,14 +182,12 @@ export async function saveTask(db: Db, input: TaskInput): Promise<string> {
   return db.transaction(async () => {
     if (!input.id) {
       const listId = input.listId ?? (await firstTaskListId(db));
-      const rowId = await saveRecord(db, "task", { ...fields, list_id: listId, google_id: null, done: 0, completed_at: null, etag: null });
-      await queueChange(db, { type: "task.create", rowId, listId });
-      return rowId;
+      return addTask(db, { ...fields, list_id: listId, google_id: null, done: 0, completed_at: null, etag: null });
     }
     const row = await getTaskRow(db, input.id);
     if (!row) throw new Error("This task no longer exists.");
     await saveRecord(db, "task", { ...row, ...fields });
-    await queueChange(db, { type: "task.patch", rowId: row.id, listId: row.list_id, baseEtag: row.etag });
+    await queueTaskEdit(db, "task.patch", row);
     return row.id;
   });
 }
@@ -189,13 +205,12 @@ export async function setTaskDone(db: Db, id: string, done: boolean): Promise<vo
     await saveRecord(db, "task", {
       ...row, done: done ? 1 : 0, completed_at: done ? utcNow() : null, repeat: repeat ? null : row.repeat,
     });
-    await queueChange(db, { type: "task.patch", rowId: row.id, listId: row.list_id, baseEtag: row.etag });
+    await queueTaskEdit(db, "task.patch", row);
     if (next) {
-      const nextId = await saveRecord(db, "task", {
+      await addTask(db, {
         list_id: row.list_id, google_id: null, title: row.title, notes: row.notes, due: next.due, time: row.time,
         done: 0, completed_at: null, repeat: JSON.stringify(next.repeat), etag: null,
       });
-      await queueChange(db, { type: "task.create", rowId: nextId, listId: row.list_id });
     }
   });
 }
@@ -205,7 +220,7 @@ export async function deleteTask(db: Db, id: string): Promise<void> {
     const row = await getTaskRow(db, id);
     if (!row) return;
     await deleteRecord(db, "task", row.id);
-    await queueChange(db, { type: "task.delete", rowId: row.id, listId: row.list_id, baseEtag: row.etag });
+    await queueTaskEdit(db, "task.delete", row);
   });
 }
 

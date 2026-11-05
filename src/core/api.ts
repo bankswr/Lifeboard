@@ -286,6 +286,8 @@ export const api = {
   getTask: schedule.getTask,
   listCalendars: schedule.listCalendars,
   setCalendarIncluded,
+  getTasksToGoogle: schedule.getTasksToGoogle,
+  setTasksToGoogle: schedule.setTasksToGoogle,
   refreshSchedule,
   saveEvent: thenSend(scheduleEdit.saveEvent),
   deleteEvent: thenSend(scheduleEdit.deleteEvent),

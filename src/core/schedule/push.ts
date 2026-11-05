@@ -328,7 +328,8 @@ export async function refreshFromGoogle(db: Db, google: ScheduleGoogle, today = 
     }
     for (const gone of stored.keys()) {
       await deleteRecord(db, "task_list", gone);
-      for (const { id } of await db.all("SELECT id FROM task WHERE list_id = ? AND deleted = 0", [gone])) await deleteRecord(db, "task", id);
+      // Tasks only in Lifeboard aren't Google's to remove, and show whatever their list.
+      for (const { id } of await db.all("SELECT id FROM task WHERE list_id = ? AND deleted = 0 AND local_only = 0", [gone])) await deleteRecord(db, "task", id);
     }
   });
 }
