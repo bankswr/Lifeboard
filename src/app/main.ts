@@ -10,7 +10,7 @@ import type { ApiName } from "../core/api.ts";
 import { call, initBackend, platform, setAfterPhoneCall } from "./backend.ts";
 import { nativeGoogleAuthorizer } from "./googleAuth.ts";
 import { nativeCookieSession } from "./nativeCookies.ts";
-import { showPhoneNotifications } from "./notify.ts";
+import { removePhoneNotifications, showPhoneNotifications } from "./notify.ts";
 import { rescheduleReminders, setUpReminders } from "./reminders.ts";
 import { startPeriodicSync, syncQuietly } from "./sync.ts";
 import { applyWidgetQueues, refreshWidgets, refreshWidgetsSoon, setUpWidgets } from "./widgets.ts";
@@ -47,7 +47,7 @@ async function main() {
   await call("clearCheckedItems");
   start();
   if (platform === "android") {
-    setAlertDelivery(showPhoneNotifications);
+    setAlertDelivery(showPhoneNotifications, removePhoneNotifications);
     setCookieSessionFactory(nativeCookieSession);
     setNativeGoogleAuthorizer(nativeGoogleAuthorizer);
     await setUpReminders();

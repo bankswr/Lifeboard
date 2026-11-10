@@ -1,8 +1,10 @@
 // Alert rules, IFTTT-style: "when <reading type> comes in, if <conditions>, then notify
 // <message>". A rule alerts when its conditions *become* true for a subject, not on every
-// update while they stay true; once they stop being true it can alert again later.
+// update while they stay true; once they stop being true its alert clears itself and it can
+// alert again later.
 // Rules are synced between devices; whether a rule currently matches is kept per device.
 import { get, utcNow, type Db } from "./db/types.ts";
+import { withdrawAlerts } from "./notify.ts";
 import { readingType, type FieldValue, type Reading } from "./readings.ts";
 import { deleteRecord, nextSeq, saveRecord, upsert } from "./sync/records.ts";
 
@@ -32,6 +34,8 @@ export interface Rule {
 }
 
 export interface NewAlert {
+  /** The alert's row, so its notification can be withdrawn when it clears. */
+  id: number;
   ruleId: string;
   subject: string;
   message: string;
@@ -176,9 +180,23 @@ function fromRow(row: Record<string, any>): Rule {
  * find its own alerts again (e.g. whether one is still undismissed).
  */
 export async function recordAlert(db: Db, subject: string, message: string, ruleId = "builtin", at = new Date()): Promise<NewAlert> {
-  const alert = { ruleId, subject, message };
-  await db.run("INSERT INTO alert (created_at, rule_id, subject, message) VALUES (?, ?, ?, ?)", [utcNow(at), alert.ruleId, subject, message]);
-  return alert;
+  const { lastId } = await db.run("INSERT INTO alert (created_at, rule_id, subject, message) VALUES (?, ?, ?, ?)", [utcNow(at), ruleId, subject, message]);
+  return { id: lastId, ruleId, subject, message };
+}
+
+/**
+ * Clears (dismisses) the alerts a rule or check raised about a subject, because what they
+ * reported is over. Only those created before `before`, if given. Returns the cleared ids so
+ * the caller can withdraw their notifications.
+ */
+export async function clearAlerts(db: Db, ruleId: string, subject: string, before?: string): Promise<number[]> {
+  const rows = await db.all(
+    `SELECT id FROM alert WHERE rule_id = ? AND subject = ? AND dismissed = 0${before ? " AND created_at < ?" : ""}`,
+    before ? [ruleId, subject, before] : [ruleId, subject],
+  );
+  const ids = rows.map((row) => Number(row.id));
+  if (ids.length > 0) await db.run(`UPDATE alert SET dismissed = 1 WHERE id IN (${ids.map(() => "?").join(", ")})`, ids);
+  return ids;
 }
 
 // ---------- evaluating ----------
@@ -206,11 +224,13 @@ export function fillMessage(template: string, reading: Reading): string {
 
 /**
  * Checks every enabled rule against new readings, records which rules now match, and saves
- * and returns an alert for each rule whose conditions just became true.
+ * and returns an alert for each rule whose conditions just became true. A rule that no
+ * longer matches clears its alerts about that subject and withdraws their notifications.
  */
 export async function evaluateRules(db: Db, readings: Reading[]): Promise<NewAlert[]> {
   const rules = (await listRules(db)).filter((rule) => rule.enabled);
   const alerts: NewAlert[] = [];
+  const cleared: number[] = [];
   await db.transaction(async () => {
     for (const reading of readings) {
       for (const rule of rules.filter((r) => r.readingType === reading.type)) {
@@ -221,15 +241,16 @@ export async function evaluateRules(db: Db, readings: Reading[]): Promise<NewAle
           [rule.id, reading.subject, matches ? 1 : 0],
         );
         if (matches && before?.matched !== 1) {
-          const alert = { ruleId: rule.id, subject: reading.subject, message: fillMessage(rule.message, reading) };
-          await db.run("INSERT INTO alert (created_at, rule_id, subject, message) VALUES (?, ?, ?, ?)", [
-            utcNow(), alert.ruleId, alert.subject, alert.message,
-          ]);
-          alerts.push(alert);
+          alerts.push(await recordAlert(db, reading.subject, fillMessage(rule.message, reading), rule.id));
         }
+        // Every time, not only when it stops matching: also clears alerts left from before
+        // alerts cleared themselves.
+        if (!matches) cleared.push(...(await clearAlerts(db, rule.id, reading.subject)));
       }
     }
   });
+  // After the transaction: the phone's notification calls shouldn't hold the database.
+  await withdrawAlerts(cleared);
   return alerts;
 }
 

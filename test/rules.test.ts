@@ -6,6 +6,7 @@ import type { Reading } from "../src/core/readings.ts";
 import { dismissAlert, dismissAllAlerts, evaluateRules, fillMessage, listRules, recentAlerts, recordAlert, saveRule } from "../src/core/rules.ts";
 import { answerSync, syncWithDesktop } from "../src/core/sync/sync.ts";
 import { SignedOutError, type Integration } from "../src/core/integration.ts";
+import { setAlertDelivery } from "../src/core/notify.ts";
 import { isUpdateDue, listConnections, runUpdate } from "../src/core/updates.ts";
 import { openNodeDb } from "../src/desktop/db/nodeSqlite.ts";
 
@@ -40,7 +41,32 @@ describe("updates and the default sign-in rule", () => {
     await runUpdate(db, [service]);
     signedIn = false;
     expect((await runUpdate(db, [service])).alerts).toHaveLength(1);
-    expect(await recentAlerts(db)).toHaveLength(2);
+    expect(await recentAlerts(db)).toHaveLength(1); // the first cleared itself on recovery
+  });
+
+  it("clears an alert once its rule stops matching, and withdraws its notification", async () => {
+    const db = await newDb();
+    const withdrawn: number[] = [];
+    setAlertDelivery(async () => {}, async (ids) => { withdrawn.push(...ids); });
+    let signedIn = false;
+    const service = fakeIntegration(() => {
+      if (!signedIn) throw new SignedOutError("Sign in again.");
+      return [];
+    });
+    const [alert] = (await runUpdate(db, [service])).alerts;
+    const other = await recordAlert(db, "Schedule", "Not tied to a rule");
+    signedIn = true;
+    await runUpdate(db, [service]);
+    expect(withdrawn).toEqual([alert.id]);
+    expect((await recentAlerts(db)).map((a) => a.id)).toEqual([other.id]); // others stay
+    setAlertDelivery(async () => {}, async () => {});
+  });
+
+  it("also clears an alert whose rule had already stopped matching before alerts cleared themselves", async () => {
+    const db = await newDb();
+    await recordAlert(db, "Fake service", "Fake service: error.", "default-connection-problem");
+    await evaluateRules(db, [{ type: "connection", subject: "Fake service", data: { status: "connected", message: "" } }]);
+    expect(await recentAlerts(db)).toEqual([]);
   });
 
   it("treats other failures as errors and keeps the last success time", async () => {

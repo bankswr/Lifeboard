@@ -10,7 +10,8 @@
 // The alert stays raised for the whole stall: dismissing it while the robot still hasn't
 // cycled raises it again at the next update (user).
 import { get, type Db } from "../db/types.ts";
-import { recordAlert, type NewAlert } from "../rules.ts";
+import { withdrawAlerts } from "../notify.ts";
+import { clearAlerts, recordAlert, type NewAlert } from "../rules.ts";
 import type { ActivityEntry } from "./api.ts";
 import { getLitterSettings } from "./levels.ts";
 import type { LitterRobotStatus } from "./status.ts";
@@ -52,7 +53,8 @@ export function findCycleStall(entries: ActivityEntry[], now: Date, waitMinutes:
 
 /**
  * Alerts for a robot that has stalled, unless this stall's alert is still on the Monitor
- * (not dismissed). Off when the setting is blank.
+ * (not dismissed). Alerts from earlier stalls clear themselves once the robot has cycled.
+ * Off when the setting is blank (which also clears any left over).
  */
 export async function checkCycleStall(
   db: Db,
@@ -61,8 +63,8 @@ export async function checkCycleStall(
   now = new Date(),
 ): Promise<NewAlert[]> {
   const { stallAlertMinutes } = await getLitterSettings(db);
-  if (stallAlertMinutes === null) return [];
-  const stall = findCycleStall(entries, now, stallAlertMinutes);
+  const stall = stallAlertMinutes === null ? null : findCycleStall(entries, now, stallAlertMinutes);
+  await withdrawAlerts(await clearAlerts(db, STALL_RULE_ID, robot.name, stall?.since));
   if (!stall) return [];
   const open = await get(
     db,

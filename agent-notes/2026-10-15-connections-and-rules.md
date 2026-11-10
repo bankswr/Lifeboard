@@ -15,6 +15,16 @@
   (`rule_state`, per device) and not again while they stay true; after they turn false it
   can alert again. One mechanism covers "signed out" and future "drawer full" without
   repeat spam, and needs no separate "event" concept.
+- **Self-clearing (user, 2026-11-10):** whenever a rule doesn't match a subject's reading,
+  its undismissed alerts for that subject are marked dismissed (`clearAlerts`), on every
+  evaluation rather than only on the true→false edge, so alerts left from before the change
+  clear too. Their phone notifications are withdrawn: `setAlertDelivery(deliver, withdraw)`;
+  the phone tags alert notifications `extra {kind: "alert", alertId}` and removes delivered
+  ones by that. Desktop pop-ups can't be withdrawn (notify-send) and just expire. Built-in
+  alerts not tied to a condition (Schedule conflicts, cat visit counts, health flags) are
+  events and stay until dismissed; the Litter-Robot stall alert clears itself too (see
+  `2026-10-18-litter-cycle-stalls.md`). A subject with no reading (e.g. a failed Google
+  check) keeps its alert.
 - **Default rule** `default-connection-problem` (status is not connected) is inserted by
   migration 4 with a fixed id and timestamp, so both devices' copies are the same row and
   sync never duplicates it. The user can edit or disable it like any rule.

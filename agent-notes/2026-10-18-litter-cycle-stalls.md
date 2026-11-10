@@ -52,3 +52,9 @@ drawer-full rule couldn't fire either. Fix: `robotStatusCatDetect` and
 message says "since it detected a cat … (status: …)". Checked against the live log: flagged.
 Also seen: `lastSeen` (2026-10-29 22:42) lagged the activity log, so it is no use as a
 "robot silent" signal.
+
+## 2026-11-10: clears itself
+Each check clears the robot's undismissed stall alerts once it has cycled (no stall, or the
+setting off), and, during a stall, those created before it began (an earlier stall's alert
+when a cycle and a new stall both fell between updates). Phone notifications are withdrawn
+as for rule alerts (`2026-10-15-connections-and-rules.md`).

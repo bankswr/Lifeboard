@@ -310,9 +310,20 @@ describe("clean-cycle stalls", () => {
     expect(await checkCycleStall(db, robot, stalled, now)).toHaveLength(1); // dismissed, still stalled
 
     expect(await checkCycleStall(db, robot, [...stalled, cycle(10)], now)).toEqual([]); // cleaned
+    expect(await recentAlerts(db)).toEqual([]); // its alert cleared itself
     const later = new Date(now.getTime() + 5 * 3_600_000);
     const [again] = await checkCycleStall(db, { ...robot, drawerFull: true }, [...stalled, cycle(10), visit(-200)], later);
     expect(again.message).toBe("Litter-Robot hasn't run a clean cycle after a cat's visit (first 100 minutes ago). The drawer is full.");
+  });
+
+  it("clears an earlier stall's alert when a new stall follows between updates", async () => {
+    const db = await newDb();
+    const robot = litterRobotStatus(READY);
+    await checkCycleStall(db, robot, [cycle(500), visit(400)], new Date(now.getTime() - 300 * 60_000));
+    await checkCycleStall(db, robot, [cycle(500), visit(400), cycle(200), visit(120)], now);
+    expect((await recentAlerts(db)).map((a) => a.message)).toEqual([
+      "Litter-Robot hasn't run a clean cycle after a cat's visit (first 2 hours ago).",
+    ]);
   });
 
   it("can be turned off, and needs a sensible wait", async () => {
