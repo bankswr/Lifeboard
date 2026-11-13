@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { axisReadings, matchAxes, type MatchedAxis } from "../src/app/ui/matchedAxes.ts";
+import { axisReadings, matchAxes, zeroAlignedAxes, type MatchedAxis } from "../src/app/ui/matchedAxes.ts";
 
 const MAX_TICKS = 12;
 const span = ({ range }: MatchedAxis) => range[1] - range[0];
@@ -66,5 +66,28 @@ describe("axisReadings", () => {
 
   it("is null with nothing to plot", () => {
     expect(axisReadings([[null, null]])).toBeNull();
+  });
+});
+
+describe("zeroAlignedAxes", () => {
+  const readings = (low: number, high: number) => ({ low, high, latest: high });
+
+  it("puts zero and every tick at the same heights on both axes, keeping every value", () => {
+    const { left, right } = zeroAlignedAxes(readings(-180, 720), readings(-8.5, 41), MAX_TICKS);
+    expectAligned(left, right);
+    expect(heights(left)[left.ticks.indexOf(0)]).toBeCloseTo(heights(right)[right.ticks.indexOf(0)], 9);
+    expect(left.range[0]).toBeLessThanOrEqual(-180);
+    expect(left.range[1]).toBeGreaterThanOrEqual(720);
+    expect(right.range[0]).toBeLessThanOrEqual(-8.5);
+    expect(right.range[1]).toBeGreaterThanOrEqual(41);
+    expect(left.ticks.length).toBeLessThanOrEqual(MAX_TICKS + 1);
+  });
+
+  it("includes zero when everything is on one side, and copes with all zeros", () => {
+    const { left, right } = zeroAlignedAxes(readings(150, 600), readings(0, 0), MAX_TICKS);
+    expect(left.range[0]).toBe(0);
+    expect(right.range[0]).toBe(0);
+    expect(right.range[1]).toBeGreaterThan(0);
+    expectAligned(left, right);
   });
 });

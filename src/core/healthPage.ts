@@ -7,7 +7,7 @@
 import { addDays, localDate } from "./dates.ts";
 import { healthDays } from "./health.ts";
 import type { Db } from "./db/types.ts";
-import { checkIntake, computeTargets, datesBetween, minimumDays, slope, trailingAverages, type AveragePoint, type EnergyDay, type Intake, type IntakeCheck, type Targets } from "./energy.ts";
+import { AVERAGE_DAYS, calorieOffsets, checkIntake, computeTargets, datesBetween, minimumDays, slope, trailingAverages, type AveragePoint, type CalorieOffset, type EnergyDay, type Intake, type IntakeCheck, type Targets } from "./energy.ts";
 import { analyzeHealth, getHealthSettings, prepareDays, type HealthAnalysis } from "./healthTargets.ts";
 import type { Flag } from "./healthReview.ts";
 import { workoutEnergy, type Workout } from "./workouts.ts";
@@ -59,6 +59,13 @@ export interface HealthPageDay {
   /** The day's own burn, spread by its steps and workouts; null for today or without a fit. */
   burn: number | null;
   workoutKcal: number;
+  /**
+   * The current model's burn estimate minus the logged intake (a missing day filled in from the
+   * week before), and its 7-day moving averages; null for today, whose intake is still partial.
+   */
+  calorieOffset: CalorieOffset | null;
+  calorieOffsetAverageKcal: number | null;
+  calorieOffsetAveragePercent: number | null;
 }
 
 export interface PageWorkout extends Workout {
@@ -122,12 +129,18 @@ export async function healthPage(db: Db, today = localDate()): Promise<HealthPag
 
   const simple = new Map<string, Targets | null>();
   const split = new Map<string, Targets | null>();
-  for (const date of datesBetween(first, today)) {
+  // From a week before the first shown day, for the calorie offset's moving average.
+  const offsetStart = addDays(first, -(AVERAGE_DAYS - 1));
+  for (const date of datesBetween(offsetStart, today)) {
     simple.set(date, computeTargets(date, cleaned, { ...settings, energyModel: "simple" }));
     split.set(date, computeTargets(date, cleaned, { ...settings, energyModel: "split" }));
   }
   const current = settings.energyModel === "split" ? split : simple;
   // The day after's estimate holds each day's own burn (it uses only earlier days).
+  const offsets = new Map(
+    calorieOffsets(datesBetween(offsetStart, addDays(today, -1)), (date) => cleanedByDate.get(date)?.calories ?? null, (date) => current.get(date)?.expenditure ?? null)
+      .map((day) => [day.date, day]),
+  );
   const nextDay = (date: string) => (date < today ? current.get(addDays(date, 1)) ?? null : null);
 
   const rows: HealthPageDay[] = datesBetween(first, today).map((date) => {
@@ -159,6 +172,9 @@ export async function healthPage(db: Db, today = localDate()): Promise<HealthPag
       expenditureSplit: split.get(date)?.method === "trend" ? split.get(date)!.expenditure : null,
       burn: nextDay(date)?.previousDayExpenditure ?? null,
       workoutKcal: energy?.workoutKcal ?? 0,
+      calorieOffset: offsets.get(date)?.offset ?? null,
+      calorieOffsetAverageKcal: offsets.get(date)?.averageKcal ?? null,
+      calorieOffsetAveragePercent: offsets.get(date)?.averagePercent ?? null,
     };
   });
 

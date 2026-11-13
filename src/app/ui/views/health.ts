@@ -5,7 +5,7 @@
 //   "How this is worked out" using the actual numbers;
 // - graphs, one at a time from a selector, all sharing one range: weight and body fat, lean
 //   and fat mass (two y axes each, trends projected a week on), FFMI and adjusted, intake vs 
-//   both burn estimates, the macros, the macros vs their targets, resting heart rate, steps;
+//   both burn estimates, the calorie offset (burn − intake, kcal and %), the macros, the macros vs their targets, resting heart rate, steps;
 // - workouts found in the heart rate;
 // - the data table, tabbed: totals (met targets in green) and deltas (eaten − target).
 // #/health/history lists the saved targets.
@@ -235,6 +235,7 @@ const GRAPHS = {
   mass: "Lean and fat mass",
   ffmi: "FFMI",
   energy: "Intake and burn",
+  offset: "Calorie offset",
   macros: "Macros",
   "macro-deltas": "Macros vs target",
   resting: "Resting heart rate",
@@ -268,6 +269,7 @@ const GRAPH_NOTES: Record<GraphId, string> = {
   mass: `Lean mass = weight × (1 − body fat) and fat mass = weight × body fat, from the 7-day averages; lean on the left axis, fat on the right, both axes spanning the same number of pounds. ${TREND_NOTE}`,
   ffmi: `Fat-free mass index = lean mass (kg) ÷ height² (m), from the 7-day averages; adjusted normalizes it to 1.8 m tall (Kouri et al. 1995). ${TREND_NOTE}`,
   energy: "Burn lines are each morning's estimate of the average daily burn, from the days before.",
+  offset: "Estimated burn (the energy model in Settings) minus the calories logged in Cronometer: kcal on the left axis, as a % of the intake on the right; above zero, more was burned than logged. A day without a log uses the average of the logged days in the week before (needs 3); those dots are rings. Lines are the 7-day moving average of the daily offsets (needs 3 days).",
   macros: "Dashed lines are the targets. Carbs are the remainder of the calories, so their target moves with the others.",
   "macro-deltas": "Each macro eaten minus its target; above zero is over.",
   resting: "",
@@ -335,6 +337,22 @@ function chartSpecs(days: HealthPageDay[], trends: BodyTrends): Record<string, C
       { label: "Burn (3,500 kcal/lb)", values: days.map((d) => d.expenditureSimple), color: COLORS.orange, kind: "line", pointSize: 0 },
       { label: "Burn (fat/lean split)", values: days.map((d) => d.expenditureSplit), color: COLORS.aqua, kind: "line", pointSize: 0 },
     ] }),
+    offset: () => {
+      const filled = days.some((d) => d.calorieOffset?.intakeFilled);
+      const measure = (name: string, color: string, axis: Axis, value: (d: HealthPageDay) => number | null, average: (d: HealthPageDay) => number | null): SeriesSpec[] => {
+        const byFill = (wanted: boolean) => days.map((d) => (d.calorieOffset && d.calorieOffset.intakeFilled === wanted ? value(d) : null));
+        return [
+          { label: `${name} 7-day average`, values: days.map(average), color, kind: "line", pointSize: 0, axis, group: name },
+          { label: `${name}, daily`, values: byFill(false), color, kind: "points", pointSize: 4, axis, group: name },
+          ...(filled ? [{ label: `${name}, intake filled in`, values: byFill(true), color, kind: "points", pointSize: 5, hollow: true, axis, group: name } as const] : []),
+        ];
+      };
+      return { ...common, yRange: "zero-aligned", decimals: 0, leftLabel: "Burn − intake, kcal", rightLabel: "Burn − intake, % of intake", series: [
+        ...measure("kcal", COLORS.blue, "left", (d) => d.calorieOffset?.kcal ?? null, (d) => d.calorieOffsetAverageKcal),
+        ...measure("%", COLORS.orange, "right", (d) => d.calorieOffset?.percent ?? null, (d) => d.calorieOffsetAveragePercent),
+        { label: "Zero", values: days.map(() => 0), color: COLORS.target, kind: "line", dashed: true },
+      ] };
+    },
     macros: () => ({ ...common, decimals: 0, leftLabel: "g", series: macros.flatMap(([label, color, eaten, target]): SeriesSpec[] => [
       { label: `${label} eaten`, values: days.map(eaten), color, kind: "line", spanGaps: false, group: label },
       { label: `${label} target`, values: days.map(target), color, kind: "line", dashed: true, group: label },

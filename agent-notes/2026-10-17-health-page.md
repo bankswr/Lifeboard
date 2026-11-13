@@ -130,3 +130,20 @@ removed (port 5181).
   calculators use 6.3; at 72 in the difference is about 0.005.
 - The adjusted trend must be fitted on `adFfmiOn`, not `ffmiOn`: the slope is the same (constant
   offset) but the line would start ~0.18 below its average line. A test checks the start points.
+
+## Calorie offset graph (2026-11-13, user)
+- "Calorie offset" in the graph selector: estimated burn − logged intake per day, kcal on the
+  left axis and as a % of the intake on the right ((burn − intake) ÷ intake, user's choice over
+  the plain burn ÷ intake ratio), dots per day plus each one's 7-day moving average.
+- Burn is the current energy model's morning estimate of the average daily burn (`expenditure`
+  of `computeTargets`, the settings window, 28 days by default), not the day's own
+  step-adjusted burn (user agreed). So the daily offset mostly shows intake swings.
+- Intake is the cleaned calories (flagged, pending or rejected days count as not logged). A
+  day without a log uses the mean of the logged days among the 7 before, needing 3; those days
+  are hollow dots and still count in the moving average. The moving average is the mean of the
+  daily values over the 7 days ending that day, needing 3 (the % line is the mean of daily %,
+  not the kcal line rescaled). Ends yesterday: today's intake is partial.
+- Pure logic in `calorieOffsets` (`core/energy.ts`), tested. The chart uses a new
+  `yRange: "zero-aligned"` (`zeroAlignedAxes` in `app/ui/matchedAxes.ts`): each axis has its
+  own round step, and both run the same number of steps below and above zero, so zero and the
+  ticks sit at the same heights.

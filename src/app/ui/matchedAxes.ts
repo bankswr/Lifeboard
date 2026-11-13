@@ -87,3 +87,33 @@ export function matchAxes(left: AxisReadings, right: AxisReadings, maxTicks: num
     ? { left: axis(widerLow), right: axis(narrowerLow) }
     : { left: axis(narrowerLow), right: axis(widerLow) };
 }
+
+/**
+ * Two axes in different units that both straddle zero (the calorie offset: kcal and %; user,
+ * 2026-11-13): zero at the same height on both, and ticks at the same heights, so each tick on
+ * the right sits on a left grid line. Each axis gets its own round step; both run the same
+ * number of steps below and above zero, as few as fit every value. Zero is always included.
+ */
+export function zeroAlignedAxes(left: AxisReadings, right: AxisReadings, maxTicks: number): MatchedAxes {
+  const limit = Math.max(2, maxTicks);
+  // Fewer target steps mean wider steps; take the most that still fit the plot.
+  for (let target = limit; target >= 1; target--) {
+    const steps = [left, right].map((axis) => roundStep(zeroSpan(axis) / target));
+    const below = Math.max(...[left, right].map((axis, i) => Math.ceil(-Math.min(0, axis.low) / steps[i] - 1e-9)));
+    const above = Math.max(...[left, right].map((axis, i) => Math.ceil(Math.max(0, axis.high) / steps[i] - 1e-9)));
+    if (below + above <= limit || target === 1) {
+      const axis = (step: number): MatchedAxis => ({
+        range: [cleanTick(-below * step), cleanTick(above * step)],
+        ticks: Array.from({ length: below + above + 1 }, (_, k) => cleanTick((k - below) * step)),
+      });
+      return { left: axis(steps[0]), right: axis(steps[1]) };
+    }
+  }
+  throw new Error("unreachable");
+}
+
+/** The axis's span with zero included; 1 when everything is zero, so it still has a step. */
+function zeroSpan(axis: AxisReadings): number {
+  const span = Math.max(0, axis.high) - Math.min(0, axis.low);
+  return span > 0 ? span : 1;
+}

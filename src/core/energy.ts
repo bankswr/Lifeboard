@@ -352,6 +352,70 @@ function goalWarnings(settings: TargetSettings, weightLbs: number): string[] {
   return [];
 }
 
+// ---------- calorie offset: estimated burn against logged intake (user, 2026-11-13) ----------
+
+export interface CalorieOffset {
+  /** Estimated expenditure − intake, kcal; above zero: burned more than was logged. */
+  kcal: number;
+  /** The same as a share of the intake, %. */
+  percent: number;
+  /** No intake logged that day: the average of the logged days in the week before was used. */
+  intakeFilled: boolean;
+}
+
+export interface CalorieOffsetDay {
+  date: string;
+  offset: CalorieOffset | null;
+  /** Mean of the daily offsets over the 7 days ending that day; null with fewer than 3. */
+  averageKcal: number | null;
+  averagePercent: number | null;
+}
+
+/**
+ * Each day's estimated expenditure minus its logged intake. A day without intake uses the
+ * average of the logged days among the AVERAGE_DAYS before it, when there are at least
+ * MIN_WEIGH_INS of them; otherwise it has no offset. The moving averages take the daily
+ * offsets (filled-in days included) over the AVERAGE_DAYS ending each day, needing
+ * MIN_WEIGH_INS of them, the same rule as the body averages.
+ */
+export function calorieOffsets(
+  dates: string[],
+  intakeOn: (date: string) => number | null,
+  expenditureOn: (date: string) => number | null,
+): CalorieOffsetDay[] {
+  const offsetOn = new Map<string, CalorieOffset | null>();
+  for (const date of dates) offsetOn.set(date, dayOffset(date, intakeOn, expenditureOn(date)));
+  return dates.map((date) => {
+    const week = Array.from({ length: AVERAGE_DAYS }, (_, back) => offsetOn.get(addDays(date, -back)) ?? null)
+      .filter((offset): offset is CalorieOffset => offset !== null);
+    const enough = week.length >= MIN_WEIGH_INS;
+    return {
+      date,
+      offset: offsetOn.get(date) ?? null,
+      averageKcal: enough ? mean(week.map((offset) => offset.kcal)) : null,
+      averagePercent: enough ? mean(week.map((offset) => offset.percent)) : null,
+    };
+  });
+}
+
+function dayOffset(date: string, intakeOn: (date: string) => number | null, expenditure: number | null): CalorieOffset | null {
+  if (expenditure === null) return null;
+  const logged = positive(intakeOn(date));
+  let intake = logged;
+  if (intake === null) {
+    const before = Array.from({ length: AVERAGE_DAYS }, (_, index) => positive(intakeOn(addDays(date, -(index + 1)))))
+      .filter((calories): calories is number => calories !== null);
+    if (before.length < MIN_WEIGH_INS) return null;
+    intake = mean(before);
+  }
+  return { kcal: expenditure - intake, percent: ((expenditure - intake) / intake) * 100, intakeFilled: logged === null };
+}
+
+/** A logged intake: zero counts as not logged, as in the fit. */
+function positive(calories: number | null): number | null {
+  return calories !== null && calories > 0 ? calories : null;
+}
+
 function isLogged(day: EnergyDay | undefined): day is EnergyDay {
   return day?.calories != null && day.calories > 0;
 }

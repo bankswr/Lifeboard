@@ -11,7 +11,7 @@
 import { html } from "lit-html";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
-import { axisReadings, matchAxes, type MatchedAxes } from "./matchedAxes.ts";
+import { axisReadings, matchAxes, zeroAlignedAxes, type MatchedAxes } from "./matchedAxes.ts";
 
 export interface SeriesSpec {
   label: string;
@@ -55,8 +55,10 @@ export interface ChartSpec {
    * moves by tenths); "symmetric": centered on zero (deltas); "data": exactly the lowest and
    * highest shown values; these apply to both axes. "matched": for two axes in one unit, the
    * same span on both, set by the wider, with ticks at the same heights (matchedAxes.ts).
+   * "zero-aligned": for two axes in different units around zero, zero and the ticks at the
+   * same heights on both (matchedAxes.ts).
    */
-  yRange: "zero" | "span" | "symmetric" | "data" | "matched";
+  yRange: "zero" | "span" | "symmetric" | "data" | "matched" | "zero-aligned";
   minSpan?: number;
   /** Small whole-number counts (visits): ticks at whole steps only, so no two read the same. */
   counts?: boolean;
@@ -160,7 +162,7 @@ function options(spec: ChartSpec, width: number): uPlot.Options {
     // uPlot's own labels: as many decimals as the tick step needs (9.25, not a rounded 9.3).
   };
   const right = hasRightAxis(spec);
-  const matched = spec.yRange === "matched" ? matchedAxes(spec) : null;
+  const matched = spec.yRange === "matched" || spec.yRange === "zero-aligned" ? matchedAxes(spec) : null;
   return {
     width,
     height: spec.height ?? HEIGHT,
@@ -192,7 +194,7 @@ function options(spec: ChartSpec, width: number): uPlot.Options {
 }
 
 /**
- * The shared scale of a "matched" chart, from the values in its shown range (the same dates
+ * The shared scale of a "matched" or "zero-aligned" chart, from the values in its shown range (the same dates
  * `xRange` shows). Null with an axis that has nothing to plot, which then fits its own data.
  */
 function matchedAxes(spec: ChartSpec): MatchedAxes | null {
@@ -203,7 +205,8 @@ function matchedAxes(spec: ChartSpec): MatchedAxes | null {
   const right = axisReadings(shownOn("right"));
   if (!left || !right) return null;
   const plotHeight = (spec.height ?? HEIGHT) - X_AXIS_SIZE;
-  return matchAxes(left, right, Math.floor(plotHeight / Y_TICK_SPACE));
+  const maxTicks = Math.floor(plotHeight / Y_TICK_SPACE);
+  return spec.yRange === "zero-aligned" ? zeroAlignedAxes(left, right, maxTicks) : matchAxes(left, right, maxTicks);
 }
 
 /** The x series of a time-of-day chart: the hovered bin's span, "9:00 – 9:30 AM". */
@@ -309,7 +312,7 @@ function xRange(visibleDays: number | undefined): uPlot.Range.Function {
 function yRange(spec: ChartSpec): uPlot.Range.Function {
   return (_u, min, max) => {
     if (min == null || max == null) return [0, 1];
-    if (spec.yRange === "data" || spec.yRange === "matched") return min === max ? [min - 1, max + 1] : [min, max];
+    if (spec.yRange === "data" || spec.yRange === "matched" || spec.yRange === "zero-aligned") return min === max ? [min - 1, max + 1] : [min, max];
     if (spec.yRange === "zero") return [0, Math.max(1, Math.ceil(max * 1.05))];
     if (spec.yRange === "symmetric") {
       const reach = Math.max(1, Math.abs(min), Math.abs(max)) * 1.1;
