@@ -7,7 +7,7 @@
 import { addDays, localDate } from "./dates.ts";
 import { healthDays } from "./health.ts";
 import type { Db } from "./db/types.ts";
-import { AVERAGE_DAYS, calorieOffsets, checkIntake, computeTargets, datesBetween, minimumDays, slope, trailingAverages, type AveragePoint, type CalorieOffset, type EnergyDay, type Intake, type IntakeCheck, type Targets } from "./energy.ts";
+import { calorieOffset, checkIntake, computeTargets, datesBetween, minimumDays, slope, trailingAverages, type AveragePoint, type CalorieOffset, type EnergyDay, type Intake, type IntakeCheck, type Targets } from "./energy.ts";
 import { analyzeHealth, getHealthSettings, prepareDays, type HealthAnalysis } from "./healthTargets.ts";
 import type { Flag } from "./healthReview.ts";
 import { workoutEnergy, type Workout } from "./workouts.ts";
@@ -60,12 +60,10 @@ export interface HealthPageDay {
   burn: number | null;
   workoutKcal: number;
   /**
-   * The current model's burn estimate minus the logged intake (a missing day filled in from the
-   * week before), and its 7-day moving averages; null for today, whose intake is still partial.
+   * Intake implied by the body composition change and a modelled burn, minus the logged intake,
+   * over the offset window ending that day; null for today, whose intake is still partial.
    */
   calorieOffset: CalorieOffset | null;
-  calorieOffsetAverageKcal: number | null;
-  calorieOffsetAveragePercent: number | null;
 }
 
 export interface PageWorkout extends Workout {
@@ -112,7 +110,7 @@ export async function healthPage(db: Db, today = localDate()): Promise<HealthPag
   const settings = await getHealthSettings(db);
   const first = addDays(today, -(HEALTH_PAGE_DAYS - 1));
   // Enough before the first shown day for its window and averages, plus the review's lookback.
-  const spanStart = addDays(first, -(settings.windowDays + 3 * 7));
+  const spanStart = addDays(first, -(Math.max(settings.windowDays, settings.offsetWindowDays) + 3 * 7));
   const { days, flags, cleaned, workouts } = await prepareDays(db, spanStart, addDays(today, -1), settings);
 
   const rawByDate = new Map(days.map((day) => [day.date, day]));
@@ -129,18 +127,12 @@ export async function healthPage(db: Db, today = localDate()): Promise<HealthPag
 
   const simple = new Map<string, Targets | null>();
   const split = new Map<string, Targets | null>();
-  // From a week before the first shown day, for the calorie offset's moving average.
-  const offsetStart = addDays(first, -(AVERAGE_DAYS - 1));
-  for (const date of datesBetween(offsetStart, today)) {
+  for (const date of datesBetween(first, today)) {
     simple.set(date, computeTargets(date, cleaned, { ...settings, energyModel: "simple" }));
     split.set(date, computeTargets(date, cleaned, { ...settings, energyModel: "split" }));
   }
   const current = settings.energyModel === "split" ? split : simple;
   // The day after's estimate holds each day's own burn (it uses only earlier days).
-  const offsets = new Map(
-    calorieOffsets(datesBetween(offsetStart, addDays(today, -1)), (date) => cleanedByDate.get(date)?.calories ?? null, (date) => current.get(date)?.expenditure ?? null)
-      .map((day) => [day.date, day]),
-  );
   const nextDay = (date: string) => (date < today ? current.get(addDays(date, 1)) ?? null : null);
 
   const rows: HealthPageDay[] = datesBetween(first, today).map((date) => {
@@ -172,9 +164,7 @@ export async function healthPage(db: Db, today = localDate()): Promise<HealthPag
       expenditureSplit: split.get(date)?.method === "trend" ? split.get(date)!.expenditure : null,
       burn: nextDay(date)?.previousDayExpenditure ?? null,
       workoutKcal: energy?.workoutKcal ?? 0,
-      calorieOffset: offsets.get(date)?.offset ?? null,
-      calorieOffsetAverageKcal: offsets.get(date)?.averageKcal ?? null,
-      calorieOffsetAveragePercent: offsets.get(date)?.averagePercent ?? null,
+      calorieOffset: date < today ? calorieOffset(date, cleaned, settings) : null,
     };
   });
 

@@ -53,6 +53,14 @@ route(/^\/health-settings$/, async () => {
           ${number("fallbackActivityFactor", "Activity factor while history is short (× BMR)", "0.025")}
         </fieldset>
         <fieldset>
+          <legend>Calorie offset</legend>
+          <div class="field-row">
+            ${number("offsetWindowDays", "Rolling window, days", "1")}
+            ${number("baseActivityFactor", "Base factor (× BMR)", "0.025")}
+          </div>
+          <p class="muted small">Checks the log against body composition. The burn is base factor × BMR plus steps and workouts, so the base covers only digestion and light movement (about 1.2).</p>
+        </fieldset>
+        <fieldset>
           <legend>Flag as suspicious</legend>
           <div class="field-row">
             ${number("lowCaloriesPercent", "Calories under % of estimated burn", "1")}
@@ -114,6 +122,8 @@ async function save(event: SubmitEvent) {
       gainWarnPercent: value("gainWarnPercent"),
       fallbackActivityFactor: value("fallbackActivityFactor"),
       maintenanceTolerancePercent: value("maintenanceTolerancePercent"),
+      offsetWindowDays: value("offsetWindowDays"),
+      baseActivityFactor: value("baseActivityFactor"),
       lowCaloriesPercent: value("lowCaloriesPercent"),
       lowCaloriesFloor: value("lowCaloriesFloor"),
       maxSteps: value("maxSteps"),

@@ -38,6 +38,10 @@ export interface TargetSettings {
   fallbackActivityFactor: number;
   /** With a maintenance goal, a day's calories count as on target within ± this % of the target. */
   maintenanceTolerancePercent: number;
+  /** Calorie offset: days its rolling window covers. */
+  offsetWindowDays: number;
+  /** Calorie offset: burn besides steps and workouts, × BMR (digestion, light movement). */
+  baseActivityFactor: number;
 }
 
 /** One day's inputs, already cleaned: null where there's no value or it was left out. */
@@ -352,68 +356,63 @@ function goalWarnings(settings: TargetSettings, weightLbs: number): string[] {
   return [];
 }
 
-// ---------- calorie offset: estimated burn against logged intake (user, 2026-11-13) ----------
+// ---------- calorie offset: logging error from body composition (user, 2026-11-14) ----------
 
 export interface CalorieOffset {
-  /** Estimated expenditure − intake, kcal; above zero: burned more than was logged. */
+  /** Implied intake − logged intake, kcal/day; above zero: more was eaten than logged. */
   kcal: number;
-  /** The same as a share of the intake, %. */
+  /** The same as a share of the logged intake, %. */
   percent: number;
-  /** No intake logged that day: the average of the logged days in the week before was used. */
-  intakeFilled: boolean;
-}
-
-export interface CalorieOffsetDay {
-  date: string;
-  offset: CalorieOffset | null;
-  /** Mean of the daily offsets over the 7 days ending that day; null with fewer than 3. */
-  averageKcal: number | null;
-  averagePercent: number | null;
+  /** Mean logged intake of the window's logged days, kcal/day. */
+  loggedIntake: number;
+  /** Mean modelled burn: base factor × BMR + steps + workouts, none of it from intake. */
+  modelledBurn: number;
+  /** Energy stored per day by the fat and lean mass trends (negative when losing). */
+  storedPerDay: number;
+  /** What must have been eaten for that burn and that change: modelledBurn + storedPerDay. */
+  impliedIntake: number;
 }
 
 /**
- * Each day's estimated expenditure minus its logged intake. A day without intake uses the
- * average of the logged days among the AVERAGE_DAYS before it, when there are at least
- * MIN_WEIGH_INS of them; otherwise it has no offset. The moving averages take the daily
- * offsets (filled-in days included) over the AVERAGE_DAYS ending each day, needing
- * MIN_WEIGH_INS of them, the same rule as the body averages.
+ * How far the logged intake is from what the body composition says was eaten, over the
+ * `offsetWindowDays` ending on `date` (included). The burn is modelled without the intake
+ * (base factor × Katch-McArdle BMR + step and workout energy) so the intake's error doesn't
+ * cancel out, as it would with the fitted burn. The stored energy is the split model's: the
+ * slopes of the 7-day average fat and lean mass. Needs half the window logged, with fresh
+ * averages and with steps; otherwise null. `days` must cover the window plus 6 days before.
  */
-export function calorieOffsets(
-  dates: string[],
-  intakeOn: (date: string) => number | null,
-  expenditureOn: (date: string) => number | null,
-): CalorieOffsetDay[] {
-  const offsetOn = new Map<string, CalorieOffset | null>();
-  for (const date of dates) offsetOn.set(date, dayOffset(date, intakeOn, expenditureOn(date)));
-  return dates.map((date) => {
-    const week = Array.from({ length: AVERAGE_DAYS }, (_, back) => offsetOn.get(addDays(date, -back)) ?? null)
-      .filter((offset): offset is CalorieOffset => offset !== null);
-    const enough = week.length >= MIN_WEIGH_INS;
-    return {
-      date,
-      offset: offsetOn.get(date) ?? null,
-      averageKcal: enough ? mean(week.map((offset) => offset.kcal)) : null,
-      averagePercent: enough ? mean(week.map((offset) => offset.percent)) : null,
-    };
-  });
-}
+export function calorieOffset(date: string, days: EnergyDay[], settings: TargetSettings): CalorieOffset | null {
+  const byDate = new Map(days.map((day) => [day.date, day]));
+  const windowDates = datesBetween(addDays(date, -(settings.offsetWindowDays - 1)), date);
+  const needed = Math.ceil(settings.offsetWindowDays / 2);
 
-function dayOffset(date: string, intakeOn: (date: string) => number | null, expenditure: number | null): CalorieOffset | null {
-  if (expenditure === null) return null;
-  const logged = positive(intakeOn(date));
-  let intake = logged;
-  if (intake === null) {
-    const before = Array.from({ length: AVERAGE_DAYS }, (_, index) => positive(intakeOn(addDays(date, -(index + 1)))))
-      .filter((calories): calories is number => calories !== null);
-    if (before.length < MIN_WEIGH_INS) return null;
-    intake = mean(before);
+  const intakes = windowDates.map((d) => byDate.get(d)).filter(isLogged).map((day) => day.calories!);
+  if (intakes.length < needed) return null;
+
+  const weight = trailingAverages(windowDates, (d) => byDate.get(d)?.weightLbs ?? null);
+  const bodyFat = trailingAverages(windowDates, (d) => byDate.get(d)?.bodyFatPercent ?? null);
+  const freshDates = windowDates.filter((d) => !weight.get(d)!.carried && !bodyFat.get(d)!.carried);
+  if (freshDates.length < needed) return null;
+  const x = (d: string) => (Date.parse(d) - Date.parse(windowDates[0])) / 86_400_000;
+  const split = splitTrend(freshDates, weight, bodyFat, x);
+  if (split === null) return null;
+  const storedPerDay = split.fatPerDay * KCAL_PER_LB_FAT + split.leanPerDay * KCAL_PER_LB_LEAN;
+
+  const burns: number[] = [];
+  for (const d of windowDates) {
+    const w = weight.get(d)!.value;
+    const bf = bodyFat.get(d)!.value;
+    const day = byDate.get(d);
+    if (w === null || bf === null || day?.steps == null) continue;
+    burns.push(settings.baseActivityFactor * katchMcArdle(w * (1 - bf / 100)) + stepEnergy(day.steps, w) + (day.workoutKcal ?? 0));
   }
-  return { kcal: expenditure - intake, percent: ((expenditure - intake) / intake) * 100, intakeFilled: logged === null };
-}
+  if (burns.length < needed) return null;
 
-/** A logged intake: zero counts as not logged, as in the fit. */
-function positive(calories: number | null): number | null {
-  return calories !== null && calories > 0 ? calories : null;
+  const loggedIntake = mean(intakes);
+  const modelledBurn = mean(burns);
+  const impliedIntake = modelledBurn + storedPerDay;
+  const kcal = impliedIntake - loggedIntake;
+  return { kcal, percent: (kcal / loggedIntake) * 100, loggedIntake, modelledBurn, storedPerDay, impliedIntake };
 }
 
 function isLogged(day: EnergyDay | undefined): day is EnergyDay {

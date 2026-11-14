@@ -29,6 +29,8 @@ export const DEFAULT_HEALTH_SETTINGS: HealthSettings = {
   gainWarnPercent: 0.5,
   fallbackActivityFactor: 1.375,
   maintenanceTolerancePercent: 5,
+  offsetWindowDays: 14,
+  baseActivityFactor: 1.2,
   lowCaloriesPercent: 50,
   lowCaloriesFloor: 1000,
   maxSteps: 40000,
@@ -55,6 +57,8 @@ export async function saveHealthSettings(db: Db, settings: HealthSettings): Prom
     ["gainWarnPercent", "The gain warning", 0, 5],
     ["fallbackActivityFactor", "The activity factor", 1, 2.5],
     ["maintenanceTolerancePercent", "The maintenance tolerance", 0, 25],
+    ["offsetWindowDays", "The calorie offset window", 7, 60],
+    ["baseActivityFactor", "The base activity factor", 1, 2],
     ["lowCaloriesPercent", "The low-calorie percentage", 0, 100],
     ["lowCaloriesFloor", "The low-calorie floor", 0, 5000],
     ["maxSteps", "The step limit", 1000, 200000],
@@ -71,6 +75,7 @@ export async function saveHealthSettings(db: Db, settings: HealthSettings): Prom
     if (!Number.isFinite(value) || value < min || value > max) throw new Error(`${label} must be between ${min} and ${max}.`);
   }
   if (!Number.isInteger(settings.windowDays)) throw new Error("The fit window must be a whole number of days.");
+  if (!Number.isInteger(settings.offsetWindowDays)) throw new Error("The calorie offset window must be a whole number of days.");
   if (settings.energyModel !== "simple" && settings.energyModel !== "split") throw new Error("Unknown energy model.");
   await saveRecord(db, "setting", { id: SETTING_ID, value: JSON.stringify(settings) });
 }

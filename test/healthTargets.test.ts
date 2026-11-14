@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import { addDays } from "../src/core/dates.ts";
 import { migrate } from "../src/core/db/schema.ts";
 import {
-  calorieOffsets, checkIntake, computeTargets, datesBetween, katchMcArdle, KCAL_PER_LB_FAT, KCAL_PER_LB_LEAN, slope, trailingAverages, type EnergyDay,
+  calorieOffset, checkIntake, computeTargets, datesBetween, katchMcArdle, KCAL_PER_LB_FAT, KCAL_PER_LB_LEAN, slope, stepEnergy, trailingAverages, type EnergyDay,
 } from "../src/core/energy.ts";
 import { replaceHealthPoints, saveNutritionDays, type HealthDay } from "../src/core/health.ts";
+import { summarizeDays } from "../src/core/healthSummary.ts";
+import { STEP_SOURCES } from "../src/core/steps.ts";
 import { alertNewFlags, reviewDays, setVerdict, type Verdict } from "../src/core/healthReview.ts";
 import { healthPage } from "../src/core/healthPage.ts";
 import { analyzeHealth, DEFAULT_HEALTH_SETTINGS, saveHealthSettings, targetHistory } from "../src/core/healthTargets.ts";
@@ -41,33 +43,49 @@ describe("energy building blocks", () => {
   });
 });
 
-describe("calorieOffsets", () => {
-  const dates = datesBetween("2026-10-01", "2026-10-10");
-  const offsets = (intake: Record<string, number>, expenditure = (_date: string): number | null => 2400) =>
-    calorieOffsets(dates, (date) => intake[date] ?? null, expenditure);
+describe("calorieOffset", () => {
+  const yesterday = addDays(TODAY, -1);
 
-  it("is burn − intake in kcal and as a % of intake, with a 7-day moving average", () => {
-    const intake = Object.fromEntries(dates.map((date, i) => [date, i % 2 ? 2000 : 2400]));
-    const result = offsets(intake);
-    expect(result[1].offset).toEqual({ kcal: 400, percent: 20, intakeFilled: false });
-    expect(result[0].offset!.kcal).toBe(0);
-    expect(result[1].averageKcal).toBeNull(); // 2 days so far
-    expect(result[2].averageKcal).toBeCloseTo(400 / 3);
-    // Days 4–10: four at 2,400 (0) and three at 2,000 (+400, +20%) in the week ending day 10.
-    expect(result[9].averageKcal).toBeCloseTo((4 * 400) / 7);
-    expect(result[9].averagePercent).toBeCloseTo((4 * 20) / 7); // day 10 is odd-indexed: 2,000
+  it("with steady weight, is the modelled burn minus the logged intake", () => {
+    const offset = calorieOffset(yesterday, steadyLoss(30, () => ({ weightLbs: 200 })), settings)!;
+    const burn = 1.2 * katchMcArdle(160) + stepEnergy(8000, 200);
+    expect(offset.storedPerDay).toBeCloseTo(0);
+    expect(offset.modelledBurn).toBeCloseTo(burn);
+    expect(offset.impliedIntake).toBeCloseTo(burn);
+    expect(offset.kcal).toBeCloseTo(burn - 2000);
+    expect(offset.percent).toBeCloseTo(((burn - 2000) / 2000) * 100);
   });
 
-  it("fills a day without a log from the logged days in the week before, needing 3", () => {
-    const result = offsets({ "2026-10-01": 1800, "2026-10-02": 2000, "2026-10-04": 2200, "2026-10-06": 0 });
-    expect(result[2].offset).toBeNull(); // only 2 logged days before 10-03
-    expect(result[4].offset).toEqual({ kcal: 400, percent: 20, intakeFilled: true }); // 10-05: average 2,000
-    expect(result[5].offset!.intakeFilled).toBe(true); // a zero is not a log
-    expect(result[9].offset).toBeNull(); // 10-10: only 10-04 in the week before
+  it("counts the fat and lean mass change as stored energy", () => {
+    const offset = calorieOffset(yesterday, steadyLoss(30), settings)!;
+    // −0.1 lb/day at 20% body fat: 0.02 lb fat and 0.08 lb lean a day.
+    expect(offset.storedPerDay).toBeCloseTo(-0.1 * (0.2 * KCAL_PER_LB_FAT + 0.8 * KCAL_PER_LB_LEAN));
+    expect(offset.impliedIntake).toBeCloseTo(offset.modelledBurn + offset.storedPerDay);
+    expect(offset.kcal).toBeCloseTo(offset.impliedIntake - 2000);
   });
 
-  it("has no offset without a burn estimate", () => {
-    expect(offsets({ "2026-10-01": 2000 }, () => null)[0].offset).toBeNull();
+  it("doesn't take the burn from the log: logging less raises the offset by as much", () => {
+    const logged = calorieOffset(yesterday, steadyLoss(30), settings)!;
+    const under = calorieOffset(yesterday, steadyLoss(30, () => ({ calories: 1700 })), settings)!;
+    expect(under.impliedIntake).toBeCloseTo(logged.impliedIntake);
+    expect(under.kcal - logged.kcal).toBeCloseTo(300);
+  });
+
+  it("uses only the window's days, and adds workouts to the burn", () => {
+    const quiet = calorieOffset(yesterday, steadyLoss(30, () => ({ weightLbs: 200 })), settings)!;
+    // A 700 kcal workout two days before the window, and one 140 kcal workout inside it.
+    const days = steadyLoss(30, (day) => ({
+      weightLbs: 200,
+      workoutKcal: day.date === addDays(yesterday, -15) ? 700 : day.date === addDays(yesterday, -3) ? 140 : 0,
+    }));
+    expect(calorieOffset(yesterday, days, settings)!.modelledBurn - quiet.modelledBurn).toBeCloseTo(10);
+  });
+
+  it("needs half the window logged", () => {
+    const days = steadyLoss(30, (_day, index) => (index >= 23 ? { calories: null } : {})); // last 7 not logged
+    expect(calorieOffset(yesterday, days, settings)).not.toBeNull();
+    const fewer = steadyLoss(30, (_day, index) => (index >= 22 ? { calories: null } : {}));
+    expect(calorieOffset(yesterday, fewer, settings)).toBeNull();
   });
 });
 
@@ -209,6 +227,12 @@ describe("analyzeHealth (database)", () => {
     await replaceHealthPoints(db, "weight", `${odd}T00:00:00Z`, `${addDays(odd, 1)}T00:00:00Z`, [
       { id: `weight-${odd}`, type: "weight", day: odd, startTime: `${odd}T12:00:00Z`, endTime: `${odd}T12:00:00Z`, value: 210 / 0.00220462262185, source: "scale" },
     ]);
+    // Steps for the calorie offset's modelled burn.
+    const stepDays = datesBetween(addDays(TODAY, -45), addDays(TODAY, -1));
+    await replaceHealthPoints(db, "steps", `${stepDays[0]}T00:00:00Z`, `${TODAY}T00:00:00Z`, stepDays.map((d) => (
+      { id: `steps-${d}`, type: "steps", day: d, startTime: `${d}T12:00:00Z`, endTime: `${d}T13:00:00Z`, value: 8000, source: STEP_SOURCES.primary[0] }
+    )));
+    await summarizeDays(db, stepDays[0], stepDays.at(-1)!);
     const page = await healthPage(db, TODAY);
     expect(page.days).toHaveLength(90);
     expect(page.days.at(-1)!.date).toBe(TODAY);
@@ -219,11 +243,10 @@ describe("analyzeHealth (database)", () => {
     expect(yesterday.met).not.toBeNull();
     expect(yesterday.expenditureSimple).toBeCloseTo(2350, -1);
     expect(page.days.find((d) => d.date === odd)!.weightState).toBe("pending");
-    // Calorie offset: the current model's burn (≈2,350) − 2,000 kcal logged.
-    expect(yesterday.calorieOffset!.kcal).toBeCloseTo(yesterday.expenditureSimple! - 2000);
-    expect(yesterday.calorieOffset!.percent).toBeCloseTo(yesterday.calorieOffset!.kcal / 20);
-    expect(yesterday.calorieOffsetAverageKcal).not.toBeNull();
-    expect(page.days[0].calorieOffsetAverageKcal).toBeNull(); // no data that far back
+    // Calorie offset: implied intake (modelled burn + stored energy) − 2,000 kcal logged.
+    expect(yesterday.calorieOffset!.kcal).toBeCloseTo(yesterday.calorieOffset!.impliedIntake - 2000);
+    expect(yesterday.calorieOffset!.loggedIntake).toBeCloseTo(2000);
+    expect(page.days[0].calorieOffset).toBeNull(); // no data that far back
     expect(page.days.at(-1)!.calorieOffset).toBeNull(); // today's intake is partial
   });
 

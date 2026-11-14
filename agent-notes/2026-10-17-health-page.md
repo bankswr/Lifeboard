@@ -131,19 +131,29 @@ removed (port 5181).
 - The adjusted trend must be fitted on `adFfmiOn`, not `ffmiOn`: the slope is the same (constant
   offset) but the line would start ~0.18 below its average line. A test checks the start points.
 
-## Calorie offset graph (2026-11-13, user)
-- "Calorie offset" in the graph selector: estimated burn − logged intake per day, kcal on the
-  left axis and as a % of the intake on the right ((burn − intake) ÷ intake, user's choice over
-  the plain burn ÷ intake ratio), dots per day plus each one's 7-day moving average.
-- Burn is the current energy model's morning estimate of the average daily burn (`expenditure`
-  of `computeTargets`, the settings window, 28 days by default), not the day's own
-  step-adjusted burn (user agreed). So the daily offset mostly shows intake swings.
-- Intake is the cleaned calories (flagged, pending or rejected days count as not logged). A
-  day without a log uses the mean of the logged days among the 7 before, needing 3; those days
-  are hollow dots and still count in the moving average. The moving average is the mean of the
-  daily values over the 7 days ending that day, needing 3 (the % line is the mean of daily %,
-  not the kcal line rescaled). Ends yesterday: today's intake is partial.
-- Pure logic in `calorieOffsets` (`core/energy.ts`), tested. The chart uses a new
+## Calorie offset graph (2026-11-13, reworked 2026-11-14, user)
+- Purpose (user): estimate how wrong the Cronometer log is, by checking it against the energy
+  the body composition says was stored. The first version (2026-11-13) used the fitted burn,
+  which is itself logged intake − stored energy, so it was circular and couldn't show a logging
+  error; replaced.
+- Now, for the rolling window ending each day (`offsetWindowDays`, default 14; user chose
+  rolling over calendar weeks): implied intake = modelled burn + stored energy; offset =
+  implied − mean logged intake, kcal/day and % of logged. Above zero: ate more than logged.
+  - Modelled burn uses no intake: `baseActivityFactor` (default 1.2) × Katch-McArdle BMR +
+    step energy + workout energy, averaged over the window's days with averages and steps.
+  - Stored energy is always the split model (fat 9,400 / lean 1,800 kcal per kg) on the slopes
+    of the 7-day average fat and lean mass, whatever energy model Settings uses.
+  - Needs half the window logged, with fresh averages and with steps; otherwise no value.
+- Base factor fixed rather than scaled by steps or heart rate (user agreed 2026-11-14): steps
+  already add a per-step cost, so scaling the factor by steps counts walking twice; heart rate
+  only detects workouts (see [Heart rate vs steps](2026-10-17-heart-rate-vs-steps.md)). The
+  base covers digestion and light movement. It's in Settings ("Calorie offset") for tuning: any
+  error in it shifts the whole line by that share of BMR.
+- Real data, 2026-11-14 (14-day window): modelled burn ~3,100–3,200 kcal/day; offset +500 to
+  +760 kcal (20–30%) through September and October, falling to about 0 by 2026-11-13.
+- Pure logic in `calorieOffset` (`core/energy.ts`), tested. The chart keeps
   `yRange: "zero-aligned"` (`zeroAlignedAxes` in `app/ui/matchedAxes.ts`): each axis has its
   own round step, and both run the same number of steps below and above zero, so zero and the
   ticks sit at the same heights.
+- Test gotcha: seeded steps count only from a `STEP_SOURCES` source (the ring), and only after
+  `summarizeDays`.
