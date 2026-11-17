@@ -36,11 +36,13 @@ const OVERLAP_DAYS = 3;
 
 /**
  * The data that should arrive every day, so its silence means something stopped syncing rather
- * than a quiet day. Two because they fail separately: the ring went silent for days while the
- * phone's steps kept arriving (2026-10-29). Over 90 days neither had a gap above 12 hours.
+ * than a quiet day. Separate because they fail separately: the ring went silent for days while
+ * the phone's steps kept arriving (2026-10-29), and its steps stopped on 2026-11-05 while its
+ * heart rate went on until 2026-11-13. Over 90 days none had a gap above 12 hours.
  */
 const HEALTH_CANARIES: { subject: string; type: PointType; sources: string[] }[] = [
   { subject: "Phone steps", type: "steps", sources: ["com.android.healthconnect.phone", "com.google.android.apps.fitness"] },
+  { subject: "Ring steps", type: "steps", sources: STEP_SOURCES.primary },
   { subject: "Ring heart rate", type: "heart-rate", sources: STEP_SOURCES.primary },
 ];
 
@@ -132,9 +134,11 @@ async function pullTodaysWeighIn(db: Db, token: string, today: string) {
 async function healthDataReadings(db: Db, token: string, today: string): Promise<Reading[]> {
   const { healthDataStaleHours } = await getHealthSettings(db);
   const readings: Reading[] = [];
+  // One request per type, shared by the canaries that watch it.
+  const pointsByType = new Map<PointType, DataPoint[]>();
   for (const { subject, type, sources } of HEALTH_CANARIES) {
-    const points = await listDataPoints(token, type, addDays(today, -1), addDays(today, 1));
-    const fetched = points
+    if (!pointsByType.has(type)) pointsByType.set(type, await listDataPoints(token, type, addDays(today, -1), addDays(today, 1)));
+    const fetched = pointsByType.get(type)!
       .map((point) => toHealthPoint(type, point))
       .filter((point): point is HealthPoint => point !== null && sources.includes(point.source))
       .map((point) => point.endTime);

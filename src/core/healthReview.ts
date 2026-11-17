@@ -115,7 +115,8 @@ export function reviewDays(
     cleaned.push({
       date: day.date,
       calories: dayCounts ? day.calories : null,
-      steps: day.steps,
+      // Without the ring the count is only the treadmill's: left out, so the typical day fills it.
+      steps: day.ringStepsMissing ? null : day.steps,
       weightLbs: weight,
       bodyFatPercent: bodyFat,
     });

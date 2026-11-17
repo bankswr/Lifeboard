@@ -1,5 +1,6 @@
 // The database schema, versioned with SQLite's PRAGMA user_version (approach from FitApp).
 // Both devices run the same migrations. Never edit a shipped migration; append a new one.
+import { resummarizeAll } from "../healthSummary.ts";
 import { insertDefaultRules } from "../rules.ts";
 import { saveRecord, syncColumns } from "../sync/records.ts";
 import type { Db } from "./types.ts";
@@ -349,6 +350,13 @@ export const MIGRATIONS: (string | ((db: Db) => Promise<void>))[] = [
   insertDefaultRules,
   // 26: tasks kept out of Google (user, 2026-11-05; schedule/edit.ts addTask).
   "ALTER TABLE task ADD COLUMN local_only INTEGER NOT NULL DEFAULT 0;",
+  // 27: days whose steps have nothing from the ring (core/steps.ts daysWithoutPrimary); the
+  // analysis gives them the typical day instead (user, 2026-11-17). Days with raw data here are
+  // re-summarized so they're marked and synced; older days stay unmarked.
+  async (db) => {
+    await db.exec("ALTER TABLE health_day_summary ADD COLUMN ring_steps_missing INTEGER NOT NULL DEFAULT 0;");
+    await resummarizeAll(db);
+  },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

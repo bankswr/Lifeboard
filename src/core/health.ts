@@ -139,6 +139,8 @@ export interface HealthDay {
   weightLbs: number | null;
   bodyFatPercent: number | null;
   steps: number | null;
+  /** The day's steps have nothing from the ring, so they're only the treadmill's. */
+  ringStepsMissing: boolean;
   /** Mean of the day's heart-rate samples. */
   averageHeartRate: number | null;
   restingHeartRate: number | null;
@@ -168,7 +170,7 @@ export async function healthDays(db: Db, start: string, end: string): Promise<He
   const average = (type: PointType, day: string) => averages.get(`${type} ${day}`) ?? null;
   // Steps and heart rate come from the synced daily summaries (core/healthSummary.ts).
   const summaries = new Map(
-    (await db.all("SELECT date, steps, average_heart_rate FROM health_day_summary WHERE date BETWEEN ? AND ? AND deleted = 0", [start, end]))
+    (await db.all("SELECT date, steps, ring_steps_missing, average_heart_rate FROM health_day_summary WHERE date BETWEEN ? AND ? AND deleted = 0", [start, end]))
       .map((row) => [row.date as string, row]),
   );
 
@@ -188,6 +190,7 @@ export async function healthDays(db: Db, start: string, end: string): Promise<He
       weightLbs: grams === null ? null : grams * LBS_PER_GRAM,
       bodyFatPercent: average("body-fat", date),
       steps: summary?.steps == null ? null : Math.round(summary.steps),
+      ringStepsMissing: summary?.ring_steps_missing === 1,
       averageHeartRate: heartRate === null ? null : Math.round(heartRate),
       restingHeartRate: resting === null ? null : Math.round(resting),
     });

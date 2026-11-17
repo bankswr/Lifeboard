@@ -39,7 +39,8 @@ Google API** (needs the user's interactive sign-in); tested against a fake API.
   over 30 days count as retired, or the weight type's old sources would force 90-day fetches
   forever. A ring outage longer than 30 days loses the part older than that (the alert below
   should come long before).
-- **Canaries** (`HEALTH_CANARIES`): phone steps and ring heart rate, a `health_data` reading per
+- **Canaries** (`HEALTH_CANARIES`): phone steps and ring heart rate (ring steps added 2026-11-17,
+  see below), a `health_data` reading per
   update and the editable default rule `default-health-data-stale`. Two, because steps from any
   source stayed fresh during the ring outage. Largest gaps over 90 days: phone steps 11.9 h,
   ring heart rate 6.2 h, ring steps 9.5 h, treadmill 112.8 h (unusable). These are gaps in when
@@ -60,10 +61,24 @@ Google API** (needs the user's interactive sign-in); tested against a fake API.
   reads days before today only, so targets and flags don't move (tested). Not in the graphs or
   the Data table, which also stop at yesterday.
 
-## Not changed: days without the ring
-`steps.ts` ignores phone steps, so a day without the ring counts only the treadmill (2026-10-31
-shows 11,114, treadmill only). Effect on the targets not checked. Corrected for the outage
-only if the ring's backlog reaches Google.
+## Days without the ring (2026-11-17)
+- **What happened:** RingConn stopped writing steps to Google Health after 2026-11-05 21:30 local
+  (heart rate went on until 2026-11-13); confirmed by querying Google directly, so not a Lifeboard
+  pull problem. `steps.ts` ignores phone steps, so 2026-11-06 to 11-16 counted only the treadmill
+  (6.7-14k against the usual ~15k). Only the ring heart-rate canary existed, so nothing warned
+  until 2026-11-14.
+- **Built (user):** a third canary, "Ring steps". And `health_day_summary.ring_steps_missing`
+  (migration 27, `daysWithoutPrimary`): a day with steps but none from the ring. The review
+  (`reviewDays`) treats its steps as missing, so the analysis uses the typical day (median of the
+  14 days before), marked estimated; the Health table shows `†≈typical (recorded)` and the steps
+  graph leaves the day out. Phone steps as a fallback was offered and not chosen (the phone reads
+  ~3-5k/day against the ring's 10-15k).
+- **Effect on the real data:** today's calorie target is unchanged (the window's expenditure
+  comes from intake and the body-composition trend); the step share of the burn, the fitted
+  base multiple, each day's own burn and the calorie offset change.
+- Migration 27 re-summarizes only days that still have raw data (90 days, desktop); the phone
+  gets the marks through sync. If the ring's backlog reaches Google within 30 days of the stall,
+  the next pull reads it and the mark clears itself.
 
 ## Sign-in
 - **Desktop only for now.** Settings → Connections → "Sign in with Google" →

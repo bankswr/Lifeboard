@@ -9,7 +9,7 @@ import { dailyHealth, healthCatchUpDay, replaceHealthPoints, saveNutritionDays, 
 import { RAW_KEEP_DAYS, summarizeDays, summarizeNewDays } from "../src/core/healthSummary.ts";
 import { getHealthSettings, saveHealthSettings } from "../src/core/healthTargets.ts";
 import { collectChanges } from "../src/core/sync/sync.ts";
-import { stepsByDay, type StepPoint } from "../src/core/steps.ts";
+import { daysWithoutPrimary, stepsByDay, type StepPoint } from "../src/core/steps.ts";
 import { runUpdate } from "../src/core/updates.ts";
 import { openNodeDb } from "../src/desktop/db/nodeSqlite.ts";
 
@@ -49,6 +49,15 @@ describe("stepsByDay (ported from FitThing)", () => {
       step(TREADMILL, "10:15", "11:00", 4000),
     ]);
     expect(totals.get("2026-10-03")).toBe(300 + 4000);
+  });
+
+  it("finds days with steps but none from the ring", () => {
+    const other = (day: string, source: string): StepPoint => ({ ...step(source, "10:00", "10:30", 100), day });
+    const missing = daysWithoutPrimary([
+      other("2026-10-01", RING), other("2026-10-01", TREADMILL),
+      other("2026-10-02", TREADMILL), other("2026-10-02", "com.google.android.apps.fitness"),
+    ]);
+    expect([...missing]).toEqual(["2026-10-02"]);
   });
 
   it("counts a treadmill session uploaded twice once", () => {
@@ -130,6 +139,18 @@ describe("health storage and the daily summary", () => {
     const before = (await collectChanges(db, 0)).seq;
     await summarizeDays(db, yesterday, yesterday);
     expect((await collectChanges(db, 0)).seq).toBe(before);
+  });
+
+  it("marks a day whose steps have nothing from the ring", async () => {
+    const db = await newDb();
+    const range = [`${yesterday}T00:00:00Z`, `${localDate()}T00:00:00Z`] as const;
+    await replaceHealthPoints(db, "steps", ...range, [point("t1", "steps", 7000, TREADMILL), point("p1", "steps", 3000, "com.google.android.apps.fitness")]);
+    await summarizeDays(db, yesterday, yesterday);
+    expect((await dailyHealth(db, 1))[0]).toMatchObject({ steps: 7000, ringStepsMissing: true });
+
+    await replaceHealthPoints(db, "steps", ...range, [point("t1", "steps", 7000, TREADMILL), point("r1", "steps", 9000)]);
+    await summarizeDays(db, yesterday, yesterday);
+    expect((await dailyHealth(db, 1))[0]).toMatchObject({ ringStepsMissing: false });
   });
 
   it("drops raw data older than the retention but keeps those days' summaries", async () => {
@@ -317,6 +338,19 @@ describe("Google integration", () => {
         expect((await runUpdate(db, [google])).alerts).toEqual([]);
         await store(20);
         expect((await runUpdate(db, [google])).alerts).toHaveLength(1);
+      });
+    });
+
+    it("warns about the ring's steps on their own, while its heart rate still arrives", async () => {
+      const site = fakeGoogle(true);
+      await withFetch(site.fetch, async () => {
+        const db = await pulledDb();
+        await replaceHealthPoints(db, "heart-rate", "2000-01-01T00:00:00Z", "2100-01-01T00:00:00Z",
+          [raw("hr", "heart-rate", RING, today, hoursAgo(1))]);
+        await replaceHealthPoints(db, "steps", "2000-01-01T00:00:00Z", "2100-01-01T00:00:00Z",
+          [raw("s", "steps", RING, today, hoursAgo(30))]);
+        const { alerts } = await runUpdate(db, [google]);
+        expect(alerts.map((a) => a.message)).toEqual(["Ring steps: nothing new in Google Health for 30 hours. Check that it's still syncing."]);
       });
     });
 

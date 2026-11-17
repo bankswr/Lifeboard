@@ -50,8 +50,12 @@ export interface HealthPageDay {
   ffmi: number | null;
   adFfmi: number | null;
   steps: number | null;
-  /** The typical day filled in for a day without steps. */
+  /** The typical day filled in for a day without steps, or without the ring's. */
   stepsEstimated: boolean;
+  /** No steps from the ring that day; `recordedSteps` is then only the treadmill's. */
+  ringStepsMissing: boolean;
+  /** Steps as recorded, before any fill-in. */
+  recordedSteps: number | null;
   restingHeartRate: number | null;
   /** Average daily burn as estimated that morning (from the days before), with each model. */
   expenditureSimple: number | null;
@@ -159,6 +163,8 @@ export async function healthPage(db: Db, today = localDate()): Promise<HealthPag
       adFfmi: adFfmiOn(date)?.value ?? null,
       steps: energy?.steps ?? null,
       stepsEstimated: energy?.stepsEstimated === true,
+      ringStepsMissing: raw?.ringStepsMissing === true,
+      recordedSteps: raw?.steps ?? null,
       restingHeartRate: raw?.restingHeartRate ?? null,
       expenditureSimple: simple.get(date)?.expenditure ?? null,
       expenditureSplit: split.get(date)?.method === "trend" ? split.get(date)!.expenditure : null,

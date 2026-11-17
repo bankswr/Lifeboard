@@ -34,6 +34,15 @@ export function stepsByDay(points: StepPoint[], sources = STEP_SOURCES): Map<str
   return totals;
 }
 
+/**
+ * Days with steps but none from the ring: it stopped syncing or wasn't worn, so the day's total
+ * is only the treadmill's (2026-11-06 to 11-16 read 7-10k against the usual ~15k).
+ */
+export function daysWithoutPrimary(points: StepPoint[], sources = STEP_SOURCES): Set<string> {
+  const withPrimary = new Set(points.filter((p) => sources.primary.includes(p.source)).map((p) => p.day));
+  return new Set(points.map((p) => p.day).filter((day) => !withPrimary.has(day)));
+}
+
 /** Overlapping sessions become one, keeping the earliest one's day and the larger count. */
 function mergeOverlapping(sessions: StepPoint[]): StepPoint[] {
   const merged: StepPoint[] = [];

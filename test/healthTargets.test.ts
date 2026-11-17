@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { addDays } from "../src/core/dates.ts";
 import { migrate } from "../src/core/db/schema.ts";
 import {
-  calorieOffset, checkIntake, computeTargets, datesBetween, katchMcArdle, KCAL_PER_LB_FAT, KCAL_PER_LB_LEAN, slope, stepEnergy, trailingAverages, type EnergyDay,
+  calorieOffset, checkIntake, computeTargets, datesBetween, fillMissingSteps, katchMcArdle, KCAL_PER_LB_FAT, KCAL_PER_LB_LEAN, slope, stepEnergy, trailingAverages, type EnergyDay,
 } from "../src/core/energy.ts";
 import { replaceHealthPoints, saveNutritionDays, type HealthDay } from "../src/core/health.ts";
 import { summarizeDays } from "../src/core/healthSummary.ts";
@@ -139,7 +139,7 @@ describe("computeTargets", () => {
 describe("reviewDays", () => {
   const day = (date: string, fields: Partial<HealthDay>): HealthDay => ({
     date, calories: 2200, proteinG: null, carbsG: null, fatG: null, weightLbs: 200, bodyFatPercent: 20, steps: 8000,
-    averageHeartRate: null, restingHeartRate: null, ...fields,
+    ringStepsMissing: false, averageHeartRate: null, restingHeartRate: null, ...fields,
   });
   const week = datesBetween("2026-10-01", "2026-10-10");
 
@@ -164,6 +164,13 @@ describe("reviewDays", () => {
     expect(run()).toBeNull();
     expect(run("rejected")).toBeNull();
     expect(run("accepted")).toBe(600);
+  });
+
+  it("leaves out the steps of a day without the ring, so the typical day fills them in", () => {
+    const days = week.map((date) => day(date, date === "2026-10-08" ? { steps: 3000, ringStepsMissing: true } : {}));
+    const { cleaned } = reviewDays(days, new Map(), settings, 1.375, null);
+    expect(cleaned.find((d) => d.date === "2026-10-08")!.steps).toBeNull();
+    expect(fillMissingSteps(cleaned).find((d) => d.date === "2026-10-08")).toMatchObject({ steps: 8000, stepsEstimated: true });
   });
 
   it("doesn't flag unlogged days before the first Cronometer entry", () => {

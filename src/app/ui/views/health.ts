@@ -206,7 +206,9 @@ function metabolismBody(t: Targets, page: HealthPage, settings: HealthSettings) 
           ${t.previousDayExpenditure !== null && yesterday?.steps != null ? html`
             <p><strong>Yesterday's burn ${n(t.previousDayExpenditure)}</strong> = ${t.activityMultiplier!.toFixed(2)} × ${n(t.bmr)} BMR
               + ${n(stepEnergy(yesterday.steps, t.weightLbs))} for ${yesterday.steps.toLocaleString()} steps${yesterday.stepsEstimated
-                ? " (none recorded, so the typical day: the median of the 14 days before)" : ""}${yesterday.workoutKcal
+                ? yesterday.ringStepsMissing
+                  ? ` (none from the ring, only the treadmill's ${yesterday.recordedSteps?.toLocaleString() ?? 0}, so the typical day: the median of the 14 days before)`
+                  : " (none recorded, so the typical day: the median of the 14 days before)" : ""}${yesterday.workoutKcal
                 ? ` + ${n(yesterday.workoutKcal)} for workouts` : ""}.</p>` : ""}
         `}
     `)}
@@ -355,7 +357,8 @@ function chartSpecs(days: HealthPageDay[], trends: BodyTrends): Record<string, C
     resting: () => ({ ...common, decimals: 0, leftLabel: "bpm", series: [
       { label: "Resting heart rate", values: days.map((d) => d.restingHeartRate), color: COLORS.blue, kind: "line" },
     ] }),
-    // Measured steps only, up to yesterday (user, 2026-10-26: for reference; the typical-day fill-in isn't drawn).
+    // Measured steps only, up to yesterday (user, 2026-10-26: for reference; the typical-day fill-in isn't drawn,
+    // nor are days without the ring, whose count is only the treadmill's).
     steps: () => {
       const past = days.filter((d) => d.date < dates.at(-1)!);
       return { ...common, dates: past.map((d) => d.date), decimals: 0, yRange: "zero", leftLabel: "steps", series: [
@@ -425,7 +428,8 @@ function dataBody(days: HealthPageDay[]) {
     <p class="muted small">
       ${tableTab === "totals" ? "Green: met that day's target (protein and fat at or above; calories by the goal). " : "Eaten − target. "}
       ${workedOut ? "* No targets were saved that day; they're worked out the way that day would have had them. " : ""}
-      ${shown.some((d) => d.stepsEstimated) ? "≈ No steps recorded: the typical day (median of the 14 days before)." : ""}
+      ${shown.some((d) => d.stepsEstimated && !d.ringStepsMissing) ? "≈ No steps recorded: the typical day (median of the 14 days before). " : ""}
+      ${shown.some((d) => d.ringStepsMissing) ? "† No steps from the ring (recorded count in brackets, treadmill only): the typical day is used instead, or – with too few days before it." : ""}
     </p>
     ${tableDays < days.length ? html`<button class="secondary small" @click=${() => { tableDays = Math.min(days.length, tableDays + 14); rerender(); }}>Show 2 more weeks</button>` : ""}
   `;
@@ -444,6 +448,13 @@ function dayCell(day: HealthPageDay) {
   return html`<td>${formatDay(day.date)}${day.targets?.workedOut ? "*" : ""}</td>`;
 }
 
+/** "12,345", "≈12,345" (typical day), or "†≈12,345 (7,353)" when the ring was missing. */
+function stepsCell(day: HealthPageDay): string {
+  const steps = day.steps === null ? "–" : `${day.stepsEstimated ? "≈" : ""}${day.steps.toLocaleString()}`;
+  if (!day.ringStepsMissing) return steps;
+  return `†${steps} (${day.recordedSteps?.toLocaleString() ?? "–"})`;
+}
+
 function totalsTable(days: HealthPageDay[]) {
   const mark = (ok: boolean | undefined) => (ok ? "good-text" : "");
   return html`
@@ -458,7 +469,7 @@ function totalsTable(days: HealthPageDay[]) {
         <td class=${mark(d.met?.protein)}>${show(d.intake?.proteinG)}</td>
         <td>${show(d.intake?.carbsG)}</td>
         <td class=${mark(d.met?.fat)}>${show(d.intake?.fatG)}</td>
-        <td>${d.steps === null ? "–" : `${d.stepsEstimated ? "≈" : ""}${d.steps.toLocaleString()}`}</td>
+        <td>${stepsCell(d)}</td>
         <td class=${stateClass(d.weightState)}>${show(d.weightLbs, 1)}</td>
         <td class=${stateClass(d.bodyFatState)}>${show(d.bodyFatPercent, 1)}</td>
         <td>${show(d.restingHeartRate)}</td>

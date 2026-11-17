@@ -12,7 +12,7 @@
 import { addDays, localDate } from "./dates.ts";
 import { get, type Db } from "./db/types.ts";
 import { getHealthSettings } from "./healthTargets.ts";
-import { stepsByDay, type StepPoint } from "./steps.ts";
+import { daysWithoutPrimary, stepsByDay, type StepPoint } from "./steps.ts";
 import { saveRecord } from "./sync/records.ts";
 import { detectWorkouts, type Workout } from "./workouts.ts";
 
@@ -35,6 +35,7 @@ export async function summarizeDays(db: Db, start: string, end: string): Promise
   )).map((row) => [row.day, row.value]));
 
   const steps = stepsByDay(stepPoints);
+  const ringMissing = daysWithoutPrimary(stepPoints);
   const workoutsByDay = new Map<string, Workout[]>();
   for (const workout of detectWorkouts(samples, resting, stepPoints, settings)) {
     workoutsByDay.set(workout.date, [...(workoutsByDay.get(workout.date) ?? []), workout]);
@@ -49,6 +50,8 @@ export async function summarizeDays(db: Db, start: string, end: string): Promise
       await saveSummary(db, {
         date,
         steps: steps.has(date) ? Math.round(steps.get(date)!) : null,
+        // Only meaningful for a day with steps; one without any is already left empty.
+        ring_steps_missing: steps.has(date) && ringMissing.has(date) ? 1 : 0,
         average_heart_rate: beats ? Math.round(beats.reduce((sum, bpm) => sum + bpm, 0) / beats.length) : null,
         workouts: JSON.stringify(workoutsByDay.get(date) ?? []),
       });
@@ -57,10 +60,17 @@ export async function summarizeDays(db: Db, start: string, end: string): Promise
 }
 
 /** Saves a day's summary unless the stored one is the same (so re-summarizing doesn't churn sync). */
-async function saveSummary(db: Db, summary: { date: string; steps: number | null; average_heart_rate: number | null; workouts: string }) {
+async function saveSummary(
+  db: Db,
+  summary: { date: string; steps: number | null; ring_steps_missing: number; average_heart_rate: number | null; workouts: string },
+) {
   const id = `day-${summary.date}`;
-  const existing = await get(db, "SELECT steps, average_heart_rate, workouts FROM health_day_summary WHERE id = ? AND deleted = 0", [id]);
-  if (existing && existing.steps === summary.steps && existing.average_heart_rate === summary.average_heart_rate && existing.workouts === summary.workouts) return;
+  const existing = await get(
+    db, "SELECT steps, ring_steps_missing, average_heart_rate, workouts FROM health_day_summary WHERE id = ? AND deleted = 0", [id],
+  );
+  const unchanged = existing && existing.steps === summary.steps && existing.ring_steps_missing === summary.ring_steps_missing
+    && existing.average_heart_rate === summary.average_heart_rate && existing.workouts === summary.workouts;
+  if (unchanged) return;
   await saveRecord(db, "health_day_summary", { id, ...summary });
 }
 
