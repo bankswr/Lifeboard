@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { api } from "../src/core/api.ts";
 import { migrate, SCHEMA_VERSION } from "../src/core/db/schema.ts";
+import { getHealthSettings, saveHealthSettings } from "../src/core/healthTargets.ts";
 import { openNodeDb } from "../src/desktop/db/nodeSqlite.ts";
 
 describe("migrate", () => {
@@ -18,6 +19,17 @@ describe("migrate", () => {
     const before = await api.getAppInfo(db);
     expect(await migrate(db)).toBe(SCHEMA_VERSION);
     expect(await api.getAppInfo(db)).toEqual(before);
+  });
+
+  it("moves the stale-health-data alert from the old 18-hour default to 24, keeping other values", async () => {
+    for (const [saved, expected] of [[18, 24], [30, 30]]) {
+      const db = openNodeDb(":memory:");
+      await migrate(db);
+      await saveHealthSettings(db, { ...(await getHealthSettings(db)), healthDataStaleHours: saved });
+      await db.exec("PRAGMA user_version = 27");
+      await migrate(db);
+      expect((await getHealthSettings(db)).healthDataStaleHours).toBe(expected);
+    }
   });
 
   it("refuses a database from a newer version", async () => {

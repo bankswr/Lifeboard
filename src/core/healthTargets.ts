@@ -37,7 +37,9 @@ export const DEFAULT_HEALTH_SETTINGS: HealthSettings = {
   weightJumpLbs: 3,
   bodyFatJumpPoints: 2,
   ...DEFAULT_WORKOUT_SETTINGS,
-  healthDataStaleHours: 18,
+  // 24, not 18 (user, 2026-11-17): data often reaches Google later than 18 hours, so the alert
+  // came before the pull did.
+  healthDataStaleHours: 24,
 };
 
 const SETTING_ID = "health_targets";

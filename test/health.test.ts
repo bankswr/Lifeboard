@@ -327,16 +327,18 @@ describe("Google integration", () => {
 
         await store(1);
         expect((await runUpdate(db, [google])).alerts).toEqual([]);
+        await store(20); // under the default 24 hours
+        expect((await runUpdate(db, [google])).alerts).toEqual([]);
 
-        await store(20);
+        await store(26);
         const { alerts } = await runUpdate(db, [google]);
         expect(alerts).toHaveLength(1);
-        expect(alerts[0].message).toBe("Ring heart rate: nothing new in Google Health for 20 hours. Check that it's still syncing.");
+        expect(alerts[0].message).toBe("Ring heart rate: nothing new in Google Health for 26 hours. Check that it's still syncing.");
         expect((await runUpdate(db, [google])).alerts).toEqual([]);
 
         await store(1);
         expect((await runUpdate(db, [google])).alerts).toEqual([]);
-        await store(20);
+        await store(26);
         expect((await runUpdate(db, [google])).alerts).toHaveLength(1);
       });
     });
@@ -359,7 +361,7 @@ describe("Google integration", () => {
       await withFetch(site.fetch, async () => {
         const db = await pulledDb();
         await replaceHealthPoints(db, "heart-rate", "2000-01-01T00:00:00Z", "2100-01-01T00:00:00Z",
-          [raw("hr", "heart-rate", RING, today, hoursAgo(20))]);
+          [raw("hr", "heart-rate", RING, today, hoursAgo(30))]);
         await saveHealthSettings(db, { ...(await getHealthSettings(db)), healthDataStaleHours: 48 });
         expect((await runUpdate(db, [google])).alerts).toEqual([]);
       });

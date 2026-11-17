@@ -45,7 +45,8 @@ Google API** (needs the user's interactive sign-in); tested against a fake API.
   source stayed fresh during the ring outage. Largest gaps over 90 days: phone steps 11.9 h,
   ring heart rate 6.2 h, ring steps 9.5 h, treadmill 112.8 h (unusable). These are gaps in when
   data was recorded, not how late it reached Google; that lag isn't measured.
-- **Threshold:** 18 hours (user), Settings → Health → "Data stopped updating". Stored in
+- **Threshold:** 18 hours (user), 24 since 2026-11-17 (user: the alert often came before the
+  pull; migration 28 moves a stored 18 to 24), Settings → Health → "Data stopped updating". Stored in
   `HealthSettings`, so it syncs.
 - **Asks Google directly each update:** stored data is pulled once a day and stops at UTC
   midnight of the local date, so it can look 18-42 hours old when nothing is wrong. Failed
