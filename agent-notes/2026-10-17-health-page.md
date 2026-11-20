@@ -157,3 +157,11 @@ removed (port 5181).
   ticks sit at the same heights.
 - Test gotcha: seeded steps count only from a `STEP_SOURCES` source (the ring), and only after
   `summarizeDays`.
+
+## Raw lean and fat mass points (user, 2026-11-20)
+- The lean/fat mass graph also shows each day's raw values as dots, like the weight/body-fat
+  graph: weight × (1 − body fat) and weight × body fat from that day's own readings, only on
+  days with both. A dot is "left out" if either reading was rejected, else "awaiting review"
+  if either is pending. Drawn with the same `readings()` helper as the body graph.
+- The matched axes fit the dots too, so raw fat mass (scale body-fat noise) widens the span
+  and makes the average and trend lines look flatter than before.

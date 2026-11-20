@@ -268,7 +268,7 @@ function graphsBody() {
 const TREND_NOTE = "Dashed lines are the straight-line trend of each 7-day average over the fit window, carried on for a week from the end of the average line.";
 const GRAPH_NOTES: Record<GraphId, string> = {
   body: `Weight on the left axis, body fat on the right. Faint lines show how far each reading is from its 7-day average. ${TREND_NOTE}`,
-  mass: `Lean mass = weight × (1 − body fat) and fat mass = weight × body fat, from the 7-day averages; lean on the left axis, fat on the right, both axes spanning the same number of pounds. ${TREND_NOTE}`,
+  mass: `Lean mass = weight × (1 − body fat) and fat mass = weight × body fat. The lines use the 7-day averages; the dots are each day's own readings (days with both a weight and a body fat), marked awaiting review or left out when either reading is. Lean on the left axis, fat on the right, both axes spanning the same number of pounds. ${TREND_NOTE}`,
   ffmi: `Fat-free mass index = lean mass (kg) ÷ height² (m), from the 7-day averages; adjusted normalizes it to 1.8 m tall (Kouri et al. 1995). ${TREND_NOTE}`,
   energy: "Burn lines are each morning's estimate of the average daily burn, from the days before.",
   offset: "How far the Cronometer log is from what the body composition says was eaten, over the rolling window in Settings ending each day. Implied intake = modelled burn (base factor × BMR + steps + workouts, nothing from the log) + energy stored by the fat and lean mass trends. Above zero, more was eaten than logged. Needs half the window logged and weighed in. Scale noise moves it a lot over short windows, and a wrong base factor shifts the whole line.",
@@ -310,6 +310,12 @@ function chartSpecs(days: HealthPageDay[], trends: BodyTrends): Record<string, C
     // Review markers only when there are any.
     return [...shown.filter((series, index) => index < 2 || series.values.some((v) => v !== null)), ...trendLine(trend, name, unit, color, axis)];
   };
+  /** A day's lean or fat mass from its own weight and body-fat readings; none unless it has both. */
+  const rawMass = (share: (bodyFatFraction: number) => number) => (d: HealthPageDay) =>
+    d.weightLbs === null || d.bodyFatPercent === null ? null : d.weightLbs * share(d.bodyFatPercent / 100);
+  /** A mass point is left out if either reading was, else awaiting review if either is. */
+  const massState = (d: HealthPageDay) =>
+    [d.weightState, d.bodyFatState].includes("rejected") ? "rejected" : [d.weightState, d.bodyFatState].includes("pending") ? "pending" : null;
   const mass = (name: string, color: string, axis: Axis, average: (d: HealthPageDay) => number | null, trend: BodyTrend | null, unit: string): SeriesSpec[] => [
     { label: `${name} 7-day average`, values: onBodyDates(average), color, kind: "line", pointSize: 0, axis, group: name },
     ...trendLine(trend, name, unit, color, axis),
@@ -327,8 +333,8 @@ function chartSpecs(days: HealthPageDay[], trends: BodyTrends): Record<string, C
       ...readings("Body fat", "%", COLORS.orange, "right", (d) => d.bodyFatPercent, (d) => d.bodyFatState, (d) => d.bodyFatAverage, trends.bodyFat),
     ] }),
     mass: () => ({ ...body, yRange: "matched", decimals: 1, leftLabel: "Lean mass, lb", rightLabel: "Fat mass, lb", series: [
-      ...mass("Lean mass", COLORS.blue, "left", (d) => d.leanAverage, trends.lean,"lb"),
-      ...mass("Fat mass", COLORS.orange, "right", (d) => d.fatAverage, trends.fat,"lb"),
+      ...readings("Lean mass", "lb", COLORS.blue, "left", rawMass((fat) => 1 - fat), massState, (d) => d.leanAverage, trends.lean),
+      ...readings("Fat mass", "lb", COLORS.orange, "right", rawMass((fat) => fat), massState, (d) => d.fatAverage, trends.fat),
     ] }),
     ffmi: () => ({ ...body, decimals: 1, leftLabel: "kg/m²", series: [
       ...mass("FFMI", COLORS.blue, "left", (d) => d.ffmi, trends.ffmi,"kg/m²"),
