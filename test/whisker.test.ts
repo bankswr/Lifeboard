@@ -13,6 +13,7 @@ import { checkCycleStall, findCycleStall } from "../src/core/whisker/stalls.ts";
 import { checkHopperAlarms, estimateHopper, hopperEstimates, listHopperRefills, markHopperRefilled, recordHopperDispenses } from "../src/core/whisker/hopper.ts";
 import { litterRobotStatus } from "../src/core/whisker/status.ts";
 import { dismissAlert, recentAlerts } from "../src/core/rules.ts";
+import { setAlertDelivery } from "../src/core/notify.ts";
 import { openNodeDb } from "../src/desktop/db/nodeSqlite.ts";
 
 const READY: RawRobot = {
@@ -147,6 +148,21 @@ describe("litter levels", () => {
     expect(await db.all("SELECT id, title, due FROM task")).toEqual([
       { id: "auto-litter-LR4C000001-2026-10-16", title: "Clean the litter box", due: "2026-10-16" },
     ]);
+  });
+
+  it("clears the alarm alert and withdraws its notification once the drawer is emptied", async () => {
+    const db = await newDb();
+    const withdrawn: number[] = [];
+    setAlertDelivery(async () => {}, async (ids) => { withdrawn.push(...ids); });
+    await saveLitterSettings(db, { ...DEFAULT_LITTER_SETTINGS, cleanTaskAtAlarm: true });
+    const [alert] = await checkLitterAlarms(db, [robot(95, 90)], "2026-10-16");
+    await checkLitterAlarms(db, [robot(96, 90)], "2026-10-16"); // still full: stays
+    expect((await recentAlerts(db)).map((a) => a.id)).toEqual([alert.id]);
+
+    await checkLitterAlarms(db, [robot(20, 90)], "2026-10-16");
+    expect(await recentAlerts(db)).toEqual([]);
+    expect(withdrawn).toEqual([alert.id]);
+    setAlertDelivery(async () => {}, async () => {});
   });
 });
 

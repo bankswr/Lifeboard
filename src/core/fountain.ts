@@ -5,10 +5,13 @@
 //   used up. The median of those samples is how long a fill lasts.
 // - Days left ≈ that median − days since the last refill. Yellow/red thresholds in days, and
 //   an optional "Refill the water fountain" task at red, checked at each update.
+// - The red alert clears itself when the user presses "Refill" (user, 2026-11-19), or at the
+//   next update once the estimate is out of alarm (a refill pressed on the other device).
 // Refills are synced rows, so both devices estimate the same.
 import { localDate } from "./dates.ts";
 import { get, type Db } from "./db/types.ts";
-import { recordAlert, type NewAlert } from "./rules.ts";
+import { withdrawAlerts } from "./notify.ts";
+import { clearAlerts, recordAlert, type NewAlert } from "./rules.ts";
 import { addTask } from "./schedule/edit.ts";
 import { median } from "./smartlife/food.ts";
 import { deleteRecord, saveRecord } from "./sync/records.ts";
@@ -18,6 +21,8 @@ export const FOUNTAIN_NAME = "Water fountain";
 const DAY_MS = 86_400_000;
 /** Refills closer together than this are double presses, not samples. */
 const MIN_SAMPLE_DAYS = 0.25;
+/** rule_id of the alarm alert, so a refill can clear it. */
+const ALARM_RULE_ID = "fountain-alarm";
 
 export interface FountainSettings {
   warningDays: number;
@@ -67,11 +72,15 @@ export async function listFountainRefills(db: Db): Promise<FountainRefill[]> {
   return rows.map((row) => ({ id: row.id, at: row.at, days: row.days }));
 }
 
-/** Records a refill now; unless it's the first, the days since the previous one are a sample. */
+/**
+ * Records a refill now; unless it's the first, the days since the previous one are a sample.
+ * The fountain is full again, so its alarm alert clears.
+ */
 export async function refillFountain(db: Db, now = new Date()): Promise<void> {
   const previous = await get(db, "SELECT at FROM fountain_refill WHERE deleted = 0 ORDER BY at DESC LIMIT 1");
   const days = previous ? (now.getTime() - new Date(previous.at).getTime()) / DAY_MS : null;
   await saveRecord(db, "fountain_refill", { at: now.toISOString(), days });
+  await withdrawAlerts(await clearAlerts(db, ALARM_RULE_ID, FOUNTAIN_NAME));
 }
 
 export async function deleteFountainRefill(db: Db, id: string): Promise<void> {
@@ -109,11 +118,12 @@ export async function checkFountainAlarm(db: Db, now = new Date()): Promise<NewA
   const inAlarm = estimate.state === "alarm";
   const before = await get(db, "SELECT matched FROM rule_state WHERE rule_id = 'fountain-alarm' AND subject = 'fountain'");
   await db.run("INSERT OR REPLACE INTO rule_state (rule_id, subject, matched) VALUES ('fountain-alarm', 'fountain', ?)", [inAlarm ? 1 : 0]);
+  if (!inAlarm) await withdrawAlerts(await clearAlerts(db, ALARM_RULE_ID, FOUNTAIN_NAME));
   if (!inAlarm || before?.matched === 1 || !settings.refillTaskAtAlarm) return [];
 
   const added = await addRefillTask(db, localDate(now));
   const alerts = [
-    await recordAlert(db, FOUNTAIN_NAME, `${FOUNTAIN_NAME}: about ${estimate.daysLeft!.toFixed(1)} days of water left. ${added ? "Added “Refill the water fountain” to today." : "Couldn't add a task: Google Tasks hasn't been read yet."}`),
+    await recordAlert(db, FOUNTAIN_NAME, `${FOUNTAIN_NAME}: about ${estimate.daysLeft!.toFixed(1)} days of water left. ${added ? "Added “Refill the water fountain” to today." : "Couldn't add a task: Google Tasks hasn't been read yet."}`, ALARM_RULE_ID),
   ];
   return alerts; // runUpdate returns these with the rule alerts; its caller delivers them
 }

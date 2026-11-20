@@ -220,4 +220,34 @@ describe("water fountain", () => {
     expect(await checkFountainAlarm(db, day(8, 13))).toEqual([]);
     expect((await db.all("SELECT id FROM task")).map((t) => t.id)).toEqual(["auto-fountain-2026-10-08"]);
   });
+
+  it("clears the alarm alert and withdraws its notification when Refill is pressed", async () => {
+    const db = openNodeDb(":memory:");
+    await migrate(db);
+    const withdrawn: number[] = [];
+    setAlertDelivery(async () => {}, async (ids) => { withdrawn.push(...ids); });
+    await saveFountainSettings(db, { warningDays: 2, alarmDays: 1, refillTaskAtAlarm: true });
+    await refillFountain(db, day(1));
+    await refillFountain(db, day(5));
+    const [alert] = await checkFountainAlarm(db, day(8, 12));
+    expect((await recentAlerts(db)).map((a) => a.id)).toEqual([alert.id]);
+
+    await refillFountain(db, day(8, 14));
+    expect(await recentAlerts(db)).toEqual([]);
+    expect(withdrawn).toEqual([alert.id]);
+    setAlertDelivery(async () => {}, async () => {});
+  });
+
+  it("clears the alarm alert at the next check after a refill made on the other device", async () => {
+    const db = openNodeDb(":memory:");
+    await migrate(db);
+    await saveFountainSettings(db, { warningDays: 2, alarmDays: 1, refillTaskAtAlarm: true });
+    await refillFountain(db, day(1));
+    await refillFountain(db, day(5));
+    await checkFountainAlarm(db, day(8, 12));
+    // A synced refill row arrives without refillFountain running here.
+    await db.run("INSERT INTO fountain_refill (id, updated_at, updated_by, deleted, seq, at, days) VALUES ('r', 'x', 'phone', 0, 0, ?, 3.2)", [day(8, 14).toISOString()]);
+    await checkFountainAlarm(db, day(8, 15));
+    expect(await recentAlerts(db)).toEqual([]);
+  });
 });

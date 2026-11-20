@@ -5,8 +5,8 @@
 // table so both devices use the same values.
 import { localDate } from "../dates.ts";
 import { get, type Db } from "../db/types.ts";
-import { deliverAlerts } from "../notify.ts";
-import { recordAlert, type NewAlert } from "../rules.ts";
+import { deliverAlerts, withdrawAlerts } from "../notify.ts";
+import { clearAlerts, recordAlert, type NewAlert } from "../rules.ts";
 import { addTask } from "../schedule/edit.ts";
 import { saveRecord } from "../sync/records.ts";
 import type { LitterRobotStatus } from "./status.ts";
@@ -68,11 +68,15 @@ export function litterState(robot: Pick<LitterRobotStatus, "litterLevel">, setti
   return robot.litterLevel <= settings.litterWarning ? "warning" : "ok";
 }
 
+/** rule_id of the alarm alerts, so they can be cleared when the alarm ends. */
+const LEVEL_ALARM_RULE_ID = "litter-alarm";
+
 /**
  * When enabled: for each robot whose drawer or litter has just reached its alarm level (it
  * wasn't there at the last check), adds a "Clean the litter box" task for today and alerts.
  * The task's id is fixed per robot and day, so if both devices make it, sync merges the two
- * and Google gets it once.
+ * and Google gets it once. Once the robot is out of alarm (drawer emptied, litter topped up),
+ * the alert clears itself and its notification is withdrawn (user, 2026-11-19).
  */
 export async function checkLitterAlarms(db: Db, robots: LitterRobotStatus[], today = localDate()): Promise<NewAlert[]> {
   const settings = await getLitterSettings(db);
@@ -85,12 +89,13 @@ export async function checkLitterAlarms(db: Db, robots: LitterRobotStatus[], tod
     const inAlarm = reasons.length > 0;
     const before = await get(db, "SELECT matched FROM rule_state WHERE rule_id = 'litter-alarm' AND subject = ?", [robot.serial]);
     await db.run("INSERT OR REPLACE INTO rule_state (rule_id, subject, matched) VALUES ('litter-alarm', ?, ?)", [robot.serial, inAlarm ? 1 : 0]);
+    if (!inAlarm) await withdrawAlerts(await clearAlerts(db, LEVEL_ALARM_RULE_ID, robot.name));
     if (!inAlarm || before?.matched === 1 || !settings.cleanTaskAtAlarm) continue;
 
     const why = reasons.join(", ");
     const added = await addCleanTask(db, robot, why, today);
     alerts.push(
-      await recordAlert(db, robot.name, `${robot.name}: ${why}. ${added ? "Added “Clean the litter box” to today." : "Couldn't add a task: Google Tasks hasn't been read yet."}`),
+      await recordAlert(db, robot.name, `${robot.name}: ${why}. ${added ? "Added “Clean the litter box” to today." : "Couldn't add a task: Google Tasks hasn't been read yet."}`, LEVEL_ALARM_RULE_ID),
     );
   }
   await deliverAlerts(alerts);

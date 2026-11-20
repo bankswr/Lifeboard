@@ -25,6 +25,13 @@
   events and stay until dismissed; the Litter-Robot stall alert clears itself too (see
   `2026-10-18-litter-cycle-stalls.md`). A subject with no reading (e.g. a failed Google
   check) keeps its alert.
+- **Built-in level alarms clear too (user, 2026-11-19):** the Litter-Robot drawer/litter
+  alarm (`rule_id` `litter-alarm`, cleared when the robot is out of alarm) and the water
+  fountain alarm (`fountain-alarm`, cleared when Refill is pressed, or at the next update
+  once out of alarm, which covers a refill pressed on the other device). Before this they
+  were recorded as `builtin` and stayed until dismissed: the user saw a "drawer 77% full"
+  alert a day after emptying the drawer. Alerts already stored as `builtin` aren't migrated;
+  dismiss them by hand. The LitterHopper and feeder alarms are still `builtin` events.
 - **Default rule** `default-connection-problem` (status is not connected) is inserted by
   migration 4 with a fixed id and timestamp, so both devices' copies are the same row and
   sync never duplicates it. The user can edit or disable it like any rule.
