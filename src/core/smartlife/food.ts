@@ -8,18 +8,24 @@
 //   median is the capacity. A feeder's first refill only sets its starting point.
 // - Food left ≈ capacity − portions scheduled since the last refill; days left divides that
 //   by the schedule's portions per day. Yellow/red thresholds are in days, with an optional
-//   "Refill the feeders" task at red (like the Litter-Robot's).
+//   "Refill the feeders" task at red (like the Litter-Robot's). The one alert covers every
+//   low feeder, so it clears itself once none is low any more: when "Refilled" is pressed
+//   for the last of them, or at the next update (user, 2026-11-19).
 // Refills and run-dry sightings are synced events, so both devices estimate the same.
 import { localDate } from "../dates.ts";
 import { get, type Db } from "../db/types.ts";
 import { listDeviceStatuses } from "../devices.ts";
-import { deliverAlerts } from "../notify.ts";
-import { recordAlert, type NewAlert } from "../rules.ts";
+import { deliverAlerts, withdrawAlerts } from "../notify.ts";
+import { clearAlerts, recordAlert, type NewAlert } from "../rules.ts";
 import { addTask } from "../schedule/edit.ts";
 import { deleteRecord, saveRecord } from "../sync/records.ts";
 import type { LevelState } from "../whisker/levels.ts";
 import type { FeederStatus, Meal } from "./feeder.ts";
 import { median } from "../energy.ts";
+
+/** rule_id and subject of the alarm alert, so it can be cleared. */
+const ALARM_RULE_ID = "feeder-alarm";
+const ALARM_SUBJECT = "Feeders";
 
 export interface FeederSettings {
   /** Days of food left at which the bar turns yellow, and red (alarm). */
@@ -118,6 +124,18 @@ export async function markRefilled(db: Db, feederId: string, now = new Date()): 
     portions = scheduledPortions(feeder.meals, from, ranDry ? new Date(ranDry.at) : now);
   }
   await saveRecord(db, "feeder_event", { feeder_id: feederId, kind: "refill", at: now.toISOString(), portions });
+  const feeders = await feederStatuses(db);
+  if (!(await anyInAlarm(db, feeders, now))) await clearFeederAlarm(db);
+}
+
+async function anyInAlarm(db: Db, feeders: FeederStatus[], now: Date): Promise<boolean> {
+  for (const feeder of feeders) if ((await estimateFood(db, feeder, now)).state === "alarm") return true;
+  return false;
+}
+
+/** Clears the "running low" alert and withdraws its notification. */
+async function clearFeederAlarm(db: Db): Promise<void> {
+  await withdrawAlerts(await clearAlerts(db, ALARM_RULE_ID, ALARM_SUBJECT));
 }
 
 /** Marks every feeder refilled at the same moment ("Refilled all"). */
@@ -189,19 +207,22 @@ export async function estimateAllFood(db: Db, now = new Date()): Promise<Record<
 export async function checkFeederAlarms(db: Db, feeders: FeederStatus[], now = new Date()): Promise<NewAlert[]> {
   const settings = await getFeederSettings(db);
   const newlyLow: { feeder: FeederStatus; estimate: FoodEstimate }[] = [];
+  let anyLow = false;
   for (const feeder of feeders) {
     const estimate = await estimateFood(db, feeder, now);
     const inAlarm = estimate.state === "alarm";
     const before = await get(db, "SELECT matched FROM rule_state WHERE rule_id = 'feeder-alarm' AND subject = ?", [feeder.id]);
     await db.run("INSERT OR REPLACE INTO rule_state (rule_id, subject, matched) VALUES ('feeder-alarm', ?, ?)", [feeder.id, inAlarm ? 1 : 0]);
     if (inAlarm && before?.matched !== 1) newlyLow.push({ feeder, estimate });
+    anyLow ||= inAlarm;
   }
+  if (!anyLow) await clearFeederAlarm(db);
   if (newlyLow.length === 0 || !settings.refillTaskAtAlarm) return [];
 
   const which = newlyLow.map(({ feeder, estimate }) => `${feeder.name} (about ${estimate.daysLeft!.toFixed(1)} days left)`).join(", ");
   const added = await addRefillTask(db, which, localDate(now));
   const alerts = [
-    await recordAlert(db, "Feeders", `Feeders running low: ${which}. ${added ? "Added “Refill the feeders” to today." : "Couldn't add a task: Google Tasks hasn't been read yet."}`),
+    await recordAlert(db, ALARM_SUBJECT, `Feeders running low: ${which}. ${added ? "Added “Refill the feeders” to today." : "Couldn't add a task: Google Tasks hasn't been read yet."}`, ALARM_RULE_ID),
   ];
   await deliverAlerts(alerts);
   return alerts;

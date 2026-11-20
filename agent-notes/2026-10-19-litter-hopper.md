@@ -23,6 +23,11 @@ then asked for the Pets bar fix and a refill-based estimate; hopper status not w
   Thresholds in days (default 3 / 1) and an optional "Refill the litter hopper" task, both in
   `LitterSettings`. Pets widget row "Hopper empty" once a refill exists.
 
+## Alert clearing (2026-11-19)
+The alarm alert (`rule_id` `hopper-alarm`) clears itself when "Hopper refilled" is pressed
+(the robot's name is looked up from its device status by serial), or at the next update once
+the estimate is out of alarm (a refill pressed on the other device).
+
 ## Open
 - Not run against the real account yet. Unknown whether the robot keeps logging
   `litterHopperDispensed` when the hopper is empty; if it does, a refill made long after it

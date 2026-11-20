@@ -31,7 +31,9 @@
   once out of alarm, which covers a refill pressed on the other device). Before this they
   were recorded as `builtin` and stayed until dismissed: the user saw a "drawer 77% full"
   alert a day after emptying the drawer. Alerts already stored as `builtin` aren't migrated;
-  dismiss them by hand. The LitterHopper and feeder alarms are still `builtin` events.
+  dismiss them by hand. The same day the LitterHopper alarm (`hopper-alarm`, cleared by
+  "Hopper refilled" or once out of alarm) and the feeders' one shared "running low" alert
+  (`feeder-alarm`, cleared once no feeder is low, by "Refilled" or at the next update) joined.
 - **Default rule** `default-connection-problem` (status is not connected) is inserted by
   migration 4 with a fixed id and timestamp, so both devices' copies are the same row and
   sync never duplicates it. The user can edit or disable it like any rule.

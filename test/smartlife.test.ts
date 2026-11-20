@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import { getCredential } from "../src/core/credentials.ts";
 import { migrate } from "../src/core/db/schema.ts";
 import { listDeviceStatuses, saveDeviceStatus } from "../src/core/devices.ts";
-import { listRules } from "../src/core/rules.ts";
+import { setAlertDelivery } from "../src/core/notify.ts";
+import { listRules, recentAlerts } from "../src/core/rules.ts";
+import { saveRecord } from "../src/core/sync/records.ts";
 import {
   decrypt, encrypt, requestSecret, requestSignature, SmartLifeSignInError, type RawDevice, type SmartLifeApi, type SmartLifeTokens,
 } from "../src/core/smartlife/api.ts";
@@ -209,5 +211,31 @@ describe("feeder food estimate", () => {
     expect((await estimateFood(db, fed, at(10, 21))).portionsLeft).toBe(0);
     await markRefilled(db, "A", at(12, 9)); // counted only up to the run-dry sighting
     expect((await listRefills(db))[0].portions).toBe(18);
+  });
+
+  it("clears the low-food alert once no feeder is low: on Refilled, or at the next check", async () => {
+    const db = await withFeeders("A", "B");
+    const withdrawn: number[] = [];
+    setAlertDelivery(async () => {}, async (ids) => { withdrawn.push(...ids); });
+    await saveFeederSettings(db, { warningDays: 3, alarmDays: 1, refillTaskAtAlarm: true });
+    await markAllRefilled(db, at(1, 9));
+    await markAllRefilled(db, at(6, 9)); // 20 portions each: capacity 20
+    const feeders = ["A", "B"].map((id) => feederStatus({ ...feeder(), id, name: id }));
+    const [alert] = await checkFeederAlarms(db, feeders, at(10, 9)); // both 1 day left
+
+    await markRefilled(db, "A", at(10, 10)); // B still low: the alert stays
+    expect((await recentAlerts(db)).map((a) => a.id)).toEqual([alert.id]);
+    await markRefilled(db, "B", at(10, 11));
+    expect(await recentAlerts(db)).toEqual([]);
+    expect(withdrawn).toEqual([alert.id]);
+
+    // A refill made on the other device arrives by sync: the next check clears the alert.
+    await checkFeederAlarms(db, feeders, at(11, 9)); // out of alarm, so it can alert again
+    const [second] = await checkFeederAlarms(db, feeders, at(14, 12));
+    await saveRecord(db, "feeder_event", { feeder_id: "A", kind: "refill", at: at(14, 13).toISOString(), portions: 16 });
+    await saveRecord(db, "feeder_event", { feeder_id: "B", kind: "refill", at: at(14, 13).toISOString(), portions: 16 });
+    await checkFeederAlarms(db, feeders, at(14, 14));
+    expect(withdrawn).toEqual([alert.id, second.id]);
+    setAlertDelivery(async () => {}, async () => {});
   });
 });

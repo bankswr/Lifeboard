@@ -51,7 +51,8 @@ point only.
 A fourth "device" with no connection: `core/fountain.ts`, same learning scheme in time
 instead of portions (days between refills, median = how long a fill lasts). Its alarm check
 runs in `runUpdate` (no integration). Settings → Water fountain. Its alert clears itself when Refill is
-pressed (2026-11-19; see `2026-10-15-connections-and-rules.md`).
+pressed (2026-11-19; see `2026-10-15-connections-and-rules.md`). The feeders' "running low"
+alert covers every low feeder, so it clears once none is low (the last "Refilled" press).
 
 ## Integration (built 2026-10-16, user approved the plan; live-verified the same day: 3 feeders read)
 - `core/smartlife/api.ts`: QR sign-in + signed/encrypted GETs, crypto via `@noble/hashes`

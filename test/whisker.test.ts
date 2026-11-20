@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getCredential } from "../src/core/credentials.ts";
 import { migrate } from "../src/core/db/schema.ts";
-import { listDeviceStatuses } from "../src/core/devices.ts";
+import { listDeviceStatuses, saveDeviceStatus } from "../src/core/devices.ts";
 import { listRules, saveRule } from "../src/core/rules.ts";
 import { runUpdate } from "../src/core/updates.ts";
 import { WhiskerSignInError, type ActivityEntry, type RawPet, type RawRobot, type WhiskerApi } from "../src/core/whisker/api.ts";
@@ -418,6 +418,25 @@ describe("LitterHopper estimate", () => {
     const [alert] = await checkHopperAlarms(db, [robot], hours(24 * 9 + 7)); // 3 left at 4 a day
     expect(alert.message).toMatch(/^Litter-Robot: about 0\.8 days of litter left in the hopper\. Couldn't add a task/);
     expect(await checkHopperAlarms(db, [robot], hours(24 * 9 + 8))).toEqual([]); // still in alarm: no repeat
+  });
+
+  it("clears the hopper alert when Hopper refilled is pressed, and withdraws its notification", async () => {
+    const db = await newDb();
+    const withdrawn: number[] = [];
+    setAlertDelivery(async () => {}, async (ids) => { withdrawn.push(...ids); });
+    await saveLitterSettings(db, { ...DEFAULT_LITTER_SETTINGS, hopperTaskAtAlarm: true });
+    await recordHopperDispenses(db, "S1", dispenses(0, 24 * 30));
+    await markHopperRefilled(db, "S1", hours(1));
+    await markHopperRefilled(db, "S1", hours(24 * 5 + 1));
+    const robot = litterRobotStatus({ ...READY, serial: "S1" });
+    await saveDeviceStatus(db, "litter-robot-S1", "litter_robot", robot.name, robot);
+    const [alert] = await checkHopperAlarms(db, [robot], hours(24 * 9 + 7));
+    expect((await recentAlerts(db)).map((a) => a.id)).toEqual([alert.id]);
+
+    await markHopperRefilled(db, "S1", hours(24 * 9 + 8));
+    expect(await recentAlerts(db)).toEqual([]);
+    expect(withdrawn).toEqual([alert.id]);
+    setAlertDelivery(async () => {}, async () => {});
   });
 
   it("checks the hopper thresholds", async () => {

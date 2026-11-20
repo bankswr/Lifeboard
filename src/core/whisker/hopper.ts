@@ -9,12 +9,16 @@
 //   median of those samples is the capacity. The first refill only sets the starting point.
 // - Left ≈ capacity − dispenses since the last refill; days left divides that by the
 //   dispenses per day over the last RATE_WINDOW_DAYS. Thresholds in days (Settings →
-//   Litter-Robot), with an optional "Refill the litter hopper" task at red.
+//   Litter-Robot), with an optional "Refill the litter hopper" task at red. Its alert clears
+//   itself when "Hopper refilled" is pressed, or at the next update once out of alarm
+//   (user, 2026-11-19).
 // Dispenses and refills are synced rows, so the phone estimates from the desktop's reads.
 import { localDate } from "../dates.ts";
 import { get, type Db } from "../db/types.ts";
+import { listDeviceStatuses } from "../devices.ts";
 import { median } from "../energy.ts";
-import { recordAlert, type NewAlert } from "../rules.ts";
+import { withdrawAlerts } from "../notify.ts";
+import { clearAlerts, recordAlert, type NewAlert } from "../rules.ts";
 import { addTask } from "../schedule/edit.ts";
 import { deleteRecord, saveRecord } from "../sync/records.ts";
 import type { ActivityEntry } from "./api.ts";
@@ -28,6 +32,8 @@ const DISPENSE_VALUE = "litterHopperDispensed";
 const RATE_WINDOW_DAYS = 14;
 /** ...and needs at least this long since the first dispense seen, or it's still learning. */
 const MIN_RATE_DAYS = 1;
+/** rule_id of the alarm alerts, so a refill can clear them. */
+const ALARM_RULE_ID = "hopper-alarm";
 
 export interface HopperEstimate {
   /** When the hopper was last marked refilled; null before the first press. */
@@ -94,12 +100,17 @@ async function lastRefill(db: Db, serial: string): Promise<string | null> {
   return row?.at ?? null;
 }
 
-/** Records that a robot's hopper was just filled; unless it's the first refill, the dispenses since the previous one are a sample. */
+/**
+ * Records that a robot's hopper was just filled; unless it's the first refill, the dispenses
+ * since the previous one are a sample. The hopper is full again, so its alarm alert clears.
+ */
 export async function markHopperRefilled(db: Db, serial: string, now = new Date()): Promise<void> {
   const previous = await lastRefill(db, serial);
   const at = now.toISOString();
   const dispenses = previous ? await countDispenses(db, serial, previous, at) : null;
   await saveRecord(db, "litter_hopper_event", { serial, kind: "refill", at, dispenses });
+  const robot = (await listDeviceStatuses(db)).find((d) => d.kind === "litter_robot" && (d.data as LitterRobotStatus).serial === serial);
+  if (robot) await withdrawAlerts(await clearAlerts(db, ALARM_RULE_ID, (robot.data as LitterRobotStatus).name));
 }
 
 /** Every refill with its sample, newest first, for Settings → Litter-Robot. */
@@ -161,12 +172,13 @@ export async function checkHopperAlarms(db: Db, robots: LitterRobotStatus[], now
     const inAlarm = estimate.state === "alarm";
     const before = await get(db, "SELECT matched FROM rule_state WHERE rule_id = 'hopper-alarm' AND subject = ?", [robot.serial]);
     await db.run("INSERT OR REPLACE INTO rule_state (rule_id, subject, matched) VALUES ('hopper-alarm', ?, ?)", [robot.serial, inAlarm ? 1 : 0]);
+    if (!inAlarm) await withdrawAlerts(await clearAlerts(db, ALARM_RULE_ID, robot.name));
     if (!inAlarm || before?.matched === 1 || !settings.hopperTaskAtAlarm) continue;
 
     const why = `about ${estimate.daysLeft!.toFixed(1)} days of litter left in the hopper`;
     const added = await addRefillTask(db, robot, why, localDate(now));
     alerts.push(
-      await recordAlert(db, robot.name, `${robot.name}: ${why}. ${added ? "Added “Refill the litter hopper” to today." : "Couldn't add a task: Google Tasks hasn't been read yet."}`),
+      await recordAlert(db, robot.name, `${robot.name}: ${why}. ${added ? "Added “Refill the litter hopper” to today." : "Couldn't add a task: Google Tasks hasn't been read yet."}`, ALARM_RULE_ID),
     );
   }
   return alerts;
